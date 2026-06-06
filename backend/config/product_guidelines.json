@@ -1,0 +1,238 @@
+{
+  "categories": {
+    "seo": {
+      "label": "SEO",
+      "icon": "search",
+      "principles": [
+        {
+          "id": "title_max_chars",
+          "name": "Title Max Characters",
+          "type": "number",
+          "value": 140,
+          "enabled": true,
+          "min": 80,
+          "max": 140
+        },
+        {
+          "id": "tags_count",
+          "name": "Tags Count",
+          "type": "number",
+          "value": 13,
+          "enabled": true,
+          "min": 13,
+          "max": 13
+        },
+        {
+          "id": "tag_max_chars",
+          "name": "Tag Max Characters",
+          "type": "number",
+          "value": 20,
+          "enabled": true,
+          "min": 1,
+          "max": 20
+        },
+        {
+          "id": "description_min_words",
+          "name": "Description Min Words",
+          "type": "number",
+          "value": 200,
+          "enabled": true,
+          "min": 100,
+          "max": 500
+        },
+        {
+          "id": "keyword_front_loading",
+          "name": "Keyword Front-Loading",
+          "type": "toggle",
+          "value": true,
+          "enabled": true
+        },
+        {
+          "id": "multi_word_tags",
+          "name": "Prefer Multi-Word Tags",
+          "type": "toggle",
+          "value": true,
+          "enabled": true
+        }
+      ]
+    },
+    "pricing": {
+      "label": "Pricing",
+      "icon": "attach_money",
+      "principles": [
+        {
+          "id": "strategy",
+          "name": "Pricing Strategy",
+          "type": "select",
+          "value": "penetration",
+          "enabled": true,
+          "options": ["penetration", "premium", "competitive"]
+        },
+        {
+          "id": "apparel_base_multiplier",
+          "name": "Apparel Price Multiplier",
+          "type": "number",
+          "value": 2.5,
+          "enabled": true,
+          "min": 1.5,
+          "max": 5.0
+        },
+        {
+          "id": "digital_fixed_price",
+          "name": "Digital Download Base Price (USD)",
+          "type": "number",
+          "value": 3.99,
+          "enabled": true,
+          "min": 0.99,
+          "max": 29.99
+        },
+        {
+          "id": "wall_art_base_multiplier",
+          "name": "Wall Art Price Multiplier",
+          "type": "number",
+          "value": 3.0,
+          "enabled": true,
+          "min": 1.5,
+          "max": 6.0
+        },
+        {
+          "id": "round_to_cent",
+          "name": "Round-to-Cent (e.g. $24.99)",
+          "type": "number",
+          "value": 0.99,
+          "enabled": true,
+          "min": 0.0,
+          "max": 0.99
+        }
+      ]
+    },
+    "design": {
+      "label": "Design",
+      "icon": "palette",
+      "principles": [
+        {
+          "id": "apparel_min_width_px",
+          "name": "Apparel Min Width (px)",
+          "type": "number",
+          "value": 4500,
+          "enabled": true,
+          "min": 2000,
+          "max": 6000
+        },
+        {
+          "id": "apparel_min_height_px",
+          "name": "Apparel Min Height (px)",
+          "type": "number",
+          "value": 5400,
+          "enabled": true,
+          "min": 2000,
+          "max": 7000
+        },
+        {
+          "id": "wall_art_min_width_px",
+          "name": "Wall Art Min Width (px)",
+          "type": "number",
+          "value": 3000,
+          "enabled": true,
+          "min": 1500,
+          "max": 6000
+        },
+        {
+          "id": "digital_width_px",
+          "name": "Digital Download Width (px)",
+          "type": "number",
+          "value": 2000,
+          "enabled": true,
+          "min": 800,
+          "max": 4000
+        },
+        {
+          "id": "designs_per_listing",
+          "name": "Design Variations per Listing",
+          "type": "number",
+          "value": 3,
+          "enabled": true,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "id": "mockups_per_listing",
+          "name": "Mockup Images per Listing",
+          "type": "number",
+          "value": 10,
+          "enabled": true,
+          "min": 5,
+          "max": 10
+        }
+      ]
+    },
+    "listing": {
+      "label": "Listing",
+      "icon": "sell",
+      "principles": [
+        {
+          "id": "description_structure",
+          "name": "Description Structure",
+          "type": "select",
+          "value": "hook_details_specs_cta",
+          "enabled": true,
+          "options": ["hook_details_specs_cta", "specs_first", "story_first"]
+        },
+        {
+          "id": "include_size_guide",
+          "name": "Include Size Guide in Description",
+          "type": "toggle",
+          "value": true,
+          "enabled": true
+        },
+        {
+          "id": "include_shipping_note",
+          "name": "Include Shipping Note",
+          "type": "toggle",
+          "value": true,
+          "enabled": true
+        },
+        {
+          "id": "digital_include_format_note",
+          "name": "Include File Format Note (digital)",
+          "type": "toggle",
+          "value": true,
+          "enabled": true
+        }
+      ]
+    },
+    "research": {
+      "label": "Research",
+      "icon": "manage_search",
+      "principles": [
+        {
+          "id": "opportunity_threshold",
+          "name": "Min Opportunity Score to Suggest",
+          "type": "number",
+          "value": 60,
+          "enabled": true,
+          "min": 0,
+          "max": 100
+        },
+        {
+          "id": "suggestions_per_research",
+          "name": "Store Suggestions per Research Run",
+          "type": "number",
+          "value": 5,
+          "enabled": true,
+          "min": 3,
+          "max": 8
+        },
+        {
+          "id": "trend_window_days",
+          "name": "Trend Window (days)",
+          "type": "number",
+          "value": 90,
+          "enabled": true,
+          "min": 30,
+          "max": 365
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,68 @@
+# Example store configuration
+# Copy this file to config/stores/your-store-slug.yaml and fill in your values.
+# Store configs are also auto-generated when you approve a store suggestion in the GUI.
+
+store_slug: example-store
+display_name: "My Etsy Store"
+etsy_shop_id: ""          # Filled in after store is live on Etsy
+active: true
+created_at: ""
+listing_count_target: 50
+airtable_store_record_id: ""
+
+niche:
+  primary: "cottagecore home decor"
+  secondary:
+    - botanical prints
+    - farmhouse style
+    - wildflower art
+  target_audience: "women 25-45, home decor enthusiasts, nature lovers"
+  subreddits:
+    - cottagecore
+    - HomeDecorating
+    - printmaking
+
+adapters:
+  llm:
+    primary: ollama
+    fallback: [gemini]
+  image_gen:
+    primary: ideogram           # ideogram | dalle | canva | pillow
+    fallback: [dalle, pillow]
+  pod:
+    primary: printify           # printify | printful | gelato
+    fallback: [printful]
+  upload:
+    primary: export_folder      # export_folder | etsy_api | draft_hybrid | airtable_queue
+    fallback: []
+
+pricing:
+  strategy: penetration         # penetration | premium | competitive
+  apparel_base_multiplier: 2.5  # pod_cost × multiplier = price
+  digital_fixed_price: 3.99
+  wall_art_base_multiplier: 3.0
+  round_to_cent: 0.99           # price ends in .99
+
+branding:
+  style_keywords:
+    - minimalist
+    - botanical
+    - hand-drawn
+    - vintage
+  color_palette:
+    - "#F5E6D3"   # warm cream
+    - "#8B7355"   # earthy brown
+    - "#5C7A4E"   # sage green
+    - "#D4B8A0"   # dusty rose
+  font_style: handwritten       # serif | sans-serif | handwritten
+  mood_keywords:
+    - cozy
+    - nostalgic
+    - earthy
+    - organic
+
+product_types:
+  - digital_download
+  - wall_art
+  # - apparel        # Uncomment to enable POD apparel
+  # - merch          # Uncomment to enable POD merch (mugs, totes, etc.)

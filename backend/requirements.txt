@@ -1,0 +1,21 @@
+# ─── Web Framework ──────────────────────────────────────────────────────────
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.0.0
+
+# ─── Core ───────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0
+pyyaml>=6.0
+httpx>=0.27.0
+
+# ─── LLM ────────────────────────────────────────────────────────────────────
+google-genai>=0.8.0          # Gemini
+anthropic>=0.34.0            # Claude
+
+# ─── Research ───────────────────────────────────────────────────────────────
+pytrends>=4.9.2              # Google Trends
+praw>=7.7.0                  # Reddit
+rapidfuzz>=3.0.0             # Fuzzy dedup
+
+# ─── Utilities ──────────────────────────────────────────────────────────────
+Pillow>=10.0.0               # Image processing (needed by some adapters)

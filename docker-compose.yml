@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/workspace:/app/backend/workspace
+      - ./backend/config:/app/backend/config
+    env_file:
+      - .env
+    restart: unless-stopped

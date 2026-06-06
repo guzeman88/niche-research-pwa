@@ -1,0 +1,61 @@
+workspace_dir: ./workspace
+logs_dir: ./logs
+log_level: INFO
+
+airtable:
+  api_key: ${AIRTABLE_API_KEY}
+  base_id: ${AIRTABLE_BASE_ID}
+  tables:
+    niches: "Niches"
+    stores: "Stores"
+    products: "Products"
+    listings: "Listings"
+
+adapters:
+  llm:
+    primary: ollama
+    fallback: [gemini]
+    model: qwen2.5:7b
+  image_gen:
+    primary: ideogram
+    fallback: [dalle, pillow]
+  pod:
+    primary: printify
+    fallback: [printful]
+  upload:
+    primary: export_folder
+    fallback: []
+  research:
+    sources: [etsy_autocomplete, google_trends, reddit]
+    # Add erank, marmalead, pinterest when keys are configured
+
+features:
+  auto_approve_suggestions: false
+  auto_publish_listings: false
+  cost_tracking: true
+  performance_sync: true
+
+research:
+  trend_window_days: 90
+  seed_keywords_per_research: 5
+  autocomplete_suggestions_per_keyword: 10
+  reddit_subreddits_default:
+    - Etsy
+    - printondemand
+    - crafts
+    - etsy_sellers
+    - redbubble
+
+niche_scoring:
+  demand_weight: 0.30
+  competition_weight: 0.30
+  margin_weight: 0.20
+  trend_weight: 0.20
+  opportunity_threshold: 60   # minimum score to suggest a store
+
+pod_cost_estimates:
+  printify_tshirt_usd: 8.50
+  printify_hoodie_usd: 22.00
+  printify_mug_usd: 7.00
+  printify_poster_usd: 9.00
+  digital_production_usd: 0.10  # image gen cost estimate

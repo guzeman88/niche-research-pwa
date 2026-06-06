@@ -1,0 +1,899 @@
+"""
+Persistent SQLite database for keyword research intelligence.
+
+Schema is versioned — migrations run automatically on init_db().
+All writes are transactional; WAL mode keeps reads fast during writes.
+
+Public API (backward-compatible):
+  init_db()               — create/migrate tables
+  load_seeds_from_library() — bulk-import config/seed_keywords.json
+  add_seed() / add_seeds_bulk()
+  save_scan(keyword, report)
+  get_unscanned() / get_stale() / get_next_batch()
+  get_top_opportunities() / get_top_gaps()
+  get_stats() / get_health()
+  search_keywords() / get_all_seeds() / get_domains()
+  record_expansion(parent, children, source)
+  log_scheduler_run() / update_scheduler_run()
+  export_csv(path) / export_json(path)
+  backup(backup_dir)
+  prune_old_scans(keep_per_keyword)
+  rebuild_gap_scores()
+"""
+
+import csv
+import json
+import shutil
+import sqlite3
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
+
+# Paths resolved relative to the backend/ directory
+import os as _os
+_BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.resolve()))
+DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
+SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
+SCHEMA_VERSION = 4
+
+
+# ── Connection ────────────────────────────────────────────────────────────────
+
+def _conn() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA foreign_keys=ON")
+    con.execute("PRAGMA synchronous=NORMAL")
+    return con
+
+
+# ── Schema migrations ─────────────────────────────────────────────────────────
+
+def _get_version(con: sqlite3.Connection) -> int:
+    con.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)")
+    row = con.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
+    return row[0] if row else 0
+
+
+def _set_version(con: sqlite3.Connection, version: int) -> None:
+    con.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", (version,))
+
+
+def _migrate_v1(con: sqlite3.Connection) -> None:
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS seeds (
+            keyword     TEXT PRIMARY KEY,
+            domain      TEXT NOT NULL DEFAULT 'unknown',
+            source      TEXT NOT NULL DEFAULT 'library',
+            added_at    TEXT NOT NULL,
+            priority    INTEGER NOT NULL DEFAULT 5
+        );
+
+        CREATE TABLE IF NOT EXISTS scans (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword                 TEXT NOT NULL,
+            scanned_at              TEXT NOT NULL,
+            opportunity_score       REAL,
+            demand_score            REAL,
+            competition_score       REAL,
+            margin_score            REAL,
+            trend_score             REAL,
+            avg_price_usd           REAL,
+            monthly_revenue_usd     REAL,
+            competition_quality     REAL,
+            listing_count           INTEGER,
+            sources_used            TEXT,
+            report_path             TEXT,
+            peak_months             TEXT,
+            keyword_clusters_json   TEXT,
+            entry_strategy          TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_scans_keyword     ON scans(keyword);
+        CREATE INDEX IF NOT EXISTS idx_scans_scanned_at  ON scans(scanned_at);
+        CREATE INDEX IF NOT EXISTS idx_scans_opportunity ON scans(opportunity_score DESC);
+    """)
+
+
+def _migrate_v2(con: sqlite3.Connection) -> None:
+    """Add expansion tree, gap scores, and scheduler log tables."""
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS expansion_tree (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_keyword  TEXT NOT NULL,
+            child_keyword   TEXT NOT NULL,
+            source          TEXT NOT NULL,
+            depth           INTEGER NOT NULL DEFAULT 1,
+            created_at      TEXT NOT NULL,
+            UNIQUE(parent_keyword, child_keyword, source)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_exp_parent ON expansion_tree(parent_keyword);
+        CREATE INDEX IF NOT EXISTS idx_exp_child  ON expansion_tree(child_keyword);
+
+        CREATE TABLE IF NOT EXISTS gap_scores (
+            keyword                 TEXT PRIMARY KEY,
+            gap_score               REAL,
+            listing_efficiency      REAL,
+            score_delta             REAL DEFAULT 0,
+            previous_gap_score      REAL,
+            trajectory              TEXT DEFAULT 'stable',
+            breakout_flag           INTEGER DEFAULT 0,
+            last_computed           TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_gap_score ON gap_scores(gap_score DESC);
+
+        CREATE TABLE IF NOT EXISTS scheduler_log (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at          TEXT NOT NULL,
+            completed_at        TEXT,
+            keywords_scanned    INTEGER DEFAULT 0,
+            new_seeds_found     INTEGER DEFAULT 0,
+            mode                TEXT DEFAULT 'continuous',
+            status              TEXT DEFAULT 'running',
+            error_msg           TEXT
+        );
+    """)
+
+
+def _migrate_v3(con: sqlite3.Connection) -> None:
+    """Add gap_score and trajectory columns to scans for fast querying."""
+    for col, typedef in [
+        ("gap_score",           "REAL"),
+        ("listing_efficiency",  "REAL"),
+        ("score_delta",         "REAL DEFAULT 0"),
+        ("trajectory",          "TEXT DEFAULT 'stable'"),
+    ]:
+        try:
+            con.execute(f"ALTER TABLE scans ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+
+def _migrate_v4(con: sqlite3.Connection) -> None:
+    """Add gap_reports table for full 6-signal gap analysis results."""
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS gap_reports (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword                     TEXT NOT NULL,
+            analyzed_at                 TEXT NOT NULL,
+            volume_gap_score            REAL DEFAULT 0,
+            quality_gap_score           REAL DEFAULT 0,
+            tag_gap_score               REAL DEFAULT 0,
+            style_gap_score             REAL DEFAULT 0,
+            price_gap_score             REAL DEFAULT 0,
+            recency_gap_score           REAL DEFAULT 0,
+            composite_gap_score         REAL DEFAULT 0,
+            entry_angle                 TEXT DEFAULT '',
+            recommended_price_min       REAL DEFAULT 0,
+            recommended_price_max       REAL DEFAULT 0,
+            untagged_searches_json      TEXT DEFAULT '[]',
+            dominant_competitor_tags_json TEXT DEFAULT '[]',
+            recommended_tags_json       TEXT DEFAULT '[]',
+            listings_analyzed           INTEGER DEFAULT 0,
+            avg_listing_age_months      REAL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_gap_reports_keyword ON gap_reports(keyword);
+        CREATE INDEX IF NOT EXISTS idx_gap_reports_composite ON gap_reports(composite_gap_score DESC);
+    """)
+
+
+def init_db() -> None:
+    """Create or migrate the database. Safe to call on every startup."""
+    with _conn() as con:
+        version = _get_version(con)
+        if version < 1:
+            _migrate_v1(con)
+            _set_version(con, 1)
+        if version < 2:
+            _migrate_v2(con)
+            _set_version(con, 2)
+        if version < 3:
+            _migrate_v3(con)
+            _set_version(con, 3)
+        if version < 4:
+            _migrate_v4(con)
+            _set_version(con, 4)
+
+
+# ── Seed management ───────────────────────────────────────────────────────────
+
+def load_seeds_from_library() -> int:
+    if not SEED_PATH.exists():
+        return 0
+    with open(SEED_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    now = datetime.utcnow().isoformat()
+    rows = []
+    for domain, keywords in data.get("domains", {}).items():
+        for kw in keywords:
+            rows.append((kw.strip().lower(), domain, "library", now, 5))
+    with _conn() as con:
+        cur = con.executemany(
+            "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at, priority) VALUES (?,?,?,?,?)",
+            rows,
+        )
+        return cur.rowcount
+
+
+def add_seed(keyword: str, domain: str = "discovered", source: str = "auto",
+             priority: int = 5) -> bool:
+    now = datetime.utcnow().isoformat()
+    with _conn() as con:
+        cur = con.execute(
+            "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at, priority) VALUES (?,?,?,?,?)",
+            (keyword.strip().lower(), domain, source, now, priority),
+        )
+        return cur.rowcount > 0
+
+
+def add_seeds_bulk(keywords: list[str], domain: str = "discovered", source: str = "auto",
+                   priority: int = 5) -> int:
+    now = datetime.utcnow().isoformat()
+    rows = [(kw.strip().lower(), domain, source, now, priority)
+            for kw in keywords if kw.strip()]
+    if not rows:
+        return 0
+    with _conn() as con:
+        cur = con.executemany(
+            "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at, priority) VALUES (?,?,?,?,?)",
+            rows,
+        )
+        return cur.rowcount
+
+
+# ── Expansion tree ────────────────────────────────────────────────────────────
+
+def record_expansion(parent: str, children: list[str], source: str,
+                     depth: int = 1) -> int:
+    """
+    Record parent -> child expansion relationships.
+    Also bulk-adds children as seeds.
+    Returns count of new seeds added.
+    """
+    if not children:
+        return 0
+    now = datetime.utcnow().isoformat()
+    parent_kw = parent.strip().lower()
+    child_rows = [(parent_kw, c.strip().lower(), source, depth, now)
+                  for c in children if c.strip()]
+    with _conn() as con:
+        con.executemany(
+            "INSERT OR IGNORE INTO expansion_tree (parent_keyword, child_keyword, source, depth, created_at) VALUES (?,?,?,?,?)",
+            child_rows,
+        )
+
+    # Estimate scan depth of parent to set child depth priority
+    priority = max(3, 7 - depth)  # deeper expansions get lower priority
+    return add_seeds_bulk([c.strip().lower() for c in children],
+                          domain="discovered", source=f"expand_{source}", priority=priority)
+
+
+def get_expansion_children(keyword: str) -> list[str]:
+    with _conn() as con:
+        rows = con.execute(
+            "SELECT child_keyword FROM expansion_tree WHERE parent_keyword = ?",
+            (keyword.strip().lower(),)
+        ).fetchall()
+        return [r[0] for r in rows]
+
+
+def get_expansion_depth(keyword: str) -> int:
+    """How many levels deep from a seed is this keyword? 0 = original seed."""
+    with _conn() as con:
+        row = con.execute(
+            "SELECT MIN(depth) FROM expansion_tree WHERE child_keyword = ?",
+            (keyword.strip().lower(),)
+        ).fetchone()
+        return row[0] if row[0] is not None else 0
+
+
+# ── Scan storage ──────────────────────────────────────────────────────────────
+
+def save_scan(keyword: str, report) -> None:
+    add_seed(keyword, source="scan_created")
+
+    if hasattr(report, "__dataclass_fields__"):
+        import dataclasses
+        r = dataclasses.asdict(report)
+    else:
+        r = dict(report)
+
+    now = datetime.utcnow().isoformat()
+    kw = keyword.strip().lower()
+
+    listing_count = None
+    comp_quality = r.get("avg_competition_quality")
+    ksd = r.get("keyword_search_data", [])
+    if ksd:
+        counts = [d.get("listing_count") for d in ksd if d.get("listing_count")]
+        if counts:
+            listing_count = int(sum(counts) / len(counts))
+
+    opp = r.get("opportunity_score") or 0
+    demand = r.get("demand_score") or 0
+    trend = r.get("trend_velocity_score") or 0
+    comp_q = comp_quality or 50
+    margin = r.get("margin_score") or 0
+    monthly_rev = r.get("estimated_market_monthly_revenue_usd") or 0
+
+    # Listing efficiency: revenue per 1000 listings (proxy for search density)
+    listing_eff = 0.0
+    if listing_count and listing_count > 0:
+        listing_eff = min(100.0, (monthly_rev / listing_count) * 10)
+
+    # Gap score weights underserved high-demand niches
+    gap = (demand * 0.30 + trend * 0.25 + (100 - comp_q) * 0.35 + margin * 0.10)
+    gap = min(100.0, max(0.0, gap))
+
+    with _conn() as con:
+        con.execute("""
+            INSERT INTO scans
+              (keyword, scanned_at, opportunity_score, demand_score, competition_score,
+               margin_score, trend_score, avg_price_usd, monthly_revenue_usd,
+               competition_quality, listing_count, sources_used, report_path,
+               peak_months, keyword_clusters_json, entry_strategy,
+               gap_score, listing_efficiency, score_delta, trajectory)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            kw, now, opp, demand,
+            r.get("competition_score"), margin,
+            trend, r.get("avg_price_usd"),
+            monthly_rev, comp_quality, listing_count,
+            json.dumps(r.get("sources_used", [])),
+            r.get("report_path"),
+            json.dumps(r.get("peak_months", [])),
+            json.dumps(r.get("keyword_clusters", [])),
+            r.get("entry_strategy"),
+            gap, listing_eff, 0.0, "stable",
+        ))
+
+    _update_gap_score(kw, gap)
+
+
+def _update_gap_score(keyword: str, new_gap: float) -> None:
+    """Compute trajectory and update gap_scores table.
+
+    Velocity is time-normalized to a 30-day rate so keywords rescanned
+    frequently don't show inflated deltas vs. keywords rescanned monthly.
+    e.g. a +10 point jump in 2 days = +150/30d velocity (breakout)
+         a +10 point jump in 60 days = +5/30d velocity (stable)
+    """
+    with _conn() as con:
+        prev = con.execute(
+            "SELECT gap_score, last_computed FROM gap_scores WHERE keyword = ?", (keyword,)
+        ).fetchone()
+        prev_score = prev[0] if prev else None
+        prev_time_str = prev[1] if prev else None
+        delta = (new_gap - prev_score) if prev_score is not None else 0.0
+
+        # Time-normalize delta to a 30-day velocity
+        velocity = delta
+        if prev_score is not None and prev_time_str:
+            try:
+                days = max(1, (datetime.utcnow() - datetime.fromisoformat(prev_time_str)).days)
+                velocity = delta / days * 30
+            except Exception:
+                pass
+
+        if velocity >= 8:
+            trajectory = "rising"
+        elif velocity <= -8:
+            trajectory = "declining"
+        else:
+            trajectory = "stable"
+
+        breakout = 1 if velocity >= 15 else 0
+
+        con.execute("""
+            INSERT INTO gap_scores
+              (keyword, gap_score, listing_efficiency, score_delta,
+               previous_gap_score, trajectory, breakout_flag, last_computed)
+            VALUES (?,?,?,?,?,?,?,?)
+            ON CONFLICT(keyword) DO UPDATE SET
+              previous_gap_score = gap_scores.gap_score,
+              gap_score = excluded.gap_score,
+              listing_efficiency = excluded.listing_efficiency,
+              score_delta = excluded.score_delta,
+              trajectory = excluded.trajectory,
+              breakout_flag = excluded.breakout_flag,
+              last_computed = excluded.last_computed
+        """, (keyword, new_gap, 0.0, delta, prev_score, trajectory, breakout,
+              datetime.utcnow().isoformat()))
+
+        # Update trajectory on most recent scan row too
+        con.execute("""
+            UPDATE scans SET gap_score=?, score_delta=?, trajectory=?
+            WHERE keyword=? AND id=(SELECT MAX(id) FROM scans WHERE keyword=?)
+        """, (new_gap, delta, trajectory, keyword, keyword))
+
+
+def rebuild_gap_scores() -> int:
+    """Recompute gap scores for all scanned keywords. Returns count updated."""
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT s.keyword, sc.demand_score, sc.trend_score,
+                   sc.competition_quality, sc.margin_score,
+                   sc.monthly_revenue_usd, sc.listing_count
+            FROM seeds s
+            JOIN scans sc ON sc.keyword = s.keyword
+            WHERE sc.id = (SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword = s.keyword)
+        """).fetchall()
+
+    count = 0
+    for r in rows:
+        demand = r["demand_score"] or 0
+        trend = r["trend_score"] or 0
+        comp_q = r["competition_quality"] or 50
+        margin = r["margin_score"] or 0
+        gap = min(100.0, demand * 0.30 + trend * 0.25 + (100 - comp_q) * 0.35 + margin * 0.10)
+        _update_gap_score(r["keyword"], gap)
+        count += 1
+    return count
+
+
+# ── Queue / batch selection ───────────────────────────────────────────────────
+
+def get_unscanned(limit: int = 20, domain: Optional[str] = None) -> list[str]:
+    with _conn() as con:
+        if domain:
+            rows = con.execute("""
+                SELECT s.keyword FROM seeds s
+                WHERE s.domain=?
+                  AND NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
+                ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
+            """, (domain, limit)).fetchall()
+        else:
+            rows = con.execute("""
+                SELECT s.keyword FROM seeds s
+                WHERE NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
+                ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
+            """, (limit,)).fetchall()
+        return [r["keyword"] for r in rows]
+
+
+def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> list[str]:
+    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    with _conn() as con:
+        base = """
+            SELECT s.keyword FROM seeds s
+            JOIN (SELECT keyword, MAX(scanned_at) AS last_scan FROM scans GROUP BY keyword) latest
+              ON latest.keyword=s.keyword
+            WHERE latest.last_scan < ?
+        """
+        if domain:
+            rows = con.execute(base + " AND s.domain=? ORDER BY latest.last_scan ASC LIMIT ?",
+                               (cutoff, domain, limit)).fetchall()
+        else:
+            rows = con.execute(base + " ORDER BY latest.last_scan ASC LIMIT ?",
+                               (cutoff, limit)).fetchall()
+        return [r["keyword"] for r in rows]
+
+
+def get_breakouts(limit: int = 20) -> list[str]:
+    """Keywords whose gap score jumped 12+ points since last scan — highest priority."""
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT keyword FROM gap_scores
+            WHERE breakout_flag=1
+            ORDER BY score_delta DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [r[0] for r in rows]
+
+
+def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
+    """Smart batch: breakouts first, then unscanned (by priority), then stale."""
+    result: list[str] = []
+    seen: set[str] = set()
+
+    def _add(items):
+        for kw in items:
+            if kw not in seen and len(result) < count:
+                result.append(kw)
+                seen.add(kw)
+
+    _add(get_breakouts(limit=count))
+    _add(get_unscanned(limit=count))
+    _add(get_stale(days=stale_days, limit=count))
+    return result[:count]
+
+
+def get_all_seeds_with_status(limit: int = 2000) -> list[dict]:
+    """Return all seeds with scan status for the UI checklist."""
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT s.keyword, s.domain, s.priority, s.added_at,
+                   sc.scanned_at,
+                   sc.opportunity_score,
+                   sc.gap_score
+            FROM seeds s
+            LEFT JOIN (
+                SELECT keyword, MAX(scanned_at) AS scanned_at,
+                       opportunity_score, gap_score
+                FROM scans
+                GROUP BY keyword
+            ) sc ON sc.keyword = s.keyword
+            ORDER BY
+                CASE WHEN sc.scanned_at IS NULL THEN 0 ELSE 1 END,
+                sc.scanned_at DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ── Query ─────────────────────────────────────────────────────────────────────
+
+def get_top_opportunities(limit: int = 100, domain: Optional[str] = None) -> list[dict]:
+    with _conn() as con:
+        base = """
+            SELECT s.keyword, s.domain, sc.opportunity_score, sc.demand_score,
+                   sc.competition_score, sc.margin_score, sc.trend_score,
+                   sc.avg_price_usd, sc.monthly_revenue_usd, sc.competition_quality,
+                   sc.listing_count, sc.scanned_at, sc.entry_strategy, sc.peak_months,
+                   sc.gap_score, sc.score_delta, sc.trajectory,
+                   gs.breakout_flag
+            FROM seeds s
+            JOIN scans sc ON sc.keyword=s.keyword
+            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
+            WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
+              AND sc.opportunity_score IS NOT NULL
+        """
+        if domain:
+            rows = con.execute(base + " AND s.domain=? ORDER BY sc.opportunity_score DESC LIMIT ?",
+                               (domain, limit)).fetchall()
+        else:
+            rows = con.execute(base + " ORDER BY sc.opportunity_score DESC LIMIT ?",
+                               (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_top_gaps(limit: int = 100, domain: Optional[str] = None) -> list[dict]:
+    """Ranked by gap_score (underserved high-demand) rather than raw opportunity."""
+    with _conn() as con:
+        base = """
+            SELECT s.keyword, s.domain, gs.gap_score, gs.score_delta, gs.trajectory,
+                   gs.breakout_flag, sc.demand_score, sc.competition_quality,
+                   sc.avg_price_usd, sc.monthly_revenue_usd, sc.scanned_at,
+                   sc.opportunity_score, sc.trend_score
+            FROM gap_scores gs
+            JOIN seeds s ON s.keyword=gs.keyword
+            JOIN scans sc ON sc.keyword=gs.keyword
+            WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=gs.keyword)
+              AND gs.gap_score IS NOT NULL
+        """
+        if domain:
+            rows = con.execute(base + " AND s.domain=? ORDER BY gs.gap_score DESC LIMIT ?",
+                               (domain, limit)).fetchall()
+        else:
+            rows = con.execute(base + " ORDER BY gs.gap_score DESC LIMIT ?",
+                               (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_stats() -> dict:
+    with _conn() as con:
+        total_seeds = con.execute("SELECT COUNT(*) FROM seeds").fetchone()[0]
+        scanned     = con.execute("SELECT COUNT(DISTINCT keyword) FROM scans").fetchone()[0]
+        total_scans = con.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
+        breakouts   = con.execute("SELECT COUNT(*) FROM gap_scores WHERE breakout_flag=1").fetchone()[0]
+        expansion_edges = con.execute("SELECT COUNT(*) FROM expansion_tree").fetchone()[0]
+
+        avg_opp_row = con.execute("""
+            SELECT AVG(sc.opportunity_score)
+            FROM (SELECT keyword, MAX(id) as id FROM scans GROUP BY keyword) latest
+            JOIN scans sc ON sc.id=latest.id
+            WHERE sc.opportunity_score IS NOT NULL
+        """).fetchone()
+        avg_opp = avg_opp_row[0] if avg_opp_row[0] else 0
+
+        avg_gap_row = con.execute("SELECT AVG(gap_score) FROM gap_scores WHERE gap_score IS NOT NULL").fetchone()
+        avg_gap = avg_gap_row[0] if avg_gap_row[0] else 0
+
+        top_gap = con.execute("""
+            SELECT gs.keyword, gs.gap_score FROM gap_scores gs ORDER BY gs.gap_score DESC LIMIT 1
+        """).fetchone()
+
+        domains = con.execute(
+            "SELECT domain, COUNT(*) as cnt FROM seeds GROUP BY domain ORDER BY cnt DESC"
+        ).fetchall()
+
+        return {
+            "total_seeds":      total_seeds,
+            "scanned":          scanned,
+            "unscanned":        total_seeds - scanned,
+            "total_scans":      total_scans,
+            "coverage_pct":     round(scanned / total_seeds * 100, 1) if total_seeds else 0,
+            "avg_opportunity":  round(avg_opp, 1),
+            "avg_gap_score":    round(avg_gap, 1),
+            "breakout_count":   breakouts,
+            "expansion_edges":  expansion_edges,
+            "top_gap_keyword":  dict(top_gap) if top_gap else None,
+            "domains":          [dict(r) for r in domains],
+        }
+
+
+def get_health() -> dict:
+    """Database file health and size stats."""
+    db_path = DB_PATH.resolve()
+    size_mb = db_path.stat().st_size / 1_048_576 if db_path.exists() else 0
+    with _conn() as con:
+        oldest = con.execute("SELECT MIN(scanned_at) FROM scans").fetchone()[0]
+        newest = con.execute("SELECT MAX(scanned_at) FROM scans").fetchone()[0]
+        orphan_seeds = con.execute("""
+            SELECT COUNT(*) FROM seeds WHERE keyword NOT IN (SELECT keyword FROM scans)
+        """).fetchone()[0]
+        integrity = con.execute("PRAGMA integrity_check").fetchone()[0]
+    return {
+        "db_path":      str(db_path),
+        "size_mb":      round(size_mb, 2),
+        "oldest_scan":  oldest,
+        "newest_scan":  newest,
+        "orphan_seeds": orphan_seeds,
+        "integrity":    integrity,
+        "schema_version": SCHEMA_VERSION,
+    }
+
+
+def search_keywords(query: str, limit: int = 100) -> list[dict]:
+    q = f"%{query.lower()}%"
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT s.keyword, s.domain, s.source, s.added_at,
+                   sc.opportunity_score, sc.avg_price_usd, sc.scanned_at,
+                   gs.gap_score, gs.trajectory
+            FROM seeds s
+            LEFT JOIN (SELECT keyword, MAX(id) as id FROM scans GROUP BY keyword) latest
+              ON latest.keyword=s.keyword
+            LEFT JOIN scans sc ON sc.id=latest.id
+            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
+            WHERE s.keyword LIKE ?
+            ORDER BY gs.gap_score DESC NULLS LAST
+            LIMIT ?
+        """, (q, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_all_seeds(domain: Optional[str] = None) -> list[dict]:
+    with _conn() as con:
+        extra = "WHERE s.domain=?" if domain else ""
+        args = (domain,) if domain else ()
+        rows = con.execute(f"""
+            SELECT s.keyword, s.domain, s.source, s.added_at, s.priority,
+                   sc.opportunity_score, sc.scanned_at, gs.gap_score, gs.trajectory
+            FROM seeds s
+            LEFT JOIN (SELECT keyword, MAX(id) as id FROM scans GROUP BY keyword) latest
+              ON latest.keyword=s.keyword
+            LEFT JOIN scans sc ON sc.id=latest.id
+            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
+            {extra}
+            ORDER BY gs.gap_score DESC NULLS LAST, s.keyword ASC
+        """, args).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_domains() -> list[str]:
+    with _conn() as con:
+        rows = con.execute("SELECT DISTINCT domain FROM seeds ORDER BY domain").fetchall()
+        return [r["domain"] for r in rows]
+
+
+# ── Scheduler log ─────────────────────────────────────────────────────────────
+
+def log_scheduler_run(mode: str = "continuous") -> int:
+    """Start a new scheduler run record. Returns run ID."""
+    now = datetime.utcnow().isoformat()
+    with _conn() as con:
+        cur = con.execute(
+            "INSERT INTO scheduler_log (started_at, mode, status) VALUES (?,?,?)",
+            (now, mode, "running")
+        )
+        return cur.lastrowid
+
+
+def update_scheduler_run(run_id: int, keywords_scanned: int = 0,
+                         new_seeds: int = 0, status: str = "running",
+                         error_msg: Optional[str] = None) -> None:
+    now = datetime.utcnow().isoformat()
+    with _conn() as con:
+        con.execute("""
+            UPDATE scheduler_log SET keywords_scanned=?, new_seeds_found=?,
+            status=?, error_msg=?, completed_at=?
+            WHERE id=?
+        """, (keywords_scanned, new_seeds, status,
+              error_msg, now if status != "running" else None, run_id))
+
+
+def get_scheduler_history(limit: int = 20) -> list[dict]:
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT * FROM scheduler_log ORDER BY started_at DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ── Export ────────────────────────────────────────────────────────────────────
+
+def export_csv(path: str | Path, domain: Optional[str] = None,
+               sort_by: str = "gap_score") -> int:
+    """Export top opportunities to CSV. Returns row count."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = get_top_gaps(limit=10_000, domain=domain) if sort_by == "gap_score" \
+        else get_top_opportunities(limit=10_000, domain=domain)
+
+    if not data:
+        return 0
+
+    fieldnames = list(data[0].keys())
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        w.writerows(data)
+    return len(data)
+
+
+def export_json(path: str | Path, include_raw_scans: bool = False) -> int:
+    """Export full DB snapshot to JSON. Returns row count."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload: dict = {
+        "exported_at": datetime.utcnow().isoformat(),
+        "stats": get_stats(),
+        "top_gaps": get_top_gaps(limit=500),
+        "top_opportunities": get_top_opportunities(limit=500),
+    }
+
+    if include_raw_scans:
+        with _conn() as con:
+            rows = con.execute("SELECT * FROM scans ORDER BY scanned_at DESC LIMIT 5000").fetchall()
+            payload["raw_scans"] = [dict(r) for r in rows]
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, default=str)
+    return len(payload["top_gaps"])
+
+
+# ── Backup ────────────────────────────────────────────────────────────────────
+
+def backup(backup_dir: str | Path = "workspace/_keyword_db/backups") -> Path:
+    """Copy the SQLite file to a timestamped backup. Returns backup path."""
+    backup_dir = Path(backup_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    dest = backup_dir / f"keywords_{ts}.sqlite"
+    shutil.copy2(DB_PATH, dest)
+    # Keep only last 10 backups
+    backups = sorted(backup_dir.glob("keywords_*.sqlite"))
+    for old in backups[:-10]:
+        old.unlink(missing_ok=True)
+    return dest
+
+
+# ── Prune ─────────────────────────────────────────────────────────────────────
+
+def prune_old_scans(keep_per_keyword: int = 5) -> int:
+    """
+    Delete old scan rows, keeping the N most recent per keyword.
+    Returns total rows deleted.
+    """
+    with _conn() as con:
+        # Find IDs to delete: all except the N most recent per keyword
+        rows = con.execute("""
+            SELECT id FROM scans WHERE id NOT IN (
+                SELECT id FROM (
+                    SELECT id, ROW_NUMBER() OVER (
+                        PARTITION BY keyword ORDER BY scanned_at DESC
+                    ) as rn FROM scans
+                ) ranked WHERE rn <= ?
+            )
+        """, (keep_per_keyword,)).fetchall()
+        ids = [r[0] for r in rows]
+        if ids:
+            placeholders = ",".join("?" * len(ids))
+            con.execute(f"DELETE FROM scans WHERE id IN ({placeholders})", ids)
+        return len(ids)
+
+
+def vacuum() -> None:
+    """Reclaim space after pruning. Runs outside a transaction."""
+    con = _conn()
+    con.isolation_level = None
+    con.execute("VACUUM")
+    con.close()
+
+
+# ── Gap reports ───────────────────────────────────────────────────────────────
+
+def save_gap_report(
+    keyword: str,
+    volume_gap: float = 0.0,
+    quality_gap: float = 0.0,
+    tag_gap: float = 0.0,
+    style_gap: float = 0.0,
+    price_gap: float = 0.0,
+    recency_gap: float = 0.0,
+    composite_gap: float = 0.0,
+    entry_angle: str = "",
+    recommended_price_min: float = 0.0,
+    recommended_price_max: float = 0.0,
+    untagged_searches: Optional[list] = None,
+    dominant_competitor_tags: Optional[list] = None,
+    recommended_tags: Optional[list] = None,
+    listings_analyzed: int = 0,
+    avg_listing_age_months: float = 0.0,
+) -> int:
+    """Insert a gap report row. Returns the new row ID."""
+    now = datetime.utcnow().isoformat()
+    kw = keyword.strip().lower()
+    with _conn() as con:
+        cur = con.execute("""
+            INSERT INTO gap_reports
+              (keyword, analyzed_at,
+               volume_gap_score, quality_gap_score, tag_gap_score,
+               style_gap_score, price_gap_score, recency_gap_score,
+               composite_gap_score, entry_angle,
+               recommended_price_min, recommended_price_max,
+               untagged_searches_json, dominant_competitor_tags_json,
+               recommended_tags_json, listings_analyzed, avg_listing_age_months)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            kw, now,
+            volume_gap, quality_gap, tag_gap,
+            style_gap, price_gap, recency_gap,
+            composite_gap, entry_angle,
+            recommended_price_min, recommended_price_max,
+            json.dumps(untagged_searches or []),
+            json.dumps(dominant_competitor_tags or []),
+            json.dumps(recommended_tags or []),
+            listings_analyzed, avg_listing_age_months,
+        ))
+        return cur.lastrowid
+
+
+def get_gap_report(keyword: str) -> Optional[dict]:
+    """Most recent gap report for a keyword, or None."""
+    kw = keyword.strip().lower()
+    with _conn() as con:
+        row = con.execute("""
+            SELECT * FROM gap_reports WHERE keyword=?
+            ORDER BY analyzed_at DESC LIMIT 1
+        """, (kw,)).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        for field in ("untagged_searches_json", "dominant_competitor_tags_json", "recommended_tags_json"):
+            try:
+                d[field] = json.loads(d[field])
+            except Exception:
+                d[field] = []
+        return d
+
+
+def get_top_gap_reports(limit: int = 100, min_score: float = 0.0) -> list[dict]:
+    """Most recent gap report per keyword, ranked by composite_gap_score."""
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT gr.* FROM gap_reports gr
+            WHERE gr.id = (
+                SELECT MAX(id) FROM gap_reports gr2 WHERE gr2.keyword = gr.keyword
+            )
+            AND gr.composite_gap_score >= ?
+            ORDER BY gr.composite_gap_score DESC
+            LIMIT ?
+        """, (min_score, limit)).fetchall()
+        results = []
+        for row in rows:
+            d = dict(row)
+            for field in ("untagged_searches_json", "dominant_competitor_tags_json", "recommended_tags_json"):
+                try:
+                    d[field] = json.loads(d[field])
+                except Exception:
+                    d[field] = []
+            results.append(d)
+        return results
