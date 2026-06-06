@@ -1,0 +1,62 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T21:04:15.402274+00:00",
+  "seed_keywords": [
+    "vintage-style tote bags"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "vintage-style tote bags",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "vintage-style tote bags",
+      "monthly_searches": 111,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 50.8,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 48.2,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "vintage-style tote bags"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "Vintage-style tote bags"
+  ],
+  "competitor_gaps": [],
+  "pricing_insights": "",
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504210415"
+}

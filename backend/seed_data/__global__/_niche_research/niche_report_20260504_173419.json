@@ -1,0 +1,68 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T17:34:19.359856+00:00",
+  "seed_keywords": [
+    "christmas ornament"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "christmas ornament",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "christmas ornament",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "christmas ornament"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [
+    "Focus on unique or seasonal themes"
+  ],
+  "recommended_product_types": [
+    "Christmas ornaments with personalized messages"
+  ],
+  "competitor_gaps": [
+    "Offer exclusive designs or limited edition items to stand out in the market"
+  ],
+  "pricing_insights": [
+    "Competitors have stable search volumes and low competition, suggesting a moderate price point may be attractive for growth"
+  ],
+  "entry_strategy": "Start by establishing yourself as a niche player offering unique Christmas ornaments that are both trendy and personalized.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504173419"
+}

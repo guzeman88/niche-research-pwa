@@ -1,0 +1,103 @@
+{
+  "store_slug": "__test__",
+  "generated_at": "2026-04-20T03:09:11.328839+00:00",
+  "seed_keywords": [
+    "nurse gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "nurse gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "nurse gift",
+      "monthly_searches": 2925,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "rising",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 70.9,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 67.5,
+  "opportunity_score": 57.8,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 12.1
+    },
+    {
+      "month": 2,
+      "relative_interest": 22.9
+    },
+    {
+      "month": 3,
+      "relative_interest": 16.2
+    },
+    {
+      "month": 4,
+      "relative_interest": 23.3
+    },
+    {
+      "month": 5,
+      "relative_interest": 21.7
+    },
+    {
+      "month": 6,
+      "relative_interest": 10.3
+    },
+    {
+      "month": 7,
+      "relative_interest": 10.3
+    },
+    {
+      "month": 8,
+      "relative_interest": 11.4
+    },
+    {
+      "month": 9,
+      "relative_interest": 10.5
+    },
+    {
+      "month": 10,
+      "relative_interest": 12.4
+    },
+    {
+      "month": 11,
+      "relative_interest": 22.5
+    },
+    {
+      "month": 12,
+      "relative_interest": 29.7
+    }
+  ],
+  "peak_months": [
+    12
+  ],
+  "keyword_clusters": [],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "digital_download",
+    "wall_art"
+  ],
+  "competitor_gaps": [],
+  "pricing_insights": "",
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260420030911"
+}

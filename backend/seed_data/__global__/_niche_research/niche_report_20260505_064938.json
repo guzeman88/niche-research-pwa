@@ -1,0 +1,120 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T06:49:38.277458+00:00",
+  "seed_keywords": [
+    "april is the month of daisies - ecolux wall art prints"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "april is the month of daisies - ecolux wall art prints",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "april is the month of daisies - ecolux wall art prints",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 2,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 3,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 4,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 5,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 6,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 7,
+      "relative_interest": 7.4
+    },
+    {
+      "month": 8,
+      "relative_interest": 2.6
+    },
+    {
+      "month": 9,
+      "relative_interest": 2.6
+    },
+    {
+      "month": 10,
+      "relative_interest": 2.7
+    },
+    {
+      "month": 11,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 12,
+      "relative_interest": 0.0
+    }
+  ],
+  "peak_months": [
+    7
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "april is the month of daisies - ecolux wall art prints"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [
+    "high demand with stable trends"
+  ],
+  "recommended_product_types": [
+    "wall art prints"
+  ],
+  "competitor_gaps": [
+    "low search volume and low competition",
+    "stable searches with high competition quality"
+  ],
+  "pricing_insights": {
+    "price_range": "0"
+  },
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505064938"
+}

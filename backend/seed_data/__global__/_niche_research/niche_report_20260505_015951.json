@@ -1,0 +1,123 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T01:59:51.166107+00:00",
+  "seed_keywords": [
+    "skateboarding gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "skateboarding gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "skateboarding gift",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 2,
+      "relative_interest": 6.0
+    },
+    {
+      "month": 3,
+      "relative_interest": 0.7
+    },
+    {
+      "month": 4,
+      "relative_interest": 3.7
+    },
+    {
+      "month": 5,
+      "relative_interest": 0.3
+    },
+    {
+      "month": 6,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 7,
+      "relative_interest": 6.3
+    },
+    {
+      "month": 8,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 9,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 10,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 11,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 12,
+      "relative_interest": 1.8
+    }
+  ],
+  "peak_months": [
+    2,
+    7
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "skateboarding gift"
+      ],
+      "opportunity_score": 7000,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 35000.0
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [
+    "High competition, high search volume"
+  ],
+  "recommended_product_types": [
+    "skateboard accessories",
+    "waterproof phone cases for skateboards",
+    "custom skateboard designs"
+  ],
+  "competitor_gaps": [
+    {
+      "keyword": "skateboarding gift",
+      "competition_quality_ratio": 0.1,
+      "opportunity_score_difference": -6500
+    }
+  ],
+  "pricing_insights": "",
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505015951"
+}

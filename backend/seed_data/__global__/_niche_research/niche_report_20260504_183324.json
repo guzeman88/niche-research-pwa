@@ -1,0 +1,126 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T18:33:24.191197+00:00",
+  "seed_keywords": [
+    "gifts for best friend"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "gifts for best friend",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "gifts for best friend",
+      "monthly_searches": 4557,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 82.5,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 57.8,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 23.0
+    },
+    {
+      "month": 2,
+      "relative_interest": 22.9
+    },
+    {
+      "month": 3,
+      "relative_interest": 18.4
+    },
+    {
+      "month": 4,
+      "relative_interest": 21.7
+    },
+    {
+      "month": 5,
+      "relative_interest": 21.8
+    },
+    {
+      "month": 6,
+      "relative_interest": 18.9
+    },
+    {
+      "month": 7,
+      "relative_interest": 19.2
+    },
+    {
+      "month": 8,
+      "relative_interest": 19.4
+    },
+    {
+      "month": 9,
+      "relative_interest": 20.5
+    },
+    {
+      "month": 10,
+      "relative_interest": 22.0
+    },
+    {
+      "month": 11,
+      "relative_interest": 43.1
+    },
+    {
+      "month": 12,
+      "relative_interest": 55.6
+    }
+  ],
+  "peak_months": [
+    12
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "gifts for best friend"
+      ],
+      "opportunity_score": 12,
+      "avg_competition_quality": 40.0,
+      "estimated_monthly_revenue_potential_usd": 3600
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [
+    "high competition, high conversion"
+  ],
+  "recommended_product_types": [
+    "gourmet chocolates",
+    "customized photo gifts"
+  ],
+  "competitor_gaps": [
+    {
+      "keyword": "gifts for best friend",
+      "opportunity_score": -10,
+      "avg_competition_quality": 45.0
+    }
+  ],
+  "pricing_insights": [
+    "gourmet chocolates offer a premium price point, suitable for niche markets"
+  ],
+  "entry_strategy": [
+    "start with an email campaign targeting your ideal customer",
+    "build relationships through social media and community engagement"
+  ],
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504183324"
+}

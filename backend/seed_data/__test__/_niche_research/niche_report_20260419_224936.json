@@ -1,0 +1,124 @@
+{
+  "store_slug": "__test__",
+  "generated_at": "2026-04-19T22:49:36.618447+00:00",
+  "seed_keywords": [
+    "cat lover gifts"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "cat lover gifts",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "cat lover gifts",
+      "monthly_searches": 817,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 55.8,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 49.7,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 1.7
+    },
+    {
+      "month": 2,
+      "relative_interest": 14.4
+    },
+    {
+      "month": 3,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 4,
+      "relative_interest": 1.7
+    },
+    {
+      "month": 5,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 6,
+      "relative_interest": 0.9
+    },
+    {
+      "month": 7,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 8,
+      "relative_interest": 1.5
+    },
+    {
+      "month": 9,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 10,
+      "relative_interest": 1.8
+    },
+    {
+      "month": 11,
+      "relative_interest": 21.0
+    },
+    {
+      "month": 12,
+      "relative_interest": 38.1
+    }
+  ],
+  "peak_months": [
+    12
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "Affordable Cat Lover Gifts",
+      "keywords": [
+        "cat lover gifts",
+        "handmade cat toys",
+        "unique cat accessories"
+      ],
+      "opportunity_score": 85,
+      "avg_competition_quality": 20,
+      "estimated_monthly_revenue_potential_usd": 10,
+      "rationale": "The keyword 'cat lover gifts' shows a stable but low search volume and low competition, making it an attractive niche for new listings. The opportunity score of 85 indicates that there is significant potential to attract buyers with a moderate level of difficulty."
+    }
+  ],
+  "underserved_angles": [
+    "Cute cat accessories"
+  ],
+  "winning_styles": [
+    "Minimalist design",
+    "3D printing technology for small-sized gifts",
+    "Unique material combinations (e.g., recycled textiles)"
+  ],
+  "recommended_product_types": [
+    "apparel",
+    "wall art"
+  ],
+  "competitor_gaps": [
+    "The current listings offer a wide variety of cat-themed gifts but lack options that cater to minimalist designs."
+  ],
+  "pricing_insights": "In this niche, the sweet spot price range is typically between $5-$10. Positioning your products in this range can attract buyers who are looking for affordable yet quality items.",
+  "entry_strategy": "To start with, create a small batch of handcrafted cat accessories, focusing on minimalist designs and unique materials (e.g., recycled silk or cotton). Price them within the $5-$10 range. Gradually increase your offerings as you gain more experience and market traction.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260419224936"
+}

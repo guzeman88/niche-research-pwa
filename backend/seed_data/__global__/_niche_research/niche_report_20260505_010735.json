@@ -1,0 +1,77 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T01:07:35.025568+00:00",
+  "seed_keywords": [
+    "sustainable home decor"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "sustainable home decor",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "sustainable home decor",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "sustainable home decor"
+      ],
+      "opportunity_score": 50,
+      "avg_competition_quality": 50,
+      "estimated_monthly_revenue_potential_usd": 3000,
+      "rationale": "There is low competition and a stable search trend for sustainable home decor, indicating high potential."
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [
+    "eco-friendly",
+    "sustainability"
+  ],
+  "recommended_product_types": [
+    "natural materials furniture",
+    "recycled goods kitchenware",
+    "ethically sourced textile accessories"
+  ],
+  "competitor_gaps": [
+    "low price points for sustainable home decor products",
+    "lack of eco-conscious design inspiration"
+  ],
+  "pricing_insights": {
+    "target_price_range_usd": [
+      0.5,
+      1
+    ],
+    "price_strategy": "Price sustainably to cater to the niche market",
+    "average_price_for_sustainability_product_usd": 2
+  },
+  "entry_strategy": "Create a community-driven platform or blog focused on sustainability and home decor for individuals interested in eco-friendly living.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505010735"
+}

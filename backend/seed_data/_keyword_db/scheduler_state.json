@@ -1,0 +1,11 @@
+{
+  "running": true,
+  "paused": false,
+  "mode": "continuous",
+  "batch_size": 5,
+  "stale_days": 30,
+  "skip_scraper": false,
+  "keywords_scanned": 0,
+  "new_seeds_found": 0,
+  "last_updated": "2026-05-06T15:41:59.792261"
+}

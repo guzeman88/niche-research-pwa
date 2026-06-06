@@ -1,0 +1,69 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T02:30:38.736137+00:00",
+  "seed_keywords": [
+    "puzzle lover gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "puzzle lover gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "puzzle lover gift",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "puzzle lover gift"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "puzzle books",
+    "puzzle sets"
+  ],
+  "competitor_gaps": [
+    "offerings for a broader puzzle range with added customization options"
+  ],
+  "pricing_insights": {
+    "compared_price_point": "$150-$200",
+    "competitive_fairness_score": 8,
+    "price_position": "high"
+  },
+  "entry_strategy": "Launch an online store or direct sales channel specializing in high-quality puzzle books, puzzles with additional customization features, and a wider selection of puzzles that cater to different interests.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505023038"
+}

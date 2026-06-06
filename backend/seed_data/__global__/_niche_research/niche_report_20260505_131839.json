@@ -1,0 +1,62 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T13:18:39.329999+00:00",
+  "seed_keywords": [
+    "recovery gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "recovery gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "recovery gift",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "recovery gift"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "Recovery Gifts"
+  ],
+  "competitor_gaps": [],
+  "pricing_insights": "",
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505131839"
+}

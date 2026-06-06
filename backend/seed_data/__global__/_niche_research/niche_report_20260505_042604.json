@@ -1,0 +1,121 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T04:26:04.662741+00:00",
+  "seed_keywords": [
+    "beagle owner"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "beagle owner",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "beagle owner",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 2,
+      "relative_interest": 16.2
+    },
+    {
+      "month": 3,
+      "relative_interest": 3.9
+    },
+    {
+      "month": 4,
+      "relative_interest": 7.5
+    },
+    {
+      "month": 5,
+      "relative_interest": 5.4
+    },
+    {
+      "month": 6,
+      "relative_interest": 3.0
+    },
+    {
+      "month": 7,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 8,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 9,
+      "relative_interest": 7.0
+    },
+    {
+      "month": 10,
+      "relative_interest": 2.7
+    },
+    {
+      "month": 11,
+      "relative_interest": 11.4
+    },
+    {
+      "month": 12,
+      "relative_interest": 2.7
+    }
+  ],
+  "peak_months": [
+    2
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "beagle owner"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0.0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "Dog Accessories"
+  ],
+  "competitor_gaps": [
+    {
+      "keywords": [
+        "beagle owner"
+      ],
+      "average_competition_quality": 50.0,
+      "price_gap": 0.0
+    }
+  ],
+  "pricing_insights": "The niche 'beagle owner' has low search volume and stable trend, indicating a relatively underdeveloped market.",
+  "entry_strategy": "Focusing on dog accessories as a product type can effectively leverage the identified underserved angle.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505042604"
+}

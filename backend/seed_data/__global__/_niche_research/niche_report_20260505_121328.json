@@ -1,0 +1,119 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T12:13:28.905612+00:00",
+  "seed_keywords": [
+    "girl dad"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "girl dad",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "girl dad",
+      "monthly_searches": 6422,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 95.9,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 61.8,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 32.8
+    },
+    {
+      "month": 2,
+      "relative_interest": 35.5
+    },
+    {
+      "month": 3,
+      "relative_interest": 33.3
+    },
+    {
+      "month": 4,
+      "relative_interest": 32.3
+    },
+    {
+      "month": 5,
+      "relative_interest": 35.5
+    },
+    {
+      "month": 6,
+      "relative_interest": 42.0
+    },
+    {
+      "month": 7,
+      "relative_interest": 32.3
+    },
+    {
+      "month": 8,
+      "relative_interest": 31.2
+    },
+    {
+      "month": 9,
+      "relative_interest": 29.7
+    },
+    {
+      "month": 10,
+      "relative_interest": 30.4
+    },
+    {
+      "month": 11,
+      "relative_interest": 33.9
+    },
+    {
+      "month": 12,
+      "relative_interest": 38.1
+    }
+  ],
+  "peak_months": [
+    2,
+    5,
+    6,
+    11,
+    12
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "girl dad"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "Vintage jewelry"
+  ],
+  "competitor_gaps": [
+    "Lack of a girl dad-themed clothing line"
+  ],
+  "pricing_insights": "",
+  "entry_strategy": "Identify gaps in the market for girl-dad-focused products and create a unique brand or product offering. Focus on creating visually appealing and affordable items that cater specifically to parents raising girls.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505121328"
+}

@@ -1,0 +1,70 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T18:52:17.042637+00:00",
+  "seed_keywords": [
+    "gifts for uncle"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "gifts for uncle",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "gifts for uncle",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "Uncle Gifts",
+      "keywords": [
+        "gifts for uncle"
+      ],
+      "opportunity_score": 50,
+      "avg_competition_quality": 25,
+      "estimated_monthly_revenue_potential_usd": 1750,
+      "rationale": "Etsy niche analyst keywords indicate strong demand with over 7,000 searches. Seasonality: n/a"
+    },
+    {
+      "cluster_name": "Uncle Gift Ideas",
+      "keywords": [
+        "gifts for uncle"
+      ],
+      "opportunity_score": 25,
+      "avg_competition_quality": 25,
+      "estimated_monthly_revenue_potential_usd": 1400,
+      "rationale": "This keyword suggests a niche in the Etsy marketplace with moderate competition and stable search trends, indicating growth potential."
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [],
+  "competitor_gaps": [],
+  "pricing_insights": "",
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504185217"
+}

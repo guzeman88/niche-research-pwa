@@ -1,0 +1,73 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T22:41:24.925305+00:00",
+  "seed_keywords": [
+    "cooler-travel-shirts"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "cooler-travel-shirts",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "cooler-travel-shirts",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "cooler travel shirts"
+  ],
+  "competitor_gaps": [
+    {
+      "keyword": "cooling vests",
+      "opportunity_score": 25.0
+    },
+    {
+      "keyword": "travel shorts",
+      "opportunity_score": 20.0
+    }
+  ],
+  "pricing_insights": {
+    "average_price": "$19",
+    "min_price": "$5",
+    "max_price": "$35"
+  },
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504224124"
+}

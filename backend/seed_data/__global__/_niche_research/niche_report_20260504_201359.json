@@ -1,0 +1,70 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T20:13:59.769135+00:00",
+  "seed_keywords": [
+    "social worker gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "social worker gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "social worker gift",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "social worker gift"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [
+    "targeted search ads"
+  ],
+  "recommended_product_types": [
+    "gifts for social workers",
+    "professional gifts",
+    "empathy-themed merchandise"
+  ],
+  "competitor_gaps": [
+    "differentiating product offering or service, focusing on non-traditional gift ideas for the niche of a social worker"
+  ],
+  "pricing_insights": [
+    "targeted pricing based on competitive data and cost of goods"
+  ],
+  "entry_strategy": "start by analyzing current market trends, engaging with social worker communities to understand their needs, then develop unique, high-quality products that meet these needs.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504201359"
+}

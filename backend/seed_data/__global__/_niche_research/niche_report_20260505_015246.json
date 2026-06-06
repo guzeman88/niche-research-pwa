@@ -1,0 +1,120 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T01:52:46.809195+00:00",
+  "seed_keywords": [
+    "skiing gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "skiing gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "skiing gift",
+      "monthly_searches": 487,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "declining",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 53.5,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 35.0,
+  "opportunity_score": 46.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 3.3
+    },
+    {
+      "month": 2,
+      "relative_interest": 10.8
+    },
+    {
+      "month": 3,
+      "relative_interest": 1.7
+    },
+    {
+      "month": 4,
+      "relative_interest": 1.7
+    },
+    {
+      "month": 5,
+      "relative_interest": 0.3
+    },
+    {
+      "month": 6,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 7,
+      "relative_interest": 0.3
+    },
+    {
+      "month": 8,
+      "relative_interest": 0.3
+    },
+    {
+      "month": 9,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 10,
+      "relative_interest": 0.2
+    },
+    {
+      "month": 11,
+      "relative_interest": 6.7
+    },
+    {
+      "month": 12,
+      "relative_interest": 17.3
+    }
+  ],
+  "peak_months": [
+    12
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "skiing gift"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "Skiing Gear"
+  ],
+  "competitor_gaps": [
+    {
+      "name": "",
+      "gap_type": "Price",
+      "gap_amount_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "pricing_insights": "The keyword 'skiing gift' has a stable trend with high competition. There is room for pricing optimization to increase revenue.",
+  "entry_strategy": "Start by understanding the target audience and their preferences regarding ski-related gifts. Develop products that meet these needs, offering quality items at competitive prices.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505015246"
+}

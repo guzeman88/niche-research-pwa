@@ -1,0 +1,49 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T08:52:29.737686+00:00",
+  "seed_keywords": [
+    "lilac floral stickers"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "lilac floral stickers",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "lilac floral stickers",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [],
+  "competitor_gaps": [],
+  "pricing_insights": "[\"A comprehensive understanding of the search volume, competition level, and trends for `lilac floral stickers` is essential. The high search volume (7000) indicates a potential market demand that can be tapped into. However, the low average competition quality suggests a relatively narrow niche with a moderate to slight difficulty in entering. Given this information, it\u2019s crucial to focus on creating high-quality products and offering unique selling points that address specific needs within the community of floral sticker enthusiasts.\"}",
+  "entry_strategy": "With an understanding of your target audience's preferences for lily-themed stickers, you can develop specialized products around flowers and nature themes, focusing heavily on customization options and adding value through limited edition or exclusive designs. By differentiating your offering with fresh, high-quality products that cater to this niche demand, you can stand out in a crowded market where competition quality is average but still exists.\"",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505085229"
+}

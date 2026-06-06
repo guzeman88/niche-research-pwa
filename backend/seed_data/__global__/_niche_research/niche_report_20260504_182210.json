@@ -1,0 +1,121 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T18:22:10.534032+00:00",
+  "seed_keywords": [
+    "gifts for grandma"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "gifts for grandma",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "gifts for grandma",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 5.8
+    },
+    {
+      "month": 2,
+      "relative_interest": 7.2
+    },
+    {
+      "month": 3,
+      "relative_interest": 6.3
+    },
+    {
+      "month": 4,
+      "relative_interest": 15.9
+    },
+    {
+      "month": 5,
+      "relative_interest": 16.1
+    },
+    {
+      "month": 6,
+      "relative_interest": 5.5
+    },
+    {
+      "month": 7,
+      "relative_interest": 5.9
+    },
+    {
+      "month": 8,
+      "relative_interest": 6.4
+    },
+    {
+      "month": 9,
+      "relative_interest": 6.6
+    },
+    {
+      "month": 10,
+      "relative_interest": 9.5
+    },
+    {
+      "month": 11,
+      "relative_interest": 31.0
+    },
+    {
+      "month": 12,
+      "relative_interest": 58.8
+    }
+  ],
+  "peak_months": [
+    12
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "gifts for grandma"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "Jewelry",
+    "Home Decor"
+  ],
+  "competitor_gaps": {
+    "price": 1.5,
+    "searches": 2000
+  },
+  "pricing_insights": {
+    "average_price_selling": "$39.87",
+    "min_suggested_price": "$14.86",
+    "max_suggested_price": "$95.01"
+  },
+  "entry_strategy": "Focus on a niche market and utilize seasonal trends to maximize sales.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504182210"
+}

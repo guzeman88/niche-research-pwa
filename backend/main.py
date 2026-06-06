@@ -50,7 +50,29 @@ app.include_router(export.router)
 
 @app.on_event("startup")
 async def startup():
-    """Initialize database and load seed library on startup."""
+    """Initialize database, seed from seed_data/ on first run, and load seed library."""
+    import shutil
+    from pathlib import Path
+
+    # Auto-seed workspace from seed_data/ if workspace is empty (first run)
+    seed_dir = BACKEND_DIR / "seed_data"
+    workspace_dir = BACKEND_DIR / "workspace"
+    db_path = workspace_dir / "_keyword_db" / "keywords.sqlite"
+
+    if seed_dir.exists() and not db_path.exists():
+        print("[startup] Seeding workspace from seed_data/ ...")
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        for item in seed_dir.iterdir():
+            dest = workspace_dir / item.name
+            if item.is_dir():
+                if not dest.exists():
+                    shutil.copytree(item, dest)
+            else:
+                if not dest.exists():
+                    shutil.copy2(item, dest)
+        total_files = len(list(workspace_dir.rglob("*")))
+        print(f"[startup] Seeded {total_files} files from seed_data/")
+
     from pipeline import keyword_database as kdb
     kdb.init_db()
     count = kdb.load_seeds_from_library()

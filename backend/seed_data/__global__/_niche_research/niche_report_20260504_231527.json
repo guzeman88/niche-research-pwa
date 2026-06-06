@@ -1,0 +1,128 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T23:15:27.956955+00:00",
+  "seed_keywords": [
+    "radiologist"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "radiologist",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "radiologist",
+      "monthly_searches": 6652,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "declining",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 97.5,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 35.0,
+  "opportunity_score": 59.2,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 56.6
+    },
+    {
+      "month": 2,
+      "relative_interest": 55.1
+    },
+    {
+      "month": 3,
+      "relative_interest": 55.7
+    },
+    {
+      "month": 4,
+      "relative_interest": 54.7
+    },
+    {
+      "month": 5,
+      "relative_interest": 50.0
+    },
+    {
+      "month": 6,
+      "relative_interest": 46.7
+    },
+    {
+      "month": 7,
+      "relative_interest": 49.7
+    },
+    {
+      "month": 8,
+      "relative_interest": 58.5
+    },
+    {
+      "month": 9,
+      "relative_interest": 56.3
+    },
+    {
+      "month": 10,
+      "relative_interest": 52.9
+    },
+    {
+      "month": 11,
+      "relative_interest": 54.7
+    },
+    {
+      "month": 12,
+      "relative_interest": 47.7
+    }
+  ],
+  "peak_months": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "radiology consultation"
+  ],
+  "competitor_gaps": [
+    {
+      "keyword": "radiologist",
+      "opportunity_score": -160.0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0.0
+    }
+  ],
+  "pricing_insights": [],
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504231527"
+}

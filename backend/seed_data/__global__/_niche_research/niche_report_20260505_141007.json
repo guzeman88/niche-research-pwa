@@ -1,0 +1,81 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T14:10:07.326269+00:00",
+  "seed_keywords": [
+    "astrology gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "astrology gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "astrology gift",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "astrology gift"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [
+    "high",
+    "exclusive"
+  ],
+  "recommended_product_types": [
+    {
+      "product_type": "unique gift ideas"
+    },
+    {
+      "product_type": "celestial-themed jewelry"
+    }
+  ],
+  "competitor_gaps": [
+    {
+      "keyword": "astrolab",
+      "price_gap_percent": 10.0,
+      "competition_quality_gap_percent": 25.0
+    }
+  ],
+  "pricing_insights": {
+    "low_price_opportunities": [
+      "discounts for bulk orders"
+    ],
+    "high_price_options": []
+  },
+  "entry_strategy": "identify underserved angles and align with high-competition gaps",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505141007"
+}

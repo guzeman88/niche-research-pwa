@@ -1,0 +1,96 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T08:55:00.476812+00:00",
+  "seed_keywords": [
+    "easter eggs for dogs"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "easter eggs for dogs",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "easter eggs for dogs",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "easter eggs for dogs"
+      ],
+      "opportunity_score": 7000,
+      "avg_competition_quality": 50,
+      "estimated_monthly_revenue_potential_usd": 35000,
+      "rationale": "Keywords have high searches and low competition, indicating a strong market opportunity."
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "chocolates"
+  ],
+  "competitor_gaps": [
+    {
+      "keyword": "",
+      "searches": 15000,
+      "comp": 75.0,
+      "price": 2.0,
+      "trend": "increasing",
+      "product_type": "kits"
+    },
+    {
+      "keyword": "",
+      "searches": 4000,
+      "comp": 40.0,
+      "price": 3.0,
+      "trend": "stable",
+      "product_type": "collars"
+    }
+  ],
+  "pricing_insights": [
+    {
+      "keyword": "",
+      "searches": 5000,
+      "comp": 10.0,
+      "price": 0.5,
+      "trend": "stable",
+      "product_type": "accessories"
+    },
+    {
+      "keyword": "",
+      "searches": 2000,
+      "comp": 30.0,
+      "price": 4.0,
+      "trend": "increasing",
+      "product_type": "toys"
+    }
+  ],
+  "entry_strategy": [],
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505085500"
+}

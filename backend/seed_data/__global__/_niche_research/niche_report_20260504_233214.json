@@ -1,0 +1,119 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T23:32:14.265002+00:00",
+  "seed_keywords": [
+    "personal trainer gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "personal trainer gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "personal trainer gift",
+      "monthly_searches": 374,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 52.7,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 48.8,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 2.5
+    },
+    {
+      "month": 2,
+      "relative_interest": 5.9
+    },
+    {
+      "month": 3,
+      "relative_interest": 5.1
+    },
+    {
+      "month": 4,
+      "relative_interest": 9.9
+    },
+    {
+      "month": 5,
+      "relative_interest": 2.0
+    },
+    {
+      "month": 6,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 7,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 8,
+      "relative_interest": 1.2
+    },
+    {
+      "month": 9,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 10,
+      "relative_interest": 1.8
+    },
+    {
+      "month": 11,
+      "relative_interest": 9.4
+    },
+    {
+      "month": 12,
+      "relative_interest": 33.7
+    }
+  ],
+  "peak_months": [
+    12
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "personal trainer gift"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "personal trainer gift"
+  ],
+  "competitor_gaps": [
+    {
+      "competing_product_type": "",
+      "gap_description": "",
+      "reason_for_gap": ""
+    }
+  ],
+  "pricing_insights": "",
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504233214"
+}

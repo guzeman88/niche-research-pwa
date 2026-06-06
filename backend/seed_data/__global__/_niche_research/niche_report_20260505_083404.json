@@ -1,0 +1,101 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T08:34:04.649701+00:00",
+  "seed_keywords": [
+    "squishy turtles mug"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "squishy turtles mug",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "squishy turtles mug",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "squishy turtles mug"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0.0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [
+    "high-quality",
+    "exclusive"
+  ],
+  "recommended_product_types": [
+    {
+      "name": "Customized squishy turtles mugs",
+      "description": "Unique and collectible mugs featuring handcrafted squishy turtles, perfect for gift-giving and unique home decor."
+    },
+    {
+      "name": "Squishy turtles plushie accessories",
+      "description": "Adorable square-shaped stuffed toys with a soft squishable texture, ideal for fashion or office decor."
+    }
+  ],
+  "competitor_gaps": [
+    {
+      "keyword": "squishy turtles mug",
+      "gap_reasons": [
+        "Low competition ranking suggests limited availability of similar products in the market.",
+        "High average quality score indicates high-quality product expectations, which may indicate a need for differentiation."
+      ]
+    },
+    {
+      "keyword": "turtles mugs",
+      "gap_reasons": [
+        "Squishy turtles theme is underrepresented, allowing for unique positioning and higher potential demand from the niche market.",
+        "Competitive products lack attention to detail or customization options that would appeal to this specific theme."
+      ]
+    }
+  ],
+  "pricing_insights": {
+    "potential_price_range": "$0-$2",
+    "competitive_pricing_analysis": [
+      "High average competition quality indicates a potential price point range where competitors offer similar value for money, suggesting a premium positioning or differentiation through exclusivity or features that are not yet available."
+    ]
+  },
+  "entry_strategy": {
+    "target_market_segmentation": [
+      "Creative individuals",
+      "Turtle enthusiasts"
+    ],
+    "product_recommendations": [
+      "Develop high-quality squishy turtle mugs with detailed designs and textures for a premium feel.",
+      "Create unique accessories like plushies, phone cases, or wall decor to add value beyond the primary product."
+    ]
+  },
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505083404"
+}

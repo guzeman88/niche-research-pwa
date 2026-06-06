@@ -1,0 +1,80 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T01:21:53.399367+00:00",
+  "seed_keywords": [
+    "golf gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "golf gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "golf gift",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "golf gift"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [],
+  "competitor_gaps": [
+    {
+      "competing_product_keywords": [
+        "golf gift"
+      ],
+      "opportunity_score": 50.0,
+      "avg_competition_quality": 0.0,
+      "estimated_monthly_revenue_potential_usd": 1200,
+      "rationale": ""
+    }
+  ],
+  "pricing_insights": {
+    "price_range": [
+      "$0"
+    ],
+    "trend_over_time": [
+      {
+        "month": "n/a",
+        "price_spend_in_month": "$0"
+      }
+    ]
+  },
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505012153"
+}

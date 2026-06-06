@@ -1,0 +1,71 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T20:25:36.228009+00:00",
+  "seed_keywords": [
+    "baker gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "baker gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "baker gift",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "baker gift"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "bakery gift items"
+  ],
+  "competitor_gaps": [
+    {
+      "compared_keywords": [
+        "baker gift",
+        "bakery item gift"
+      ],
+      "gap_found": true,
+      "gap_description": "The market for 'bakery gift' is underrepresented compared to 'baker gift', suggesting an opportunity to enter this niche with a unique offering."
+    }
+  ],
+  "pricing_insights": [],
+  "entry_strategy": "Identify and understand the unmet demand in the 'bakery gift' market, create a compelling product that highlights its uniqueness, such as locally sourced ingredients or personalized touches like handwritten notes. Focus on customer service to build trust and loyalty.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504202536"
+}

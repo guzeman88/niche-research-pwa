@@ -1,0 +1,60 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T20:11:37.244346+00:00",
+  "seed_keywords": [
+    "librarian gift"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "librarian gift",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "librarian gift",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "librarian gift",
+      "keywords": [
+        "librarian gift"
+      ],
+      "opportunity_score": 7000,
+      "avg_competition_quality": 50,
+      "estimated_monthly_revenue_potential_usd": 35000,
+      "rationale": "High search volume and stable trend indicates a strong opportunity."
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [],
+  "competitor_gaps": [],
+  "pricing_insights": "",
+  "entry_strategy": "Target the high-volume and stable keywords 'librarian gift' to establish an initial market presence.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504201137"
+}

@@ -1,0 +1,19 @@
+{
+  "keyword": "gifts for wife",
+  "analyzed_at": "2026-05-04T18:38:27.063034+00:00",
+  "volume_gap_score": 68.7,
+  "quality_gap_score": 50.0,
+  "tag_gap_score": 50.0,
+  "style_gap_score": 30.0,
+  "price_gap_score": 30.0,
+  "recency_gap_score": 45.0,
+  "composite_gap_score": 49.2,
+  "entry_angle": "Tag gap: top sellers are under-tagging for buyer search variations. Volume gap: strong buyer demand relative to listing supply \u2014 new listings can gain visibility faster than in saturated niches.",
+  "recommended_price_min": 0.0,
+  "recommended_price_max": 0.0,
+  "untagged_searches": [],
+  "dominant_competitor_tags": [],
+  "recommended_tags": [],
+  "listings_analyzed": 0,
+  "avg_listing_age_months": 18.0
+}

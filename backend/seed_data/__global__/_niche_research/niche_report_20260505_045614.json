@@ -1,0 +1,70 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T04:56:14.206995+00:00",
+  "seed_keywords": [
+    "tabby cat"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "tabby cat",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "tabby cat",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "tabby cat"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [
+    "niche focused"
+  ],
+  "recommended_product_types": [
+    "tabby cat themed merchandise, pet accessories"
+  ],
+  "competitor_gaps": [
+    "unique niche market presence"
+  ],
+  "pricing_insights": {
+    "target_price_range": "$10 - $20",
+    "max_revenue_potential": 5000,
+    "current_competition": 5
+  },
+  "entry_strategy": "Develop a strong brand identity and focus on high-quality, handmade products to stand out from the competition.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505045614"
+}

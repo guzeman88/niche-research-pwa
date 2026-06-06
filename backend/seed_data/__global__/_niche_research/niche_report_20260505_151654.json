@@ -1,0 +1,86 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T15:16:54.603808+00:00",
+  "seed_keywords": [
+    "pet parent sticker book"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "pet parent sticker book",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "pet parent sticker book",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "pet parent sticker book"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 50,
+      "estimated_monthly_revenue_potential_usd": 1624398475,
+      "rationale": "\u7a33\u5b9a\u589e\u957f\u7684\u641c\u7d22\u91cf\u548c\u7a33\u5b9a\u7684\u8d8b\u52bf\u662f\u6f5c\u5728\u673a\u4f1a\u7684\u4e3b\u8981\u4fe1\u53f7\u3002"
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [],
+  "competitor_gaps": [
+    {
+      "kw": "pet parent sticker book",
+      "searches": 0,
+      "comp": 0.0,
+      "price": 0.0,
+      "trend": "stable"
+    },
+    {
+      "kw": "pet parent sticker book",
+      "searches": 7000,
+      "comp": 50.0,
+      "price": 0.0,
+      "trend": "stable"
+    }
+  ],
+  "pricing_insights": [
+    {
+      "avg_competition_price": {
+        "average_price_per_month_usd": 31984,
+        "average_price_per_hour_usd": 266.84
+      },
+      "lower_price_gaps": [],
+      "higher_price_gaps": [
+        "pet parent sticker book"
+      ]
+    }
+  ],
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505151654"
+}

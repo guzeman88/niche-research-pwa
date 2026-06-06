@@ -1,0 +1,113 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T04:23:37.941918+00:00",
+  "seed_keywords": [
+    "chihuahua owner"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "chihuahua owner",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "chihuahua owner",
+      "monthly_searches": 428,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 53.1,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 48.9,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 21.1
+    },
+    {
+      "month": 2,
+      "relative_interest": 29.4
+    },
+    {
+      "month": 3,
+      "relative_interest": 16.6
+    },
+    {
+      "month": 4,
+      "relative_interest": 25.8
+    },
+    {
+      "month": 5,
+      "relative_interest": 13.6
+    },
+    {
+      "month": 6,
+      "relative_interest": 5.7
+    },
+    {
+      "month": 7,
+      "relative_interest": 20.6
+    },
+    {
+      "month": 8,
+      "relative_interest": 16.4
+    },
+    {
+      "month": 9,
+      "relative_interest": 0.0
+    },
+    {
+      "month": 10,
+      "relative_interest": 9.7
+    },
+    {
+      "month": 11,
+      "relative_interest": 27.9
+    },
+    {
+      "month": 12,
+      "relative_interest": 10.1
+    }
+  ],
+  "peak_months": [
+    2,
+    4,
+    11
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "chihuahua owner"
+      ],
+      "opportunity_score": 7000,
+      "avg_competition_quality": 50.0,
+      "estimated_monthly_revenue_potential_usd": 0.0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [],
+  "competitor_gaps": [],
+  "pricing_insights": "",
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505042337"
+}

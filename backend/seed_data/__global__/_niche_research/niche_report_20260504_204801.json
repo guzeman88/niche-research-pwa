@@ -1,0 +1,117 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-04T20:48:01.861018+00:00",
+  "seed_keywords": [
+    "july birthday"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "july birthday",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "july birthday",
+      "monthly_searches": 4981,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "declining",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 85.6,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 35.0,
+  "opportunity_score": 55.7,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [
+    {
+      "month": 1,
+      "relative_interest": 13.5
+    },
+    {
+      "month": 2,
+      "relative_interest": 13.6
+    },
+    {
+      "month": 3,
+      "relative_interest": 12.0
+    },
+    {
+      "month": 4,
+      "relative_interest": 12.0
+    },
+    {
+      "month": 5,
+      "relative_interest": 12.8
+    },
+    {
+      "month": 6,
+      "relative_interest": 30.7
+    },
+    {
+      "month": 7,
+      "relative_interest": 44.5
+    },
+    {
+      "month": 8,
+      "relative_interest": 9.5
+    },
+    {
+      "month": 9,
+      "relative_interest": 9.8
+    },
+    {
+      "month": 10,
+      "relative_interest": 8.5
+    },
+    {
+      "month": 11,
+      "relative_interest": 9.6
+    },
+    {
+      "month": 12,
+      "relative_interest": 11.1
+    }
+  ],
+  "peak_months": [
+    7
+  ],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "july birthday"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "jewelry",
+    "accessories"
+  ],
+  "competitor_gaps": [
+    "exclusive birthday gift options",
+    "limited edition july-themed merchandise"
+  ],
+  "pricing_insights": "",
+  "entry_strategy": "",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260504204801"
+}

@@ -1,0 +1,67 @@
+{
+  "store_slug": "__global__",
+  "generated_at": "2026-05-05T10:28:19.026902+00:00",
+  "seed_keywords": [
+    "plant mom"
+  ],
+  "keyword_signals": [
+    {
+      "keyword": "plant mom",
+      "monthly_searches": 7000,
+      "competition_score": 50.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "etsy_autocomplete"
+    },
+    {
+      "keyword": "plant mom",
+      "monthly_searches": 0,
+      "competition_score": 0.0,
+      "avg_price_usd": 0.0,
+      "trend_direction": "stable",
+      "source": "google_trends"
+    }
+  ],
+  "keyword_search_data": [],
+  "demand_score": 100.0,
+  "competition_score": 50.0,
+  "margin_score": 40.0,
+  "trend_velocity_score": 50.0,
+  "opportunity_score": 63.0,
+  "avg_price_usd": 0.0,
+  "price_sweet_spot": "",
+  "estimated_market_monthly_revenue_usd": 0.0,
+  "avg_competition_quality": 0.0,
+  "seasonality": [],
+  "peak_months": [],
+  "keyword_clusters": [
+    {
+      "cluster_name": "",
+      "keywords": [
+        "plant mom"
+      ],
+      "opportunity_score": 0,
+      "avg_competition_quality": 0,
+      "estimated_monthly_revenue_potential_usd": 0,
+      "rationale": ""
+    }
+  ],
+  "underserved_angles": [],
+  "winning_styles": [],
+  "recommended_product_types": [
+    "plant-related gifts"
+  ],
+  "competitor_gaps": [],
+  "pricing_insights": {
+    "compares to": "plant mom",
+    "pricing strategies needed": [
+      "differentiate based on unique features or benefits"
+    ]
+  },
+  "entry_strategy": "Identify the plant-loving community and create relevant, targeted products.",
+  "sources_used": [
+    "etsy_autocomplete",
+    "google_trends"
+  ],
+  "report_id": "rpt_20260505102819"
+}
