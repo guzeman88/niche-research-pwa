@@ -2,14 +2,9 @@
   command = "npm run build"
   publish = "dist"
 
-# Set your backend URL after deploying the API to Render:
-# Go to Site settings → Environment variables → Add VITE_API_URL
-# Example: VITE_API_URL = https://niche-research-api.onrender.com
-
-[[redirects]]
-  from = "/api/*"
-  to = "https://niche-research-api.onrender.com/api/:splat"
-  status = 200
+# After deploying the backend to Render, set VITE_API_URL in Netlify env vars
+# Go to: https://app.netlify.com/sites/singular-youtiao-c95d49/settings/deploys#environment
+# Set: VITE_API_URL = https://YOUR-RENDER-APP.onrender.com
 
 [[redirects]]
   from = "/*"
