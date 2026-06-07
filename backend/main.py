@@ -62,13 +62,18 @@ async def startup():
     print(f"[startup] seed_dir exists={seed_dir.exists()}")
     print(f"[startup] db_path exists={db_path.exists()}")
 
-    # Seed if: seed_data exists AND (no DB yet OR DB is empty/just-initialized)
+    # Seed if: seed_data exists AND (no DB yet OR seed_data DB is newer/better)
     needs_seed = False
     if seed_dir.exists():
+        seed_db = seed_dir / "_keyword_db" / "keywords.sqlite"
         if not db_path.exists():
             needs_seed = True
+        elif seed_db.exists() and seed_db.stat().st_size > db_path.stat().st_size:
+            # Seed data has been updated — replace workspace with fresh seed
+            print(f"[startup] seed_data DB is newer ({seed_db.stat().st_size} > {db_path.stat().st_size}) — re-seeding")
+            shutil.rmtree(workspace_dir, ignore_errors=True)
+            needs_seed = True
         else:
-            # Check if DB has actual scan data (not just empty init)
             import sqlite3
             try:
                 con = sqlite3.connect(str(db_path))
