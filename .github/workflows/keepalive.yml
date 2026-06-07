@@ -1,0 +1,15 @@
+name: Keep Render Backend Awake
+# Free keep-alive — pings every 10 min so Render free tier never sleeps
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # every 10 minutes
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend
+        run: |
+          curl -sf https://niche-research-api.onrender.com/api/health || true
+          curl -sf https://niche-research-api.onrender.com/api/stats || true
