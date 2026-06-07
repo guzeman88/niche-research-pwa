@@ -54,12 +54,37 @@ async def startup():
     import shutil
     from pathlib import Path
 
-    # Auto-seed workspace from seed_data/ if workspace is empty (first run)
     seed_dir = BACKEND_DIR / "seed_data"
     workspace_dir = BACKEND_DIR / "workspace"
     db_path = workspace_dir / "_keyword_db" / "keywords.sqlite"
 
-    if seed_dir.exists() and not db_path.exists():
+    print(f"[startup] BACKEND_DIR={BACKEND_DIR}")
+    print(f"[startup] seed_dir exists={seed_dir.exists()}")
+    print(f"[startup] db_path exists={db_path.exists()}")
+
+    # Seed if: seed_data exists AND (no DB yet OR DB is empty/just-initialized)
+    needs_seed = False
+    if seed_dir.exists():
+        if not db_path.exists():
+            needs_seed = True
+        else:
+            # Check if DB has actual scan data (not just empty init)
+            import sqlite3
+            try:
+                con = sqlite3.connect(str(db_path))
+                scan_count = con.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
+                con.close()
+                if scan_count == 0:
+                    print(f"[startup] DB exists but has 0 scans — re-seeding")
+                    shutil.rmtree(workspace_dir, ignore_errors=True)
+                    needs_seed = True
+                else:
+                    print(f"[startup] DB has {scan_count} scans — skipping seed")
+            except Exception:
+                shutil.rmtree(workspace_dir, ignore_errors=True)
+                needs_seed = True
+
+    if needs_seed:
         print("[startup] Seeding workspace from seed_data/ ...")
         workspace_dir.mkdir(parents=True, exist_ok=True)
         for item in seed_dir.iterdir():
