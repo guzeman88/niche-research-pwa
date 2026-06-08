@@ -11,17 +11,47 @@ import type { GapReport } from '../types/gaps'
 
 const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${BASE_URL}${path}`;
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    ...options,
+// Warm-up: ping backend immediately on load to wake it from Render cold start
+let _warmPromise: Promise<boolean> | null = null;
+export function warmUpBackend(): Promise<boolean> {
+  if (_warmPromise) return _warmPromise;
+  _warmPromise = new Promise((resolve) => {
+    let attempts = 0;
+    const tryPing = () => {
+      fetch(`${BASE_URL}/api/health`, { signal: AbortSignal.timeout(3000) })
+        .then(r => r.ok ? resolve(true) : retry())
+        .catch(() => retry());
+    };
+    const retry = () => {
+      if (++attempts >= 15) { resolve(false); return; }
+      setTimeout(tryPing, 2000);
+    };
+    tryPing();
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status} ${res.statusText}: ${body}`);
+  return _warmPromise;
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  // Cache-bust GET requests to bypass stale service worker cache
+  const isGet = !options?.method || options.method === 'GET';
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${BASE_URL}${path}${isGet ? `${sep}_t=${Date.now()}` : ''}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      ...options,
+    });
+  } catch (err) {
+    throw new Error(`Network error: backend unreachable at ${url}`);
   }
   const contentType = res.headers.get('content-type') || '';
+  // If we got HTML instead of JSON, the backend is unreachable
+  if (!res.ok || contentType.includes('text/html')) {
+    throw new Error(contentType.includes('text/html')
+      ? 'Backend offline — deploy the API to Render to enable research'
+      : `${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
+  }
   if (contentType.includes('application/json')) {
     return res.json() as Promise<T>;
   }

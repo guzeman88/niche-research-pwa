@@ -2,7 +2,7 @@ name: Keep Render Backend Awake
 # Free keep-alive — pings every 10 min so Render free tier never sleeps
 on:
   schedule:
-    - cron: '*/10 * * * *'  # every 10 minutes
+    - cron: '*/5 * * * *'  # every 5 minutes (Render sleeps after 15)
   workflow_dispatch:
 
 jobs:
