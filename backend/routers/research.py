@@ -27,29 +27,28 @@ def run_research(req: ResearchRunRequest):
 
 @router.get("/reports", response_model=list[ReportListItem])
 def list_reports(store_slug: str = "__global__", limit: int = 50):
-    """List recent niche research reports."""
-    from pipeline.stages.niche_research import list_reports as _list_reports
-    from pipeline.stages.niche_research import load_latest_report
+    """List recent niche research reports — pulled from keyword database for accurate scores."""
+    from pipeline import keyword_database as kdb
+    kdb.init_db()
 
+    # Get top opportunities as report-like items
+    opps = kdb.get_top_opportunities(limit=limit)
     reports = []
-    paths = _list_reports(store_slug)[:limit]
-    for p in paths:
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-            reports.append(ReportListItem(
-                report_id=data.get("report_id", p.stem),
-                store_slug=data.get("store_slug", store_slug),
-                seed_keywords=data.get("seed_keywords", []),
-                opportunity_score=data.get("opportunity_score", 0.0),
-                demand_score=data.get("demand_score", 0.0),
-                competition_score=data.get("competition_score", 0.0),
-                margin_score=data.get("margin_score", 0.0),
-                trend_velocity_score=data.get("trend_velocity_score", 0.0),
-                generated_at=data.get("generated_at", ""),
-                sources_used=data.get("sources_used", []),
-            ))
-        except Exception:
-            continue
+    for o in opps:
+        scan_date = o.get("scanned_at", "")
+        kw = o.get("keyword", "")
+        reports.append(ReportListItem(
+            report_id=f"rpt_{kw.replace(' ','_')[:30]}_{scan_date[:10] if scan_date else 'unknown'}",
+            store_slug=store_slug,
+            seed_keywords=[kw],
+            opportunity_score=o.get("opportunity_score", 0) or 0,
+            demand_score=o.get("demand_score", 0) or 0,
+            competition_score=o.get("competition_score", 0) or 0,
+            margin_score=o.get("margin_score", 0) or 0,
+            trend_velocity_score=o.get("trend_score", 0) or 0,
+            generated_at=scan_date,
+            sources_used=[],
+        ))
     return reports
 
 
