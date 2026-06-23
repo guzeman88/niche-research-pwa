@@ -3,6 +3,8 @@ dist/
 __pycache__/
 *.pyc
 *.pyo
+*.tsbuildinfo
+*.log
 .env
 *.egg-info/
 .venv/
@@ -11,3 +13,4 @@ workspace/
 backend/workspace/
 logs/
 .netlify/
+render-*.png
