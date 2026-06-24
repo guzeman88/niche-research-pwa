@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Keyword Deep Dive — Mobile + Desktop</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#020617;color:#e2e8f0;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:430px;background:#0f172a;min-height:100vh}
+@media(min-width:768px){.app{max-width:100%;display:flex}.app-main{flex:1;margin-left:0}}
+
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#0f172a;border-bottom:1px solid #1e293b;position:sticky;top:0;z-index:20}
+.topbar .back{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:#94a3b8;font-size:20px;cursor:pointer;min-width:36px}
+.topbar .back:active{background:#1e293b}
+.topbar h1{font-size:16px;font-weight:700}
+.topbar h1 span{color:#818cf8}
+
+.main{padding:12px 16px 80px}
+@media(min-width:768px){.main{padding:24px 32px;max-width:900px;margin:0 auto}}
+
+.gauges{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+@media(max-width:380px){.gauges{grid-template-columns:repeat(2,1fr)}}
+.gauge-card{background:#1e293b;border-radius:12px;padding:12px;border:1px solid #334155;text-align:center}
+.gauge-card canvas{width:72px!important;height:72px!important}
+@media(min-width:768px){.gauge-card canvas{width:90px!important;height:90px!important}}
+.gauge-card .label{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.gauge-card .score{font-size:13px;font-weight:700;margin-top:1px}
+
+.section-title{font-size:13px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 10px}
+
+.metrics-card{background:#1e293b;border-radius:12px;padding:14px;border:1px solid #334155}
+.metrics-card h3{font-size:12px;color:#94a3b8;margin-bottom:10px}
+.metric-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #1e293b;font-size:12px}
+.metric-row .name{color:#94a3b8}
+.metric-row .value{font-weight:600}
+
+.chart-card{background:#1e293b;border-radius:12px;padding:14px;border:1px solid #334155;margin-bottom:12px}
+.chart-card h3{font-size:12px;color:#94a3b8;margin-bottom:10px}
+.chart-wrap{position:relative;height:180px}
+@media(min-width:768px){.chart-wrap{height:220px}}
+
+.chart-grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:768px){.chart-grid{grid-template-columns:repeat(2,1fr)}}
+
+.insight-box{background:#312e81;border:1px solid #4338ca;border-radius:8px;padding:12px;margin-bottom:8px;font-size:12px;line-height:1.5}
+.insight-box .title{font-weight:700;color:#a5b4fc;margin-bottom:3px}
+
+.tag-cloud{display:flex;flex-wrap:wrap;gap:5px}
+.tag{background:#334155;color:#cbd5e1;padding:5px 10px;border-radius:6px;font-size:11px;min-height:30px;display:inline-flex;align-items:center}
+.tag.hot{background:#7f1d1d;color:#fca5a5}
+.tag.opp{background:#065f46;color:#6ee7b7}
+
+table{width:100%;font-size:11px;border-collapse:collapse}
+th{text-align:left;padding:8px 6px;color:#94a3b8;font-weight:500;border-bottom:2px solid #334155;font-size:9px;text-transform:uppercase}
+td{padding:8px 6px;border-bottom:1px solid #1e293b}
+
+.bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:#0f172a;border-top:1px solid #1e293b;padding:6px 8px;padding-bottom:max(6px,env(safe-area-inset-bottom));z-index:20}
+@media(min-width:768px){.bottom-nav{display:none}}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:8px;font-size:10px;color:#64748b;cursor:pointer;min-height:44px;justify-content:center}
+.nav-tab.active{color:#a5b4fc}
+.nav-tab svg{width:20px;height:20px;opacity:.5}
+.nav-tab.active svg{opacity:1}
+</style></head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <button class="back" onclick="history.back()">←</button>
+    <h1>🍂 <span>fall aesthetic</span></h1>
+  </div>
+
+  <div class="main">
+    <!-- Gauges -->
+    <div class="gauges">
+      <div class="gauge-card"><div class="label">Opportunity</div><canvas id="gOpp"></canvas><div class="score" style="color:#6ee7b7">80.0</div></div>
+      <div class="gauge-card"><div class="label">Demand</div><canvas id="gDem"></canvas><div class="score" style="color:#818cf8">71.8</div></div>
+      <div class="gauge-card"><div class="label">Competition</div><canvas id="gComp"></canvas><div class="score" style="color:#fbbf24">22.6</div></div>
+      <div class="gauge-card"><div class="label">Margin</div><canvas id="gMar"></canvas><div class="score" style="color:#c4b5fd">77.3</div></div>
+    </div>
+
+    <!-- Market overview -->
+    <div class="metrics-card">
+      <h3>Market Overview</h3>
+      <div class="metric-row"><span class="name">Est. Monthly Revenue</span><span class="value" style="color:#6ee7b7">$12,450</span></div>
+      <div class="metric-row"><span class="name">Total Listings</span><span class="value">6,842</span></div>
+      <div class="metric-row"><span class="name">Avg Price</span><span class="value">$18.50</span></div>
+      <div class="metric-row"><span class="name">Price Sweet Spot</span><span class="value" style="color:#818cf8">$12–$28</span></div>
+      <div class="metric-row"><span class="name">Avg Reviews (top 20)</span><span class="value">34</span></div>
+      <div class="metric-row"><span class="name">Star Sellers %</span><span class="value">15%</span></div>
+      <div class="metric-row"><span class="name">Avg Favorites</span><span class="value">142</span></div>
+    </div>
+
+    <div class="section-title">Seasonality</div>
+    <div class="chart-card"><div class="chart-wrap"><canvas id="seasonChart"></canvas></div></div>
+
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Competition Breakdown</h3><div class="chart-wrap"><canvas id="compChart"></canvas></div></div>
+      <div class="chart-card"><h3>6-Signal Gap Radar</h3><div class="chart-wrap"><canvas id="gapRadar"></canvas></div></div>
+    </div>
+
+    <div class="section-title">AI Insights</div>
+    <div class="insight-box"><div class="title">💡 Entry Strategy</div>Enter at $14.99–$22.99 with warm-toned photography. Top competitors average 2 years old — fresh designs will rank quickly.</div>
+    <div class="insight-box"><div class="title">🎯 Underserved Angles</div>"Dark academia fall decor" and "minimalist autumn art" — not targeted by any top-20 listing.</div>
+
+    <div class="section-title">Tags</div>
+    <div class="tag-cloud">
+      <span class="tag hot">fall decor</span><span class="tag opp">dark academia</span>
+      <span class="tag">autumn aesthetic</span><span class="tag">cozy vibes</span>
+      <span class="tag opp">minimalist autumn</span><span class="tag">pumpkin spice</span>
+      <span class="tag opp">moody colors</span><span class="tag">boho fall</span>
+      <span class="tag">digital download</span>
+    </div>
+
+    <div class="section-title">Related Keywords</div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;background:#1e293b;border-radius:12px;border:1px solid #334155">
+      <table>
+        <thead><tr><th>Keyword</th><th>Opp</th><th>Dem</th><th>Cmp</th><th>Trd</th></tr></thead>
+        <tbody>
+          <tr><td>dark academia decor</td><td style="color:#6ee7b7;font-weight:600">84</td><td>68</td><td>12</td><td style="color:#6ee7b7">↑92</td></tr>
+          <tr><td>cozy autumn decor</td><td style="color:#818cf8;font-weight:600">73</td><td>65</td><td>28</td><td style="color:#6ee7b7">↑85</td></tr>
+          <tr><td>moody fall colors</td><td style="color:#818cf8;font-weight:600">68</td><td>52</td><td>18</td><td style="color:#94a3b8">→55</td></tr>
+          <tr><td>autumn wall art</td><td style="color:#fbbf24;font-weight:600">54</td><td>48</td><td>44</td><td style="color:#94a3b8">→50</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Home</div>
+    <div class="nav-tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Explore</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 2-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8Z"/></svg>Keywords</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Schdlr</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</div>
+  </nav>
+</div>
+
+<script>
+function gauge(id,val,color){
+  const c=document.getElementById(id);if(!c)return;
+  c.width=100;c.height=100;
+  const ctx=c.getContext('2d'),r=38,circ=2*Math.PI*r;
+  ctx.beginPath();ctx.arc(50,50,r,0,2*Math.PI);ctx.strokeStyle='#334155';ctx.lineWidth=7;ctx.stroke();
+  ctx.beginPath();ctx.arc(50,50,r,-Math.PI/2,(-Math.PI/2)+(2*Math.PI*val/100));ctx.strokeStyle=color;ctx.lineWidth=7;ctx.lineCap='round';ctx.stroke();
+  ctx.fillStyle='#e2e8f0';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.round(val),50,50);
+}
+gauge('gOpp',80,'#6ee7b7');gauge('gDem',72,'#818cf8');gauge('gComp',23,'#fbbf24');gauge('gMar',77,'#c4b5fd');
+
+new Chart(document.getElementById('seasonChart'),{
+  type:'bar',
+  data:{labels:['J','F','M','A','M','J','J','A','S','O','N','D'],datasets:[{data:[22,18,25,30,28,24,20,55,82,95,78,68],backgroundColor:ctx=>ctx.raw>=80?'#6ee7b7':ctx.raw>=50?'#818cf8':'#334155',borderRadius:3}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:8}},grid:{display:false}},y:{display:false,beginAtZero:true}}}
+});
+new Chart(document.getElementById('compChart'),{
+  type:'doughnut',
+  data:{labels:['Star Seller','Bestseller','Regular'],datasets:[{data:[15,8,77],backgroundColor:['#818cf8','#6ee7b7','#334155'],borderWidth:0}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:9},padding:10}}}}
+});
+new Chart(document.getElementById('gapRadar'),{
+  type:'radar',
+  data:{labels:['Volume','Quality','Tag','Style','Price','Recency'],datasets:[{data:[72,55,68,42,58,38],backgroundColor:'#818cf820',borderColor:'#818cf8',borderWidth:2,pointBackgroundColor:'#818cf8',pointRadius:3}]},
+  options:{responsive:true,maintainAspectRatio:false,scales:{r:{grid:{color:'#334155'},ticks:{display:false,stepSize:25},pointLabels:{color:'#94a3b8',font:{size:9}}}},plugins:{legend:{display:false}}}
+});
+</script></body></html>

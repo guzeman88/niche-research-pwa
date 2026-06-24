@@ -1,0 +1,139 @@
+<!doctype html><html lang=en><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Market Comparison</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#06080d;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:32px 16px}
+.phone{width:390px;height:844px;background:linear-gradient(180deg,#0b0f19,#0f172a);border-radius:44px;overflow:hidden;border:2px solid #1e293b;position:relative;box-shadow:0 0 0 8px #111827,0 0 0 10px #1e293b,0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.phone-notch{height:48px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:10px;flex-shrink:0}
+.phone-notch .pill{width:96px;height:5px;background:#334155;border-radius:100px}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:72px}
+.navbar{display:flex;align-items:center;gap:12px;padding:8px 20px;position:sticky;top:0;z-index:10;background:#0b0f19f0;backdrop-filter:blur(20px)}
+.navbar .back{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#111827;border:1px solid #1e293b;color:#94a3b8;font-size:16px;cursor:pointer}
+.navbar h1{font-size:17px;font-weight:800;letter-spacing:-.3px}
+/* Filters */
+.filters{padding:4px 20px 8px;display:flex;gap:6px}
+.filters select,.filters input{background:#111827;color:#e2e8f0;border:1px solid #1e293b;border-radius:10px;padding:8px 10px;font-size:11px;font-family:Inter,system-ui;font-weight:500}
+.filters select:focus,.filters input:focus{outline:none;border-color:#6366f1}
+.filters input{flex:1}
+.filters input::placeholder{color:#475569}
+/* Controls */
+.controls{display:flex;align-items:center;justify-content:space-between;padding:0 20px 10px;font-size:10px;color:#64748b;font-weight:600}
+.controls .btn{background:#111827;border:1px solid #1e293b;color:#94a3b8;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:10px;font-weight:700;font-family:Inter,system-ui;transition:all .15s}
+.controls .btn:active{background:#1e293b;color:#e2e8f0}
+.controls .btn:disabled{opacity:.3}
+.controls .page-info{font-variant-numeric:tabular-nums}
+/* Table */
+.table-shell{background:#111827;border:1px solid #1e293b;border-radius:18px;overflow:hidden;margin:0 12px}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;min-width:560px;font-size:10px;border-collapse:collapse}
+thead th{padding:10px 8px;color:#64748b;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e293b;cursor:pointer;user-select:none;white-space:nowrap;text-align:left;background:#0b0f19;position:sticky;top:0;z-index:1}
+thead th:active{color:#e2e8f0}
+thead th .arr{color:#475569;font-size:8px;margin-left:2px}
+thead th.sorted{color:#818cf8}
+thead th.sorted .arr{color:#818cf8}
+tbody td{padding:10px 8px;border-bottom:1px solid #1e293b20;color:#cbd5e1}
+tbody tr:active td{background:#1e293b40}
+.inline-bar{display:inline-block;width:44px;height:4px;background:#1e293b;border-radius:2px;vertical-align:middle;margin-right:5px;overflow:hidden}
+.inline-bar-fill{height:100%;border-radius:2px}
+.badge{display:inline-block;padding:3px 7px;border-radius:6px;font-size:8px;font-weight:700}
+.badge-purple{background:#3b076420;color:#a78bfa;border:1px solid #7c3aed20}
+.score-g{color:#34d399;font-weight:700}
+.score-a{color:#fbbf24;font-weight:700}
+.score-r{color:#f87171;font-weight:700}
+.kw-link{font-weight:600;color:#e2e8f0;cursor:pointer}
+.trend-up{color:#34d399}
+.trend-down{color:#f87171}
+/* Bottom nav */
+.bottom-nav{display:flex;position:absolute;bottom:0;left:0;right:0;background:#0b0f19f0;backdrop-filter:blur(20px);border-top:1px solid #1e293b40;padding:6px 12px;z-index:10}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:12px;font-size:9px;font-weight:600;color:#475569;cursor:pointer}
+.nav-tab.active{color:#a5b4fc}
+.nav-tab svg{width:22px;height:22px}
+</style></head>
+<body>
+<div class=phone>
+  <div class=phone-notch><div class=pill></div></div>
+  <div class=navbar><button class=back>←</button><h1>📋 Market Comparison</h1></div>
+  <div class=scroll>
+    <div class=filters>
+      <select id=domF><option value="">All Domains</option></select>
+      <input placeholder="Search keywords..." id=search>
+    </div>
+    <div class=controls>
+      <span id=cnt>940 keywords</span>
+      <span style=display:flex;gap:4px;align-items:center>
+        <button class=btn id=prev>←</button>
+        <span class=page-info id=pglbl>1 / 38</span>
+        <button class=btn id=next>→</button>
+      </span>
+    </div>
+    <div class=table-shell>
+      <div class=table-scroll>
+        <table><thead><tr>
+          <th data-sort=keyword>Keyword <span class=arr>▼</span></th>
+          <th data-sort=domain>Domain</th>
+          <th data-sort=opp>Opp</th>
+          <th data-sort=demand>Demand</th>
+          <th data-sort=comp>Comp</th>
+          <th data-sort=margin>Margin</th>
+          <th data-sort=trend>Trend</th>
+          <th data-sort=vol>Vol</th>
+          <th data-sort=qual>Qual</th>
+          <th data-sort=tag>Tag</th>
+        </tr></thead>
+        <tbody id=tb></tbody></table>
+      </div>
+    </div>
+    <div style=height:8px></div>
+  </div>
+
+  <div class=bottom-nav>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><rect x=3 y=3 width=7 height=7 rx=1.5/><rect x=14 y=3 width=7 height=7 rx=1.5/><rect x=14 y=14 width=7 height=7 rx=1.5/><rect x=3 y=14 width=7 height=7 rx=1.5/></svg>Home</div>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><circle cx=11 cy=11 r=7/><path d="m20 20-3.5-3.5"/></svg>Explore</div>
+    <div class="nav-tab active"><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><path d="m20 2-2 2"/><circle cx=13 cy=13 r=8/></svg>Keywords</div>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><circle cx=12 cy=12 r=10/><polyline points="12 6 12 12 15 15"/></svg>Schdlr</div>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><circle cx=12 cy=12 r=3/></svg>Settings</div>
+  </div>
+</div>
+
+<script>
+const domains=['trending niches','aesthetics','occasions','hobbies','pets','professions','home decor','pop culture'];
+const words=['gift','decor','art','print','shirt','mug','poster','sticker','aesthetic','cottagecore','boho','minimalist','vintage','retro','modern','rustic','cozy','dark','light','academia','witchy','celestial','mushroom','frog','cat','dog','plant','flower','mountain','ocean','forest','sunset','moon','star','mom','dad','teacher','nurse','doctor','chef','halloween','christmas','thanksgiving','easter','valentine','birthday','wedding','funny','cute','trendy','unique'];
+const all=[];for(let i=0;i<940;i++){const w1=words[i%words.length],w2=words[(i*7+13)%words.length],d=30+Math.random()*70,c=5+Math.random()*80,m=20+(100-c)*.6+Math.random()*20,t=20+Math.random()*80;all.push({keyword:`${w1} ${w2}`,domain:domains[i%8],opp:Math.round((d*.3+(100-c)*.3+m*.2+t*.2+(Math.random()-.5)*5)*10)/10,demand:Math.round(d*10)/10,comp:Math.round(c*10)/10,margin:Math.round(m*10)/10,trend:Math.round(t*10)/10,vol:Math.round((Math.random()*60+30)*10)/10,qual:Math.round((Math.random()*60+20)*10)/10,tag:Math.round((Math.random()*60+25)*10)/10})}
+all.sort((a,b)=>b.opp-a.opp);
+
+let col='opp',dir='asc',domF='',q='',pg=1,per=30;
+function render(){
+  let f=all.filter(k=>(!domF||k.domain===domF)&&(!q||k.keyword.includes(q)));
+  f.sort((a,b)=>{const va=a[col]??0,vb=b[col]??0;return dir==='asc'?va-vb:vb-va});
+  document.getElementById('cnt').textContent=`${f.length} keywords`;
+  const tp=Math.ceil(f.length/per);
+  document.getElementById('pglbl').textContent=`${pg} / ${tp||1}`;
+  document.getElementById('prev').disabled=pg<=1;
+  document.getElementById('next').disabled=pg>=tp;
+  document.getElementById('tb').innerHTML=f.slice((pg-1)*per,pg*per).map(k=>{
+    const oc=k.opp>=70?'score-g':k.opp>=50?'score-a':'score-r';
+    const tc=k.trend>=70?'trend-up':k.trend<40?'trend-down':'';
+    const ta=k.trend>=70?'↑':k.trend<40?'↓':'→';
+    return`<tr>
+      <td><span class=kw-link>${k.keyword}</span></td>
+      <td><span class="badge badge-purple">${k.domain}</span></td>
+      <td><span class="${oc}">${k.opp.toFixed(1)}</span></td>
+      <td><span class=inline-bar><span class=inline-bar-fill style="width:${k.demand}%;background:#818cf8"></span></span>${k.demand.toFixed(0)}</td>
+      <td><span class=inline-bar><span class=inline-bar-fill style="width:${k.comp}%;background:#fbbf24"></span></span>${k.comp.toFixed(0)}</td>
+      <td><span class=inline-bar><span class=inline-bar-fill style="width:${k.margin}%;background:#a78bfa"></span></span>${k.margin.toFixed(0)}</td>
+      <td class="${tc}">${ta} ${k.trend.toFixed(0)}</td>
+      <td><span class=inline-bar><span class=inline-bar-fill style="width:${k.vol}%;background:#34d399"></span></span>${k.vol.toFixed(0)}</td>
+      <td><span class=inline-bar><span class=inline-bar-fill style="width:${k.qual}%;background:#f59e0b"></span></span>${k.qual.toFixed(0)}</td>
+      <td><span class=inline-bar><span class=inline-bar-fill style="width:${k.tag}%;background:#fb923c"></span></span>${k.tag.toFixed(0)}</td>
+    </tr>`}).join('')}
+
+document.querySelectorAll('th[data-sort]').forEach(th=>th.addEventListener('click',()=>{const c=th.dataset.sort;if(col===c)dir=dir==='asc'?'desc':'asc';else{col=c;dir='asc'}document.querySelectorAll('th').forEach(t=>t.classList.remove('sorted'));th.classList.add('sorted');pg=1;render()}));
+document.querySelector('th[data-sort=opp]').classList.add('sorted');
+document.getElementById('domF').innerHTML='<option value="">All Domains</option>'+domains.map(d=>`<option>${d}</option>`).join('');
+document.getElementById('domF').addEventListener('change',e=>{domF=e.target.value;pg=1;render()});
+document.getElementById('search').addEventListener('input',e=>{q=e.target.value;pg=1;render()});
+document.getElementById('prev').addEventListener('click',()=>{pg--;render();document.querySelector('.scroll').scrollTo(0,0)});
+document.getElementById('next').addEventListener('click',()=>{pg++;render();document.querySelector('.scroll').scrollTo(0,0)});
+render();
+</script></body></html>

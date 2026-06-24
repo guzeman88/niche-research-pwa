@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Opportunity Matrix — Mobile + Desktop</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#020617;color:#e2e8f0;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:430px;background:#0f172a;min-height:100vh}
+@media(min-width:768px){.app{max-width:100%}}
+
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#0f172a;border-bottom:1px solid #1e293b;position:sticky;top:0;z-index:20}
+.topbar .back{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:none;color:#94a3b8;font-size:20px;cursor:pointer;background:transparent}
+.topbar h1{font-size:16px;font-weight:700}
+.main{padding:12px 16px 80px}
+@media(min-width:768px){.main{padding:24px 32px;max-width:1100px;margin:0 auto}}
+
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;margin-bottom:12px}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+.chart-card{background:#1e293b;border-radius:12px;padding:14px;border:1px solid #334155;margin-bottom:12px}
+.chart-card h3{font-size:12px;color:#94a3b8;margin-bottom:8px}
+.chart-wrap{position:relative;height:320px}
+@media(min-width:768px){.chart-wrap{height:400px}}
+
+.chart-grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:768px){.chart-grid{grid-template-columns:repeat(2,1fr)}}
+
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stat-card{background:#1e293b;border-radius:12px;padding:12px;border:1px solid #334155;text-align:center}
+.stat-card .label{font-size:10px;color:#94a3b8;margin-bottom:4px}
+.stat-card .value{font-size:22px;font-weight:700}
+.stat-card .sub{font-size:10px;color:#64748b;margin-top:2px}
+
+.list-row{display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid #1e293b;font-size:11px}
+.list-row .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{display:inline-flex;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:600}
+.badge-green{background:#065f46;color:#6ee7b7}
+.badge-amber{background:#78350f;color:#fbbf24}
+
+.bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:#0f172a;border-top:1px solid #1e293b;padding:6px 8px;padding-bottom:max(6px,env(safe-area-inset-bottom));z-index:20}
+@media(min-width:768px){.bottom-nav{display:none}}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:8px;font-size:10px;color:#64748b;cursor:pointer;min-height:44px;justify-content:center}
+.nav-tab.active{color:#a5b4fc}
+.nav-tab svg{width:20px;height:20px;opacity:.5}
+.nav-tab.active svg{opacity:1}
+</style></head>
+<body>
+<div class="app">
+  <div class="topbar"><button class="back">←</button><h1>📍 Opportunity Matrix</h1></div>
+  <div class="main">
+    <div class="legend">
+      <span><span class="legend-dot" style="background:#6ee7b7"></span>Sweet Spot</span>
+      <span><span class="legend-dot" style="background:#818cf8"></span>High Demand</span>
+      <span><span class="legend-dot" style="background:#fbbf24"></span>Niche Play</span>
+      <span><span class="legend-dot" style="background:#fca5a5"></span>Saturated</span>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>Demand vs Competition — 940 Keywords</h3>
+        <div class="chart-wrap"><canvas id="matrix"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Top Sweet Spot Keywords</h3>
+        <div id="sweetList" style="max-height:360px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <div class="chart-grid" style="margin-top:12px">
+      <div class="chart-card"><h3>By Domain</h3><div class="chart-wrap" style="height:280px"><canvas id="domainBubble"></canvas></div></div>
+      <div class="chart-card">
+        <h3>Market Breakdown</h3>
+        <div class="stats-grid" id="breakdown" style="margin-bottom:12px"></div>
+        <div class="chart-wrap" style="height:140px"><canvas id="trendPie"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/></svg>Home</div>
+    <div class="nav-tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Explore</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 2-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8"/></svg>Keywords</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>Schdl</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</div>
+  </nav>
+</div>
+
+<script>
+const domains=['trending_micro_niches','aesthetics','occasions_holidays','hobbies','pets','professions','home_decor_themes','pop_culture_themes'];
+const domainAvgs={trending_micro_niches:[45,22],aesthetics:[55,30],occasions_holidays:[75,58],hobbies:[35,25],pets:[50,45],professions:[40,20],home_decor_themes:[60,50],pop_culture_themes:[55,28]};
+const domainColors={trending_micro_niches:'#818cf8',aesthetics:'#6ee7b7',occasions_holidays:'#fbbf24',hobbies:'#fca5a5',pets:'#c4b5fd',professions:'#fb923c',home_decor_themes:'#34d399',pop_culture_themes:'#a78bfa'};
+
+const pts=[];
+for(let i=0;i<940;i++){const d=domains[i%8];const[bd,bc]=domainAvgs[d];pts.push({x:Math.max(2,Math.min(100,bc+(Math.random()-.5)*25)),y:Math.max(2,Math.min(100,bd+(Math.random()-.5)*35)),domain:d})}
+
+new Chart(document.getElementById('matrix'),{
+  type:'scatter',data:{datasets:[{data:pts.map(p=>({x:p.x,y:p.y})),backgroundColor:pts.map(p=>p.y>60&&p.x<35?'#6ee7b720':p.y>60?'#818cf820':p.x<35?'#fbbf2420':'#fca5a520'),borderColor:pts.map(p=>p.y>60&&p.x<35?'#6ee7b7':p.y>60?'#818cf8':p.x<35?'#fbbf24':'#fca5a5'),borderWidth:1,pointRadius:3,pointHoverRadius:7}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{text:'Competition →',display:true,color:'#64748b',font:{size:10}},min:0,max:100,ticks:{color:'#64748b',font:{size:8}},grid:{color:'#1e293b'},reverse:true},y:{title:{text:'Demand →',display:true,color:'#64748b',font:{size:10}},min:0,max:100,ticks:{color:'#64748b',font:{size:8}},grid:{color:'#1e293b'}}}}
+});
+
+const sweetSpots=[
+  {kw:'trendy stickers',d:62,c:19,m:71},{kw:'roman empire',d:64,c:13,m:58},
+  {kw:'fall aesthetic',d:72,c:23,m:77},{kw:'villain era',d:67,c:21,m:74},
+  {kw:'girl dinner',d:54,c:15,m:84},{kw:'dark academia decor',d:70,c:12,m:82},
+  {kw:'soft girl aesthetic',d:65,c:12,m:61},{kw:'golden hour',d:65,c:24,m:71},
+];
+document.getElementById('sweetList').innerHTML=sweetSpots.map(k=>`<div class="list-row"><span class="name">${k.kw}</span><span class="badge badge-green">D:${k.d}</span><span class="badge badge-amber">C:${k.c}</span><span style="color:#c4b5fd;font-weight:600;font-size:11px">$${k.m}</span></div>`).join('');
+
+new Chart(document.getElementById('domainBubble'),{
+  type:'bubble',data:{datasets:Object.entries(domainAvgs).map(([d,[bd,bc]])=>({label:d.replace(/_/g,' '),data:[{x:bc,y:bd,r:14+Math.random()*6}],backgroundColor:domainColors[d]+'50',borderColor:domainColors[d],borderWidth:1}))},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{text:'Competition',display:true,color:'#64748b',font:{size:9}},ticks:{color:'#64748b',font:{size:8}},grid:{color:'#1e293b'}},y:{title:{text:'Demand',display:true,color:'#64748b',font:{size:9}},ticks:{color:'#64748b',font:{size:8}},grid:{color:'#1e293b'}}}}
+});
+
+document.getElementById('breakdown').innerHTML=[
+  {l:'Sweet Spot',v:142,c:'#6ee7b7'},{l:'High Demand',v:315,c:'#818cf8'},
+  {l:'Niche Play',v:203,c:'#fbbf24'},{l:'Saturated',v:280,c:'#fca5a5'},
+].map(s=>`<div class="stat-card"><div class="label">${s.l}</div><div class="value" style="color:${s.c}">${s.v}</div></div>`).join('');
+
+new Chart(document.getElementById('trendPie'),{
+  type:'doughnut',data:{labels:['Rising','Stable','Declining'],datasets:[{data:[340,480,120],backgroundColor:['#6ee7b7','#818cf8','#fca5a5'],borderWidth:0}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:9},padding:8,boxWidth:10}}}}
+});
+</script></body></html>

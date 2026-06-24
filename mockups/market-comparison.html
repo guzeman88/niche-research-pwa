@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Market Comparison — Mobile + Desktop</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#020617;color:#e2e8f0;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:430px;background:#0f172a;min-height:100vh}
+@media(min-width:768px){.app{max-width:100%}}
+
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#0f172a;border-bottom:1px solid #1e293b;position:sticky;top:0;z-index:20}
+.topbar .back{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:none;color:#94a3b8;font-size:20px;cursor:pointer;background:transparent}
+.topbar h1{font-size:16px;font-weight:700}
+.main{padding:12px 16px 80px}
+@media(min-width:768px){.main{padding:24px 32px;max-width:1100px;margin:0 auto}}
+
+.filters{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.filters select,.filters input{background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px 10px;font-size:12px;min-height:40px;-webkit-appearance:none}
+.filters select:focus,.filters input:focus{outline:none;border-color:#818cf8}
+.filters input{flex:1;min-width:120px}
+
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;background:#1e293b;border-radius:12px;border:1px solid #334155}
+@media(min-width:768px){.table-wrap{overflow-x:visible}}
+
+table{width:100%;font-size:11px;border-collapse:collapse;min-width:600px}
+th{padding:10px 8px;color:#94a3b8;font-weight:500;border-bottom:2px solid #334155;font-size:9px;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;user-select:none;white-space:nowrap;position:sticky;top:0;background:#1e293b}
+th:active{color:#e2e8f0}
+th .arrow{opacity:.3;font-size:8px}
+th.active{color:#818cf8}
+th.active .arrow{opacity:1}
+td{padding:9px 8px;border-bottom:1px solid #0f172a}
+tr:active td{background:#33415530}
+
+.score-bar{display:inline-block;width:50px;height:4px;background:#334155;border-radius:2px;vertical-align:middle;margin-right:5px}
+.score-bar-fill{height:100%;border-radius:2px}
+
+.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:600}
+.badge-green{background:#065f46;color:#6ee7b7}
+.badge-amber{background:#78350f;color:#fbbf24}
+.badge-red{background:#7f1d1d;color:#fca5a5}
+.badge-purple{background:#3b0764;color:#c4b5fd}
+
+.controls{display:flex;align-items:center;justify-content:space-between;padding:8px 0;font-size:11px;color:#64748b}
+.controls button{background:#334155;color:#cbd5e1;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;min-height:36px;min-width:36px;display:inline-flex;align-items:center;justify-content:center}
+.controls button:active{background:#475569}
+.controls button:disabled{opacity:.3}
+
+.bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:#0f172a;border-top:1px solid #1e293b;padding:6px 8px;padding-bottom:max(6px,env(safe-area-inset-bottom));z-index:20}
+@media(min-width:768px){.bottom-nav{display:none}}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:8px;font-size:10px;color:#64748b;cursor:pointer;min-height:44px;justify-content:center}
+.nav-tab.active{color:#a5b4fc}
+.nav-tab svg{width:20px;height:20px;opacity:.5}
+.nav-tab.active svg{opacity:1}
+</style></head>
+<body>
+<div class="app">
+  <div class="topbar"><button class="back">←</button><h1>📋 Market Comparison</h1></div>
+  <div class="main">
+    <div class="filters">
+      <select id="domainFilter"><option value="">All Domains</option></select>
+      <input type="text" placeholder="Search keywords..." id="searchInput">
+    </div>
+    <div class="controls">
+      <span id="countLabel">940 keywords</span>
+      <span style="display:flex;gap:4px">
+        <button id="prevBtn">←</button>
+        <span style="align-self:center;padding:0 4px" id="pageLabel">1/38</span>
+        <button id="nextBtn">→</button>
+      </span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th data-sort="keyword">Keyword <span class="arrow">▼</span></th>
+          <th data-sort="domain">Domain</th>
+          <th data-sort="opp">Opp</th>
+          <th data-sort="demand">Demand</th>
+          <th data-sort="comp">Comp</th>
+          <th data-sort="margin">Margin</th>
+          <th data-sort="trend">Trend</th>
+          <th data-sort="vol">Vol Gap</th>
+          <th data-sort="qual">Qual Gap</th>
+          <th data-sort="tag">Tag Gap</th>
+        </tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/></svg>Home</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Explore</div>
+    <div class="nav-tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 2-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8"/></svg>Keywords</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>Schdl</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</div>
+  </nav>
+</div>
+
+<script>
+const allData=[],domains=['trending_micro_niches','aesthetics','occasions_holidays','hobbies','pets','professions','home_decor_themes','pop_culture_themes'];
+const words=['gift','decor','art','print','shirt','mug','poster','sticker','aesthetic','cottagecore','boho','minimalist','vintage','retro','modern','rustic','cozy','dark','light','academia','witchy','celestial','mushroom','frog','cat','dog','plant','flower','mountain','ocean','forest','sunset','moon','star','mom','dad','teacher','nurse','doctor','chef','halloween','christmas','thanksgiving','easter','valentine','birthday','wedding','funny','cute','trendy','unique','custom'];
+
+for(let i=0;i<940;i++){const w1=words[i%words.length],w2=words[(i*7+13)%words.length],domain=domains[i%8],d=30+Math.random()*70,c=5+Math.random()*80,m=20+(100-c)*.6+Math.random()*20,t=20+Math.random()*80,opp=d*.3+(100-c)*.3+m*.2+t*.2+(Math.random()-.5)*5;allData.push({keyword:`${w1} ${w2}`,domain,opp:Math.round(opp*10)/10,demand:Math.round(d*10)/10,comp:Math.round(c*10)/10,margin:Math.round(m*10)/10,trend:Math.round(t*10)/10,vol:Math.round((Math.random()*60+30)*10)/10,qual:Math.round((Math.random()*60+20)*10)/10,tag:Math.round((Math.random()*60+25)*10)/10})}
+allData.sort((a,b)=>b.opp-a.opp);
+
+let sortCol='opp',sortDir='desc',filterDomain='',searchQuery='',page=1,perPage=25;
+
+function render(){
+  let f=allData.filter(k=>(!filterDomain||k.domain===filterDomain)&&(!searchQuery||k.keyword.includes(searchQuery.toLowerCase())));
+  f.sort((a,b)=>{const va=a[sortCol]??0,vb=b[sortCol]??0;return sortDir==='asc'?va-vb:vb-va});
+  document.getElementById('countLabel').textContent=`${f.length} keywords`;
+  const tp=Math.ceil(f.length/perPage),pd=f.slice((page-1)*perPage,page*perPage);
+  document.getElementById('pageLabel').textContent=`${page}/${tp||1}`;
+  document.getElementById('prevBtn').disabled=page<=1;
+  document.getElementById('nextBtn').disabled=page>=tp;
+
+  document.getElementById('tableBody').innerHTML=pd.map(k=>{const oc=k.opp>=70?'badge-green':k.opp>=50?'badge-amber':'badge-red';return`<tr>
+    <td style="font-weight:500;cursor:pointer" onclick="alert('${k.keyword}\\nDemand: ${k.demand}/100\\nCompetition: ${k.comp}/100\\nMargin: ${k.margin}/100\\nTrend: ${k.trend}/100')">${k.keyword}</td>
+    <td><span class="badge badge-purple">${k.domain.replace(/_/g,' ')}</span></td>
+    <td><span class="${oc}">${k.opp.toFixed(1)}</span></td>
+    <td><span class="score-bar"><span class="score-bar-fill" style="width:${k.demand}%;background:#818cf8"></span></span>${k.demand.toFixed(0)}</td>
+    <td><span class="score-bar"><span class="score-bar-fill" style="width:${k.comp}%;background:#fbbf24"></span></span>${k.comp.toFixed(0)}</td>
+    <td><span class="score-bar"><span class="score-bar-fill" style="width:${k.margin}%;background:#c4b5fd"></span></span>${k.margin.toFixed(0)}</td>
+    <td style="color:${k.trend>=70?'#6ee7b7':k.trend<40?'#fca5a5':'#94a3b8'}">${k.trend>=70?'↑':k.trend<40?'↓':'→'} ${k.trend.toFixed(0)}</td>
+    <td><span class="score-bar"><span class="score-bar-fill" style="width:${k.vol}%;background:#6ee7b7"></span></span>${k.vol.toFixed(0)}</td>
+    <td><span class="score-bar"><span class="score-bar-fill" style="width:${k.qual}%;background:#fbbf24"></span></span>${k.qual.toFixed(0)}</td>
+    <td><span class="score-bar"><span class="score-bar-fill" style="width:${k.tag}%;background:#fb923c"></span></span>${k.tag.toFixed(0)}</td>
+  </tr>`}).join('');
+}
+
+document.querySelectorAll('th[data-sort]').forEach(th=>{th.addEventListener('click',()=>{const c=th.dataset.sort;if(sortCol===c)sortDir=sortDir==='asc'?'desc':'asc';else{sortCol=c;sortDir='desc'}document.querySelectorAll('th').forEach(t=>t.classList.remove('active'));th.classList.add('active');page=1;render()})});
+document.querySelector('th[data-sort="opp"]').classList.add('active');
+document.getElementById('domainFilter').innerHTML='<option value="">All Domains</option>'+domains.map(d=>`<option value="${d}">${d.replace(/_/g,' ')}</option>`).join('');
+document.getElementById('domainFilter').addEventListener('change',e=>{filterDomain=e.target.value;page=1;render()});
+document.getElementById('searchInput').addEventListener('input',e=>{searchQuery=e.target.value;page=1;render()});
+document.getElementById('prevBtn').addEventListener('click',()=>{page--;render();window.scrollTo(0,0)});
+document.getElementById('nextBtn').addEventListener('click',()=>{page++;render();window.scrollTo(0,0)});
+render();
+</script></body></html>

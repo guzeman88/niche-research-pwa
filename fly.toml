@@ -1,0 +1,15 @@
+app = "niche-research-api"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile.backend"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true

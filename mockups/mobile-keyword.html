@@ -1,0 +1,210 @@
+<!doctype html><html lang=en><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>fall aesthetic — Keyword Deep Dive</title>
+<script src=https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#06080d;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:32px 16px}
+.phone{width:390px;height:844px;background:linear-gradient(180deg,#0b0f19,#0f172a);border-radius:44px;overflow:hidden;border:2px solid #1e293b;position:relative;box-shadow:0 0 0 8px #111827,0 0 0 10px #1e293b,0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.phone-notch{height:48px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:10px;flex-shrink:0}
+.phone-notch .pill{width:96px;height:5px;background:#334155;border-radius:100px}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:72px}
+/* Nav bar */
+.navbar{display:flex;align-items:center;gap:12px;padding:8px 20px;position:sticky;top:0;z-index:10;background:#0b0f19f0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.navbar .back{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#111827;border:1px solid #1e293b;color:#94a3b8;font-size:16px;cursor:pointer}
+.breadcrumb{font-size:10px;color:#64748b;padding:2px 20px 0}
+.breadcrumb span{color:#818cf8}
+/* Header */
+.header{padding:6px 20px 16px}
+.header .title-row{display:flex;align-items:center;gap:8px}
+.header h1{font-size:21px;font-weight:800;letter-spacing:-.3px;color:#f1f5f9}
+.header .pill{display:inline-flex;padding:4px 10px;border-radius:100px;font-size:10px;font-weight:700}
+.pill-green{background:#065f4620;color:#34d399;border:1px solid #05966930}
+.pill-amber{background:#78350f20;color:#fbbf24;border:1px solid #d9770630}
+.header .meta{display:flex;gap:16px;margin-top:8px;font-size:10px;color:#64748b}
+.header .meta b{color:#94a3b8;font-weight:600}
+/* Hero gauge ring */
+.hero-gauge{display:flex;justify-content:center;padding:0 0 8px}
+.gauge-ring{position:relative;width:120px;height:120px}
+.gauge-ring canvas{position:absolute;inset:0}
+.gauge-ring .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.gauge-ring .big-num{font-size:36px;font-weight:800;letter-spacing:-1px;color:#34d399;line-height:1}
+.gauge-ring .big-label{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:600}
+/* Sub gauges row */
+.sub-gauges{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 20px}
+.sub-gauge{background:#111827;border:1px solid #1e293b;border-radius:16px;padding:14px 10px;text-align:center;position:relative;overflow:hidden}
+.sub-gauge::after{content:'';position:absolute;top:0;left:0;right:0;height:1px}
+.sub-gauge:nth-child(1)::after{background:#6366f1}
+.sub-gauge:nth-child(2)::after{background:#f59e0b}
+.sub-gauge:nth-child(3)::after{background:#8b5cf6}
+.sub-gauge .sg-val{font-size:22px;font-weight:800;letter-spacing:-.5px}
+.sub-gauge .sg-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-top:2px}
+.sub-gauge .sg-bar{height:3px;border-radius:2px;margin-top:6px}
+/* Section */
+.sec{padding:0 20px}
+.sec-title{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px}
+/* Metric rows */
+.metrics-card{background:#111827;border:1px solid #1e293b;border-radius:16px;overflow:hidden}
+.met-row{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #1e293b40}
+.met-row:last-child{border-bottom:none}
+.met-row .met-label{font-size:12px;color:#94a3b8;font-weight:500}
+.met-row .met-val{font-size:13px;font-weight:700;color:#e2e8f0}
+.met-row .met-accent{color:#818cf8}
+/* Chart card */
+.chart-card{background:#111827;border:1px solid #1e293b;border-radius:16px;padding:14px;margin-bottom:10px}
+.chart-title{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.chart-title .dot{width:5px;height:5px;border-radius:50%}
+.chart-wrap{position:relative;height:160px}
+/* Insight */
+.insight{background:linear-gradient(135deg,#1e1b4b40,#312e8140);border:1px solid #4338ca30;border-radius:14px;padding:14px;margin-bottom:8px;font-size:11px;line-height:1.6;color:#cbd5e1}
+.insight .ins-title{font-size:11px;font-weight:700;color:#a5b4fc;margin-bottom:3px}
+/* Tags */
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:6px 12px;border-radius:8px;font-size:10px;font-weight:600}
+.tag.hot{background:#7f1d1d20;border-color:#b91c1c30;color:#f87171}
+.tag.opp{background:#065f4620;border-color:#05966930;color:#34d399}
+/* Table */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;background:#111827;border:1px solid #1e293b;border-radius:16px}
+table{width:100%;min-width:360px;font-size:11px;border-collapse:collapse}
+th{text-align:left;padding:10px 12px;color:#64748b;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #1e293b;background:#0b0f19}
+td{padding:10px 12px;border-bottom:1px solid #1e293b30;color:#cbd5e1}
+td .strong{font-weight:600;color:#e2e8f0}
+/* Bottom nav */
+.bottom-nav{display:flex;position:absolute;bottom:0;left:0;right:0;background:#0b0f19f0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid #1e293b40;padding:6px 12px;z-index:10}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:12px;font-size:9px;font-weight:600;color:#475569;cursor:pointer}
+.nav-tab.active{color:#a5b4fc}
+.nav-tab svg{width:22px;height:22px}
+</style></head>
+<body>
+<div class=phone>
+  <div class=phone-notch><div class=pill></div></div>
+  <div class=navbar><button class=back>←</button><div><div class=breadcrumb>Dashboard / <span>Keywords</span> / <span style=color:#94a3b8>fall aesthetic</span></div></div></div>
+  <div class=scroll>
+    <div class=header>
+      <div class=title-row>
+        <h1>fall aesthetic</h1>
+        <span class="pill pill-green">High Opp</span>
+      </div>
+      <div class=meta>
+        <span>Domain: <b>aesthetics</b></span>
+        <span>Scanned: <b>Jun 7, 2026</b></span>
+      </div>
+    </div>
+
+    <!-- Hero gauge -->
+    <div class=hero-gauge>
+      <div class=gauge-ring>
+        <canvas id=gOpp width=120 height=120></canvas>
+        <div class=center><span class=big-num>80</span><span class=big-label>Opportunity</span></div>
+      </div>
+    </div>
+
+    <!-- 3 sub gauges -->
+    <div class=sub-gauges>
+      <div class=sub-gauge>
+        <div class=sg-val style=color:#818cf8>72</div>
+        <div class=sg-label>Demand</div>
+        <div class=sg-bar style="background:linear-gradient(90deg,#6366f1,#818cf8);width:72%"></div>
+      </div>
+      <div class=sub-gauge>
+        <div class=sg-val style=color:#fbbf24>23</div>
+        <div class=sg-label>Competition</div>
+        <div class=sg-bar style="background:linear-gradient(90deg,#f59e0b,#fbbf24);width:23%"></div>
+      </div>
+      <div class=sub-gauge>
+        <div class=sg-val style=color:#c4b5fd>77</div>
+        <div class=sg-label>Margin</div>
+        <div class=sg-bar style="background:linear-gradient(90deg,#8b5cf6,#a78bfa);width:77%"></div>
+      </div>
+    </div>
+
+    <div class=sec><div class=sec-title>Market Overview</div>
+      <div class=metrics-card>
+        <div class=met-row><span class=met-label>Est. Monthly Revenue</span><span class=met-val style=color:#34d399>$12,450</span></div>
+        <div class=met-row><span class=met-label>Total Listings</span><span class=met-val>6,842</span></div>
+        <div class=met-row><span class=met-label>Average Price</span><span class=met-val>$18.50</span></div>
+        <div class=met-row><span class=met-label>Price Sweet Spot</span><span class="met-val met-accent">$12 – $28</span></div>
+        <div class=met-row><span class=met-label>Star Sellers (top 20)</span><span class=met-val>15%</span></div>
+        <div class=met-row><span class=met-label>Avg Favorites</span><span class=met-val>142</span></div>
+        <div class=met-row><span class=met-label>Competition Quality</span><span class=met-val style=color:#fbbf24>23 / 100</span></div>
+      </div>
+    </div>
+
+    <div class=sec>
+      <div class=sec-title>5-Year Seasonality</div>
+      <div class=chart-card>
+        <div class=chart-title><span class=dot style=background:#818cf8></span> Monthly Interest</div>
+        <div class=chart-wrap><canvas id=season></canvas></div>
+      </div>
+    </div>
+
+    <div class=sec>
+      <div style=display:grid;grid-template-columns:1fr 1fr;gap:8px>
+        <div class=chart-card>
+          <div class=chart-title><span class=dot style=background:#6366f1></span> Competition Mix</div>
+          <div class=chart-wrap style=height:140px><canvas id=comp></canvas></div>
+        </div>
+        <div class=chart-card>
+          <div class=chart-title><span class=dot style=background:#8b5cf6></span> Gap Signals</div>
+          <div class=chart-wrap style=height:140px><canvas id=radar></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class=sec>
+      <div class=sec-title>AI Insights</div>
+      <div class=insight>
+        <div class=ins-title>💡 Entry Strategy</div>
+        Enter at $14.99–$22.99 with warm-toned lifestyle photography. Top competitors average 2 years old — fresh listings with strong SEO will rank within 4–6 weeks.
+      </div>
+      <div class=insight>
+        <div class=ins-title>🎯 Underserved Angles</div>
+        "Dark academia fall decor" and "minimalist autumn wall art" — zero coverage from the top 20 sellers. First mover advantage available.
+      </div>
+    </div>
+
+    <div class=sec>
+      <div class=sec-title>Tags & Keywords</div>
+      <div class=tags>
+        <span class="tag hot">fall decor</span><span class="tag opp">dark academia</span>
+        <span class=tag>autumn aesthetic</span><span class="tag opp">minimalist autumn</span>
+        <span class=tag>cozy vibes</span><span class="tag opp">moody colors</span>
+        <span class=tag>pumpkin spice</span><span class=tag>boho fall</span>
+        <span class=tag>wall art print</span><span class="tag opp">vintage autumn</span>
+      </div>
+    </div>
+
+    <div class=sec>
+      <div class=sec-title>Related Keywords</div>
+      <div class=table-wrap>
+        <table><thead><tr><th>Keyword</th><th>Opp</th><th>Demand</th><th>Comp</th><th>Trend</th></tr></thead>
+        <tbody>
+          <tr><td class=strong>dark academia decor</td><td style=color:#34d399;font-weight:700>84</td><td>68</td><td>12</td><td style=color:#34d399>↑ 92</td></tr>
+          <tr><td class=strong>cozy autumn decor</td><td style=color:#818cf8;font-weight:700>73</td><td>65</td><td>28</td><td style=color:#34d399>↑ 85</td></tr>
+          <tr><td class=strong>moody fall colors</td><td style=color:#818cf8;font-weight:700>68</td><td>52</td><td>18</td><td style=color:#94a3b8>→ 55</td></tr>
+          <tr><td class=strong>autumn wall art</td><td style=color:#fbbf24;font-weight:700>54</td><td>48</td><td>44</td><td style=color:#94a3b8>→ 50</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+    <div style=height:20px></div>
+  </div>
+
+  <div class=bottom-nav>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round><rect x=3 y=3 width=7 height=7 rx=1.5/><rect x=14 y=3 width=7 height=7 rx=1.5/><rect x=14 y=14 width=7 height=7 rx=1.5/><rect x=3 y=14 width=7 height=7 rx=1.5/></svg>Home</div>
+    <div class="nav-tab active"><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><circle cx=11 cy=11 r=7/><path d="m20 20-3.5-3.5"/></svg>Explore</div>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><path d="m20 2-2 2"/><circle cx=13 cy=13 r=8/></svg>Keywords</div>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><circle cx=12 cy=12 r=10/><polyline points="12 6 12 12 15 15"/></svg>Schdlr</div>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><circle cx=12 cy=12 r=3/><path d="M19.4 15c.4.5.6 1.2.3 1.8l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1c.6-.3 1.3-.1 1.8.3"/></svg>Settings</div>
+  </div>
+</div>
+
+<script>
+function ring(id,val,color){const c=document.getElementById(id),ctx=c.getContext('2d'),r=52,circ=2*Math.PI*r;ctx.clearRect(0,0,120,120);ctx.beginPath();ctx.arc(60,60,r,0,2*Math.PI);ctx.strokeStyle='#1e293b';ctx.lineWidth=6;ctx.stroke();const grad=ctx.createLinearGradient(0,0,120,120);grad.addColorStop(0,color[0]);grad.addColorStop(1,color[1]||color[0]);ctx.beginPath();ctx.arc(60,60,r,-Math.PI/2,(-Math.PI/2)+(2*Math.PI*val/100));ctx.strokeStyle=grad;ctx.lineWidth=6;ctx.lineCap='round';ctx.stroke()}
+ring('gOpp',80,['#34d399','#059669']);
+
+new Chart(document.getElementById('season'),{type:'bar',data:{labels:'JFMAMJJASOND'.split(''),datasets:[{data:[22,18,25,30,28,24,20,55,82,95,78,68],backgroundColor:c=>{const v=c.raw;return v>=90?'#4f46e5':v>=75?'#6366f1':v>=50?'#818cf8':v>=30?'#64748b':'#334155'},borderRadius:3,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:8}},grid:{display:false}},y:{display:false,beginAtZero:true}}});
+
+new Chart(document.getElementById('comp'),{type:'doughnut',data:{labels:['Star Seller','Bestseller','Regular'],datasets:[{data:[15,8,77],backgroundColor:['#6366f1','#34d399','#1e293b'],borderWidth:2,borderColor:'#111827'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'62%'});
+
+new Chart(document.getElementById('radar'),{type:'radar',data:{labels:['Volume','Quality','Tag','Style','Price','Recency'],datasets:[{data:[72,55,68,42,58,38],backgroundColor:'#6366f110',borderColor:'#818cf8',borderWidth:1.5,pointRadius:3,pointBackgroundColor:'#818cf8'}]},options:{responsive:true,maintainAspectRatio:false,scales:{r:{grid:{color:'#1e293b'},ticks:{display:false,stepSize:25},pointLabels:{color:'#94a3b8',font:{size:8,weight:600}}}},plugins:{legend:{display:false}}});
+</script></body></html>

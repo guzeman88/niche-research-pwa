@@ -1,0 +1,233 @@
+<!doctype html><html lang=en><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Niche Research — Dashboard</title>
+<script src=https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#06080d;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:32px 16px}
+/* Phone frame */
+.phone{width:390px;height:844px;background:linear-gradient(180deg,#0b0f19 0%,#0f172a 100%);border-radius:44px;overflow:hidden;border:2px solid #1e293b;position:relative;box-shadow:0 0 0 8px #111827,0 0 0 10px #1e293b,0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.phone-notch{height:48px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:10px;flex-shrink:0;background:transparent}
+.phone-notch .pill{width:96px;height:5px;background:#334155;border-radius:100px}
+/* Scroll */
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:72px;scroll-behavior:smooth}
+/* Status bar row */
+.status-row{display:flex;justify-content:space-between;align-items:center;padding:4px 24px 0;font-size:11px;font-weight:600;color:#64748b}
+.status-row .time{letter-spacing:.5px}
+.status-icons{display:flex;gap:6px;align-items:center}
+.status-icons svg{width:14px;height:14px}
+/* Greeting */
+.greeting{padding:8px 24px 4px}
+.greeting .hi{font-size:13px;color:#64748b;font-weight:500}
+.greeting .name{font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-.3px}
+/* Quick stats row - horizontal scroll chips */
+.chips-row{display:flex;gap:8px;padding:6px 24px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.chips-row::-webkit-scrollbar{display:none}
+.chip{flex-shrink:0;padding:10px 16px;border-radius:16px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:8px}
+.chip-1{background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid #4338ca40}
+.chip-2{background:linear-gradient(135deg,#022c22,#065f46);border:1px solid #05966940}
+.chip-3{background:linear-gradient(135deg,#451a03,#78350f);border:1px solid #d9770640}
+.chip-4{background:linear-gradient(135deg,#1e1b4b,#3b0764);border:1px solid #7c3aed40}
+.chip .chip-val{font-size:20px;font-weight:800;letter-spacing:-.5px}
+.chip .chip-label{font-size:10px;color:#94a3b8;font-weight:500}
+/* Section */
+.section{margin:0 24px}
+.section-header{display:flex;justify-content:space-between;align-items:baseline;margin:20px 0 10px}
+.section-title{font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px}
+.section-link{font-size:11px;color:#6366f1;font-weight:600;text-decoration:none}
+/* Big metric row */
+.big-metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.big-metric{background:#111827;border:1px solid #1e293b;border-radius:18px;padding:16px;position:relative;overflow:hidden}
+.big-metric::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;opacity:.4}
+.big-metric:nth-child(1)::after{background:linear-gradient(90deg,#6366f1,#818cf8)}
+.big-metric:nth-child(2)::after{background:linear-gradient(90deg,#10b981,#34d399)}
+.big-metric:nth-child(3)::after{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+.big-metric:nth-child(4)::after{background:linear-gradient(90deg,#8b5cf6,#a78bfa)}
+.big-metric .metric-icon{font-size:18px;margin-bottom:6px}
+.big-metric .metric-val{font-size:26px;font-weight:800;letter-spacing:-.8px;line-height:1}
+.big-metric .metric-label{font-size:10px;color:#64748b;font-weight:500;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.big-metric .metric-sub{font-size:9px;color:#475569;margin-top:2px}
+/* Chart card */
+.chart-card{background:#111827;border:1px solid #1e293b;border-radius:18px;padding:16px;margin-top:10px}
+.chart-card .chart-title{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.chart-card .chart-title .dot{width:6px;height:6px;border-radius:50%}
+.chart-wrap{position:relative;height:170px}
+/* Top list */
+.rank-list{margin-top:2px}
+.rank-item{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #1e293b40}
+.rank-item:last-child{border-bottom:none}
+.rank-num{width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.rank-num.gold{background:#f59e0b20;color:#fbbf24}
+.rank-num.silver{background:#94a3b820;color:#cbd5e1}
+.rank-info{flex:1;min-width:0}
+.rank-info .rank-kw{font-size:12px;font-weight:600;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-info .rank-domain{font-size:9px;color:#64748b;margin-top:1px}
+.rank-bar-wrap{width:60px;height:4px;background:#1e293b;border-radius:2px;overflow:hidden;flex-shrink:0}
+.rank-bar-fill{height:100%;border-radius:2px}
+.rank-score{font-size:12px;font-weight:700;width:32px;text-align:right;flex-shrink:0}
+/* Gap mini cards */
+.gap-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.gap-mini{background:#111827;border:1px solid #1e293b;border-radius:14px;padding:10px;text-align:center}
+.gap-mini .mini-val{font-size:18px;font-weight:800;letter-spacing:-.5px}
+.gap-mini .mini-label{font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.gap-mini .mini-bar{height:2px;border-radius:1px;margin-top:6px}
+/* Bottom nav */
+.bottom-nav{display:flex;position:absolute;bottom:0;left:0;right:0;background:#0b0f19f0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid #1e293b40;padding:6px 12px;padding-bottom:max(6px,env(safe-area-inset-bottom));z-index:10}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:12px;font-size:9px;font-weight:600;color:#475569;cursor:pointer;transition:all .2s}
+.nav-tab.active{color:#a5b4fc;background:#6366f108}
+.nav-tab svg{width:22px;height:22px}
+.nav-tab .nav-badge{position:absolute;top:2px;width:5px;height:5px;border-radius:50%;background:#6366f1}
+.nav-tab.active .nav-badge{box-shadow:0 0 6px #6366f1}
+/* Domain bars */
+.domain-bars{margin-top:6px}
+.domain-row{display:flex;align-items:center;gap:8px;padding:7px 0}
+.domain-row .dom-name{font-size:10px;color:#94a3b8;width:78px;flex-shrink:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.domain-row .dom-bar{flex:1;height:6px;background:#1e293b;border-radius:3px;overflow:hidden}
+.domain-row .dom-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#6366f1,#818cf8)}
+.domain-row .dom-val{font-size:10px;font-weight:700;color:#e2e8f0;width:28px;text-align:right;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div class=phone>
+  <div class=phone-notch><div class=pill></div></div>
+  <div class=status-row>
+    <span class=time>9:41</span>
+    <span class=status-icons>
+      <svg viewBox="0 0 24 24" fill="#64748b"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C17.93 4.07 6.07 4.07 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-6-6l2 2c2.76-2.76 7.24-2.76 10 0l2-2C13.14 7.1 5.86 7.1 3 11z"/></svg>
+      <svg viewBox="0 0 24 24" fill="#64748b"><rect x=1 y=4 width=22 height=16 rx=3/><path d="M23 8v8H1V8" stroke="#0b0f19" stroke-width=2 fill=#64748b/></svg>
+    </span>
+  </div>
+
+  <div class=scroll>
+    <div class=greeting>
+      <div class=hi>Good morning</div>
+      <div class=name>Niche Research</div>
+    </div>
+
+    <!-- Chips -->
+    <div class=chips-row>
+      <div class="chip chip-1"><span class=chip-val style=color:#a5b4fc>940</span><span class=chip-label>Keywords<br>20 domains</span></div>
+      <div class="chip chip-2"><span class=chip-val style=color:#34d399>59.4</span><span class=chip-label>Avg Opp.<br>range 41–82</span></div>
+      <div class="chip chip-3"><span class=chip-val style=color:#fbbf24>137</span><span class=chip-label>Breakouts<br>↑ rapidly</span></div>
+      <div class="chip chip-4"><span class=chip-val style=color:#c4b5fd>81.2</span><span class=chip-label>Top Gap<br>fall aesthetic</span></div>
+    </div>
+
+    <div class=section>
+      <div class=section-header>
+        <span class=section-title>Performance Overview</span>
+        <a href=# class=section-link>View all →</a>
+      </div>
+      <div class=big-metrics>
+        <div class=big-metric>
+          <div class=metric-icon>📊</div>
+          <div class=metric-val style=color:#818cf8>73.1%</div>
+          <div class=metric-label>Coverage</div>
+          <div class=metric-sub>678 of 928 scanned</div>
+        </div>
+        <div class=big-metric>
+          <div class=metric-icon>🎯</div>
+          <div class=metric-val style=color:#34d399>62.5</div>
+          <div class=metric-label>Avg Opportunity</div>
+          <div class=metric-sub>Top: trendy stickers 82.3</div>
+        </div>
+        <div class=big-metric>
+          <div class=metric-icon>⚡</div>
+          <div class=metric-val style=color:#fbbf24>690</div>
+          <div class=metric-label>Total Scans</div>
+          <div class=metric-sub>Across 20 domains</div>
+        </div>
+        <div class=big-metric>
+          <div class=metric-icon>🔍</div>
+          <div class=metric-val style=color:#c4b5fd>63.5</div>
+          <div class=metric-label>Avg Gap Score</div>
+          <div class=metric-sub>Best: fall aesthetic 81.2</div>
+        </div>
+      </div>
+    </div>
+
+    <div class=section>
+      <div class=section-header>
+        <span class=section-title>Score Distribution</span>
+        <a href=# class=section-link>Details →</a>
+      </div>
+      <div class=chart-card>
+        <div class=chart-title><span class=dot style=background:#6366f1></span> Keywords by Opportunity Score</div>
+        <div class=chart-wrap><canvas id=distChart></canvas></div>
+      </div>
+    </div>
+
+    <div class=section>
+      <div class=section-header>
+        <span class=section-title>Top Opportunities</span>
+        <a href=# class=section-link>See all 940 →</a>
+      </div>
+      <div class=chart-card style=padding:12px>
+        <div class=rank-list id=topRank></div>
+      </div>
+    </div>
+
+    <div class=section>
+      <div class=section-header>
+        <span class=section-title>Domain Breakdown</span>
+        <span style=font-size:10px;color:#64748b;font-weight:500>by avg opportunity</span>
+      </div>
+      <div class=chart-card>
+        <div class=domain-bars id=domBars></div>
+      </div>
+    </div>
+
+    <div class=section>
+      <div class=section-header><span class=section-title>Gap Signals</span></div>
+      <div class=gap-grid id=gapGrid></div>
+    </div>
+
+    <div style=height:16px></div>
+  </div>
+
+  <!-- Bottom nav -->
+  <div class=bottom-nav>
+    <div class="nav-tab active">
+      <svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round><rect x=3 y=3 width=7 height=7 rx=1.5/><rect x=14 y=3 width=7 height=7 rx=1.5/><rect x=14 y=14 width=7 height=7 rx=1.5/><rect x=3 y=14 width=7 height=7 rx=1.5/></svg>
+      Home
+    </div>
+    <div class=nav-tab>
+      <svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round><circle cx=11 cy=11 r=7/><path d="m20 20-3.5-3.5"/></svg>
+      Explore
+    </div>
+    <div class=nav-tab>
+      <svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round><path d="m20 2-2 2"/><circle cx=13 cy=13 r=8/><path d="M6 6 2 2"/></svg>
+      Keywords
+    </div>
+    <div class=nav-tab>
+      <svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round><circle cx=12 cy=12 r=10/><polyline points="12 6 12 12 15 15"/></svg>
+      Scheduler
+    </div>
+    <div class=nav-tab>
+      <svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round><circle cx=12 cy=12 r=3/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </div>
+  </div>
+</div>
+
+<script>
+const opps=[{kw:'trendy stickers w/ quotes',opp:82.3,domain:'trending niches'},{kw:'roman empire',opp:80.1,domain:'pop culture'},{kw:'fall aesthetic',opp:80.0,domain:'aesthetics'},{kw:'villain era',opp:79.8,domain:'pop culture'},{kw:'girl dinner',opp:79.4,domain:'trending niches'},{kw:'vaporwave',opp:79.2,domain:'aesthetics'},{kw:'soft girl aesthetic',opp:79.1,domain:'aesthetics'}];
+const doms=[{n:'trending niches',v:72.4},{n:'aesthetics',v:68.2},{n:'pop culture',v:66.1},{n:'occasions/holidays',v:63.8},{n:'home decor',v:61.5},{n:'hobbies',v:54.2},{n:'pets',v:55.8},{n:'nature themes',v:48.3}];
+const gaps=[{l:'Volume',v:67,c:'#6366f1'},{l:'Quality',v:55,c:'#10b981'},{l:'Tag',v:58,c:'#f59e0b'},{l:'Price',v:52,c:'#8b5cf6'}];
+
+document.getElementById('topRank').innerHTML=opps.map((o,i)=>{
+  const cls=i<3?'gold':'silver',col=o.opp>=80?'#34d399':o.opp>=70?'#818cf8':'#fbbf24';
+  return`<div class=rank-item>
+    <div class="rank-num ${cls}">${i+1}</div>
+    <div class=rank-info><div class=rank-kw>${o.kw}</div><div class=rank-domain>${o.domain}</div></div>
+    <div class=rank-bar-wrap><div class=rank-bar-fill style="width:${o.opp}%;background:${col}"></div></div>
+    <div class=rank-score style=color:${col}>${o.opp.toFixed(1)}</div>
+  </div>`
+}).join('');
+
+document.getElementById('domBars').innerHTML=doms.map(d=>`<div class=domain-row><span class=dom-name>${d.n}</span><div class=dom-bar><div class=dom-fill style="width:${d.v}%"></div></div><span class=dom-val>${d.v.toFixed(0)}</span></div>`).join('');
+
+document.getElementById('gapGrid').innerHTML=gaps.map(g=>`<div class=gap-mini><div class=mini-val style=color:${g.c}>${g.v}</div><div class=mini-label>${g.l}</div><div class=mini-bar style="background:${g.c};width:${g.v}%"></div></div>`).join('');
+
+new Chart(document.getElementById('distChart'),{type:'bar',data:{labels:['<45','45–49','50–54','55–59','60–64','65–69','70–74','75–79','80+'],datasets:[{data:[15,32,87,112,178,163,142,98,73],backgroundColor:['#475569','#475569','#64748b','#64748b','#818cf8','#818cf8','#6366f1','#6366f1','#4f46e5'],borderRadius:4,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:8,weight:500}},grid:{display:false}},y:{ticks:{color:'#475569',font:{size:8},stepSize:50},grid:{color:'#1e293b30'},beginAtZero:true,border:{display:false}}}});
+</script></body></html>
