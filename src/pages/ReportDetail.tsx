@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { getReport } from '../lib/api'
+import { getGapReport, getReport } from '../lib/api'
 import Icon from '../components/Icon'
 import ScoreBadge from '../components/ScoreBadge'
 import SeasonalityChart from '../components/SeasonalityChart'
@@ -189,9 +189,7 @@ function FavoritesAnalytics({ data }: { data: KeywordSearchData | null }) {
 function GapMeterWrapper({ keyword }: { keyword: string }) {
   const { data: gap } = useQuery<any>({
     queryKey: ['gap', keyword],
-    queryFn: async () => {
-      try { return await (await fetch(`https://niche-research-api.onrender.com/api/gaps/${encodeURIComponent(keyword)}`)).json() } catch { return null }
-    },
+    queryFn: () => getGapReport(keyword).catch(() => null),
     enabled: !!keyword,
   })
 
