@@ -31,7 +31,7 @@ jobs:
 
       - name: Deploy to Netlify
         if: ${{ env.NETLIFY_AUTH_TOKEN != '' && env.NETLIFY_SITE_ID != '' }}
-        run: npx --yes netlify-cli deploy --prod --dir=dist --site="$NETLIFY_SITE_ID" --auth="$NETLIFY_AUTH_TOKEN"
+        run: npx --yes netlify-cli deploy --prod --dir=dist --no-build --auth="$NETLIFY_AUTH_TOKEN"
 
       - name: Explain skipped deploy
         if: ${{ env.NETLIFY_AUTH_TOKEN == '' || env.NETLIFY_SITE_ID == '' }}
