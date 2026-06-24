@@ -5,7 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const API = process.env.VITE_API_URL || 'https://niche-research-api.onrender.com';
+const API = process.env.VITE_API_URL || 'https://niche-research-api-kqlt.onrender.com';
 const OUT = path.join(__dirname, '..', 'public', 'data');
 
 function fetch(url) {
@@ -24,7 +24,7 @@ function fetch(url) {
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
-  console.log(`Fetching data from ${API}...`);
+  console.log(`Fetching static data snapshots from ${API}...`);
 
   const endpoints = [
     ['stats.json', '/api/stats'],
