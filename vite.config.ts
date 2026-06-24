@@ -38,6 +38,7 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         cacheId: 'etsy-niches-v11',
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [],
       },
     }),
