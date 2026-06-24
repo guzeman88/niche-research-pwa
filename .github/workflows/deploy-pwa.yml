@@ -1,0 +1,36 @@
+name: Refresh PWA Data And Deploy
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: https://niche-research-api-kqlt.onrender.com
+      MIN_KEYWORD_SNAPSHOT_COUNT: '13000'
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run smoke
+
+      - name: Deploy to Netlify
+        if: ${{ env.NETLIFY_AUTH_TOKEN != '' && env.NETLIFY_SITE_ID != '' }}
+        run: npx --yes netlify-cli deploy --prod --dir=dist --site="$NETLIFY_SITE_ID" --auth="$NETLIFY_AUTH_TOKEN"
+
+      - name: Explain skipped deploy
+        if: ${{ env.NETLIFY_AUTH_TOKEN == '' || env.NETLIFY_SITE_ID == '' }}
+        run: |
+          echo "Built and smoke-checked the PWA, but skipped Netlify deploy."
+          echo "Set NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID repository secrets to enable GitHub deploys."
