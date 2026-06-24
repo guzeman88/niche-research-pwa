@@ -41,7 +41,9 @@ export default function Scheduler() {
       try {
         const data = JSON.parse(e.data)
         setLogs((prev) => [...prev.slice(-300), data])
-      } catch {}
+      } catch {
+        // Ignore malformed SSE log events.
+      }
     })
 
     es.addEventListener('error', () => {

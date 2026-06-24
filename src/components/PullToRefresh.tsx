@@ -35,7 +35,9 @@ export default function PullToRefresh({ onRefresh, children, disabled }: Props) 
     if (pullDist > 50) {
       setRefreshing(true)
       setPullDist(0)
-      try { await onRefresh() } catch {}
+      try { await onRefresh() } catch {
+        // Refresh is best-effort; the page keeps the last loaded data.
+      }
       setTimeout(() => setRefreshing(false), 400)
     } else {
       setPullDist(0)
