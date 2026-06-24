@@ -13,3 +13,7 @@ jobs:
         run: |
           curl -sf https://niche-research-api-kqlt.onrender.com/api/health || true
           curl -sf https://niche-research-api-kqlt.onrender.com/api/stats || true
+          STATUS=$(curl -sf https://niche-research-api-kqlt.onrender.com/api/scheduler/status || echo '{}')
+          echo "$STATUS" | grep -q '"running":true' || curl -sf -X POST https://niche-research-api-kqlt.onrender.com/api/scheduler/start \
+            -H 'Content-Type: application/json' \
+            -d '{"mode":"continuous","batch_size":5}' || true
