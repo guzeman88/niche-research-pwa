@@ -11,5 +11,5 @@ jobs:
     steps:
       - name: Ping backend
         run: |
-          curl -sf https://niche-research-api.onrender.com/api/health || true
-          curl -sf https://niche-research-api.onrender.com/api/stats || true
+          curl -sf https://niche-research-api-kqlt.onrender.com/api/health || true
+          curl -sf https://niche-research-api-kqlt.onrender.com/api/stats || true
