@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listKeywords, searchKeywords, getDomains, runDiscovery } from '../lib/api'
+import { listKeywords, getDomains, runDiscovery } from '../lib/api'
 import Icon from '../components/Icon'
 import PullToRefresh from '../components/PullToRefresh'
 import { KeywordsSkeleton } from '../components/Skeleton'
@@ -19,22 +19,39 @@ const COLUMNS: { key: SortKey; label: string; align: 'left' | 'right' }[] = [
   { key: 'trajectory', label: 'Trend', align: 'right' },
 ]
 
+const PAGE_SIZE = 100
+
 export default function Keywords() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [domain, setDomain] = useState('')
   const [sortBy, setSortBy] = useState<SortKey>('gap')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [page, setPage] = useState(1)
 
-  const { data: domains } = useQuery<string[]>({ queryKey: ['domains'], queryFn: getDomains })
+  const { data: apiDomains } = useQuery<string[]>({ queryKey: ['domains'], queryFn: getDomains })
   const { data: keywords, isLoading } = useQuery<KeywordItem[]>({
-    queryKey: ['keywords', search, domain],
-    queryFn: () => search ? searchKeywords(search, 200) : listKeywords(domain || undefined, 2000),
+    queryKey: ['keywords'],
+    queryFn: () => listKeywords(undefined, 15000),
   })
 
-  const sorted = useMemo(() => {
+  const domains = useMemo(() => {
+    const fromKeywords = Array.from(new Set((keywords || []).map(kw => kw.domain).filter(Boolean))).sort()
+    return fromKeywords.length ? fromKeywords : (apiDomains || [])
+  }, [apiDomains, keywords])
+
+  const filtered = useMemo(() => {
     if (!keywords) return []
-    const list = [...(keywords || [])]
+    const q = search.trim().toLowerCase()
+    return keywords.filter(kw => {
+      const matchesSearch = !q || kw.keyword.toLowerCase().includes(q)
+      const matchesDomain = !domain || kw.domain === domain
+      return matchesSearch && matchesDomain
+    })
+  }, [keywords, search, domain])
+
+  const sorted = useMemo(() => {
+    const list = [...filtered]
     list.sort((a, b) => {
       let va: any, vb: any
       switch (sortBy) {
@@ -51,7 +68,20 @@ export default function Keywords() {
       return 0
     })
     return list
-  }, [keywords, sortBy, sortDir])
+  }, [filtered, sortBy, sortDir])
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageStart = sorted.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0
+  const pageEnd = Math.min(sorted.length, currentPage * PAGE_SIZE)
+  const visibleKeywords = useMemo(
+    () => sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [currentPage, sorted],
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, domain, sortBy, sortDir])
 
   const discoverMutation = useMutation({
     mutationFn: runDiscovery,
@@ -94,7 +124,7 @@ export default function Keywords() {
         </div>
         <select className="input w-auto min-w-36 text-[13px] font-medium" value={domain} onChange={e => { setDomain(e.target.value); setSearch('') }}>
           <option value="">All domains</option>
-          {domains?.map(d => <option key={d} value={d}>{d}</option>)}
+          {domains.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
       </div>
 
@@ -122,7 +152,7 @@ export default function Keywords() {
             </thead>
             <tbody>
               {isLoading && <tr><td colSpan={6} className="px-4 py-12 text-center text-surface-300">Loading…</td></tr>}
-              {sorted.map(kw => {
+              {visibleKeywords.map(kw => {
                 const oppScore = kw.opportunity_score || 0
                 const gapScore = kw.gap_score || 0
                 const oppColor = oppScore >= 70 ? 'text-accent-green' : oppScore >= 50 ? 'text-accent-amber' : 'text-accent-red'
@@ -159,6 +189,36 @@ export default function Keywords() {
             </tbody>
           </table>
         </div>
+        {sorted.length > PAGE_SIZE && (
+          <div className="flex flex-col gap-3 border-t border-surface-600/60 bg-surface-900/45 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[12px] font-medium text-surface-300">
+              Showing {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} of {sorted.length.toLocaleString()}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-secondary h-8 px-3 text-[12px]"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                <Icon name="chevron-left" size={14} />
+                Prev
+              </button>
+              <span className="min-w-20 text-center text-[12px] font-semibold text-surface-200">
+                {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
+              </span>
+              <button
+                type="button"
+                className="btn-secondary h-8 px-3 text-[12px]"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <Icon name="chevron-right" size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
     </PullToRefresh>
