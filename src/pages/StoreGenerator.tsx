@@ -1,13 +1,17 @@
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getOpportunities, getTopGaps } from '../lib/api'
+import { useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { createStore, getOpportunities, getTopGaps } from '../lib/api'
 import Icon from '../components/Icon'
 import { scoreColor } from '../lib/utils'
 import { generateStoreIdeas } from '../lib/storeIdeas'
+import type { StoreIdea } from '../lib/storeIdeas'
 
 const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
 
 export default function StoreGenerator() {
+  const queryClient = useQueryClient()
+  const [savedConcepts, setSavedConcepts] = useState<Set<string>>(() => new Set())
+  const [saveError, setSaveError] = useState<string>('')
   const { data: opps, isLoading: oppsLoading, error: oppsError } = useQuery({
     queryKey: ['opportunities', 300],
     queryFn: () => getOpportunities(undefined, 300),
@@ -20,6 +24,17 @@ export default function StoreGenerator() {
   const concepts = useMemo(() => generateStoreIdeas(opps || [], gaps || []), [opps, gaps])
   const isLoading = oppsLoading || gapsLoading
   const bestConcept = concepts[0]
+  const saveStore = useMutation({
+    mutationFn: (concept: StoreIdea) => createStore(toStorePayload(concept)),
+    onMutate: () => setSaveError(''),
+    onSuccess: (_store, concept) => {
+      setSavedConcepts((current) => new Set(current).add(concept.id))
+      queryClient.invalidateQueries({ queryKey: ['stores'] })
+    },
+    onError: (error) => {
+      setSaveError(error instanceof Error ? error.message : 'Could not save this store idea.')
+    },
+  })
 
   return (
     <div className="page">
@@ -32,8 +47,19 @@ export default function StoreGenerator() {
               : 'Find storeable niches that can hold multiple related keywords'}
           </p>
         </div>
-        <span className="chip">{concepts.length} concepts</span>
+        <div className="flex flex-col items-end gap-2">
+          <span className="chip">{concepts.length} concepts</span>
+          {savedConcepts.size > 0 && (
+            <span className="text-[11px] font-semibold text-accent-green">{savedConcepts.size} saved to My Stores</span>
+          )}
+        </div>
       </div>
+
+      {saveError && (
+        <div className="panel-soft mb-4 border-accent-amber/30 bg-accent-amber/10 p-3 text-[12px] font-medium text-accent-amber">
+          {saveError}
+        </div>
+      )}
 
       {oppsError ? (
         <div className="panel-soft p-12 text-center">
@@ -61,6 +87,8 @@ export default function StoreGenerator() {
         <div className="space-y-4">
           {concepts.map((concept, index) => {
             const color = COLORS[index % COLORS.length]
+            const isSaved = savedConcepts.has(concept.id)
+            const isSaving = saveStore.isPending && saveStore.variables?.id === concept.id
             return (
               <div key={concept.id} className="panel overflow-hidden">
                 <div className="h-1" style={{ background: `linear-gradient(90deg, ${color}, ${color}80)` }} />
@@ -74,9 +102,24 @@ export default function StoreGenerator() {
                       <p className="text-[11px] text-surface-300 mt-1">{concept.focus}</p>
                       <p className="text-[13px] text-surface-200 mt-3 max-w-3xl leading-relaxed">{concept.rationale}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end">
                       <div className={`text-3xl font-extrabold tabular-nums ${scoreColor(concept.nicheScore)}`}>{concept.nicheScore}</div>
-                      <div className="text-[10px] uppercase font-bold tracking-wider text-surface-400">niche score</div>
+                      <div className="sm:text-right">
+                        <div className="text-[10px] uppercase font-bold tracking-wider text-surface-400">niche score</div>
+                        <button
+                          type="button"
+                          onClick={() => saveStore.mutate(concept)}
+                          disabled={isSaved || isSaving}
+                          className={`mt-2 inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-[12px] font-bold transition-all duration-150 ${
+                            isSaved
+                              ? 'border-accent-green/25 bg-accent-green/10 text-accent-green'
+                              : 'border-primary-300/30 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25 disabled:cursor-wait disabled:opacity-70'
+                          }`}
+                        >
+                          <Icon name={isSaved ? 'check-circle' : isSaving ? 'loader' : 'plus-circle'} size={14} />
+                          {isSaved ? 'Added' : isSaving ? 'Saving' : 'Add to My Stores'}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -183,4 +226,44 @@ function Signal({ label, value, suffix = '/100' }: { label: string; value: numbe
       <div className="text-[10px] uppercase font-bold tracking-wider text-surface-400">{label}</div>
     </div>
   )
+}
+
+function toStorePayload(concept: StoreIdea) {
+  const keywordNames = concept.keywords.map((keyword) => keyword.keyword)
+  const secondary = [
+    concept.focus,
+    ...keywordNames.slice(0, 5),
+  ].filter((item, index, list) => item && list.indexOf(item) === index)
+
+  return {
+    name: concept.name,
+    niche: concept.focus,
+    niche_secondary: secondary,
+    target_audience: audienceFor(concept),
+    product_types: concept.productTypes.map(toProductType),
+    brand_voice: voiceFor(concept),
+    aesthetic: aestheticFor(concept),
+    pricing_strategy: concept.nicheScore >= 76 ? 'premium' : concept.avgGap >= 60 ? 'competitive' : 'penetration',
+    listing_target: concept.nicheScore >= 78 ? 75 : 50,
+  }
+}
+
+function toProductType(product: string): string {
+  return product.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'digital_download'
+}
+
+function audienceFor(concept: StoreIdea): string {
+  if (concept.anchorType === 'audience') return `${concept.focus} buyers searching for cohesive ${concept.productTypes.slice(0, 3).join(', ')} collections`
+  if (concept.anchorType === 'occasion') return `gift buyers and event planners looking for ${concept.focus} products`
+  return `Etsy shoppers interested in ${concept.focus} across ${concept.productTypes.slice(0, 3).join(', ')}`
+}
+
+function voiceFor(concept: StoreIdea): string {
+  const strength = concept.nicheScore >= 76 ? 'premium' : 'approachable'
+  return [strength, 'focused', 'data-led', 'giftable'].join(', ')
+}
+
+function aestheticFor(concept: StoreIdea): string {
+  const focusTerms = concept.focus.split('/').map((term) => term.trim().toLowerCase()).filter(Boolean)
+  return [...focusTerms, 'cohesive', 'etsy-ready'].slice(0, 5).join(', ')
 }
