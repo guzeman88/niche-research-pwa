@@ -12,7 +12,7 @@ jobs:
       VITE_API_URL: https://niche-research-api-kqlt.onrender.com
       MIN_KEYWORD_SNAPSHOT_COUNT: '13000'
       NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+      NETLIFY_SITE_ID: 9c00efca-ced9-4097-b302-172437380b32
     steps:
       - uses: actions/checkout@v4
 
@@ -37,4 +37,4 @@ jobs:
         if: ${{ env.NETLIFY_AUTH_TOKEN == '' || env.NETLIFY_SITE_ID == '' }}
         run: |
           echo "Built and smoke-checked the PWA, but skipped Netlify deploy."
-          echo "Set NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID repository secrets to enable GitHub deploys."
+          echo "Set the NETLIFY_AUTH_TOKEN repository secret to enable GitHub deploys."
