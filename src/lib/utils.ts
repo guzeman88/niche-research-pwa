@@ -12,16 +12,16 @@ export function fmtPrice(n: number | null | undefined): string {
 
 /** Get a Tailwind color class for an opportunity score (0-100) */
 export function scoreColor(score: number): string {
-  if (score >= 70) return 'text-emerald-400';
-  if (score >= 50) return 'text-amber-400';
-  return 'text-red-400';
+  if (score >= 70) return 'text-accent-green';
+  if (score >= 50) return 'text-accent-amber';
+  return 'text-accent-red';
 }
 
 /** Get a Tailwind bg color class for score badges */
 export function scoreBg(score: number): string {
-  if (score >= 70) return 'bg-emerald-500/20';
-  if (score >= 50) return 'bg-amber-500/20';
-  return 'bg-red-500/20';
+  if (score >= 70) return 'bg-accent-green/15';
+  if (score >= 50) return 'bg-accent-amber/15';
+  return 'bg-accent-red/15';
 }
 
 /** Format a date string for display */

@@ -6,6 +6,8 @@ import ReportDetail from './pages/ReportDetail'
 import Keywords from './pages/Keywords'
 import Scheduler from './pages/Scheduler'
 import Settings from './pages/Settings'
+import Stores from './pages/Stores'
+import StoreGenerator from './pages/StoreGenerator'
 import NotFound from './pages/NotFound'
 
 export default function App() {
@@ -18,6 +20,8 @@ export default function App() {
         <Route path="/keywords" element={<Keywords />} />
         <Route path="/scheduler" element={<Scheduler />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/store-generator" element={<StoreGenerator />} />
+        <Route path="/stores" element={<Stores />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

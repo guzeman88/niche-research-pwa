@@ -74,8 +74,8 @@ export default function Scheduler() {
   return (
     <div className="p-4 lg:p-6 space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white">Scheduler</h2>
-        <p className="text-sm text-slate-500 mt-1">Autonomous keyword scanner</p>
+        <h2 className="text-xl font-bold text-surface-50">Scheduler</h2>
+        <p className="text-sm text-surface-300 mt-1">Autonomous keyword scanner</p>
       </div>
 
       {status && (
@@ -92,34 +92,34 @@ export default function Scheduler() {
 
       {/* History */}
       <div className="card">
-        <h3 className="text-sm font-semibold text-slate-300 mb-3">Run History</h3>
+        <h3 className="text-sm font-semibold text-surface-100 mb-3">Run History</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-surface-700">
-                <th className="text-left px-3 py-2 text-xs text-slate-400">Started</th>
-                <th className="text-left px-3 py-2 text-xs text-slate-400">Status</th>
-                <th className="text-left px-3 py-2 text-xs text-slate-400">Mode</th>
-                <th className="text-right px-3 py-2 text-xs text-slate-400">Scanned</th>
-                <th className="text-right px-3 py-2 text-xs text-slate-400">New Seeds</th>
+              <tr className="border-b border-surface-500">
+                <th className="text-left px-3 py-2 text-xs text-surface-200">Started</th>
+                <th className="text-left px-3 py-2 text-xs text-surface-200">Status</th>
+                <th className="text-left px-3 py-2 text-xs text-surface-200">Mode</th>
+                <th className="text-right px-3 py-2 text-xs text-surface-200">Scanned</th>
+                <th className="text-right px-3 py-2 text-xs text-surface-200">New Seeds</th>
               </tr>
             </thead>
             <tbody>
               {history?.map((h) => (
-                <tr key={h.id} className="border-b border-surface-700/50">
-                  <td className="px-3 py-2 text-slate-400">{fmtDateTime(h.started_at)}</td>
+                <tr key={h.id} className="border-b border-surface-500/50">
+                  <td className="px-3 py-2 text-surface-200">{fmtDateTime(h.started_at)}</td>
                   <td className="px-3 py-2">
-                    <span className={`text-xs ${h.status === 'running' ? 'text-emerald-400' : h.status === 'stopped' ? 'text-amber-400' : 'text-slate-500'}`}>
+                    <span className={`text-xs ${h.status === 'running' ? 'text-accent-green' : h.status === 'stopped' ? 'text-accent-amber' : 'text-surface-300'}`}>
                       {h.status}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-slate-500">{h.mode}</td>
-                  <td className="px-3 py-2 text-right text-slate-300">{h.keywords_scanned}</td>
-                  <td className="px-3 py-2 text-right text-slate-300">{h.new_seeds_found}</td>
+                  <td className="px-3 py-2 text-surface-300">{h.mode}</td>
+                  <td className="px-3 py-2 text-right text-surface-100">{h.keywords_scanned}</td>
+                  <td className="px-3 py-2 text-right text-surface-100">{h.new_seeds_found}</td>
                 </tr>
               ))}
               {(!history || history.length === 0) && (
-                <tr><td colSpan={5} className="px-3 py-4 text-center text-slate-500">No runs yet</td></tr>
+                <tr><td colSpan={5} className="px-3 py-4 text-center text-surface-300">No runs yet</td></tr>
               )}
             </tbody>
           </table>

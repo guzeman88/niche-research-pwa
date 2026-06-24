@@ -1,0 +1,52 @@
+import { useMemo } from 'react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { useQuery } from '@tanstack/react-query'
+import { getOpportunities } from '../lib/api'
+import Icon from './Icon'
+
+const BUCKETS = [
+  { min: 0, max: 45, label: '<45', color: '#bf616a' },
+  { min: 45, max: 50, label: '45-49', color: '#bf616a' },
+  { min: 50, max: 55, label: '50-54', color: '#ebcb8b' },
+  { min: 55, max: 60, label: '55-59', color: '#ebcb8b' },
+  { min: 60, max: 65, label: '60-64', color: '#81a1c1' },
+  { min: 65, max: 70, label: '65-69', color: '#81a1c1' },
+  { min: 70, max: 75, label: '70-74', color: '#5e81ac' },
+  { min: 75, max: 80, label: '75-79', color: '#5e81ac' },
+  { min: 80, max: 101, label: '80+', color: '#4c6d96' },
+]
+
+export default function ScoreDistribution() {
+  const { data: opps } = useQuery({ queryKey: ['opportunities', 500], queryFn: () => getOpportunities(undefined, 500) })
+
+  const chartData = useMemo(() => {
+    const counts = BUCKETS.map(b => ({ ...b, count: 0 }))
+    if (!opps || !Array.isArray(opps)) return counts
+    for (const o of opps) {
+      const score = (o as any).opportunity_score || 0
+      for (const b of counts) {
+        if (score >= b.min && score < b.max) { b.count++; break }
+      }
+    }
+    return counts
+  }, [opps])
+
+  return (
+    <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Icon name="bar-chart" size={14} className="text-primary-200" />
+        <span className="text-[11px] font-bold text-surface-200 uppercase tracking-wider">Score Distribution</span>
+      </div>
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
+          <XAxis dataKey="label" tick={{ fill: '#5e81ac', fontSize: 9, fontWeight: 500 }} axisLine={false} tickLine={false} />
+          <YAxis hide />
+          <Tooltip contentStyle={{ background: '#434c5e', border: '1px solid #434c5e', borderRadius: '8px', fontSize: 11 }} labelStyle={{ color: '#d8dee9' }} formatter={(v: number) => [`${v} keywords`, 'Count']} />
+          <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+            {chartData.map((d, i) => <Cell key={i} fill={d.color} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}

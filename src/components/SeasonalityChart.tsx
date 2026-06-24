@@ -9,7 +9,7 @@ interface Props {
 
 export default function SeasonalityChart({ data, peakMonths = [] }: Props) {
   if (!data.length) {
-    return <p className="text-sm text-slate-500">No seasonality data available</p>
+    return <p className="text-sm text-surface-300">No seasonality data available</p>
   }
 
   const chartData = data.map((d) => ({
@@ -20,18 +20,18 @@ export default function SeasonalityChart({ data, peakMonths = [] }: Props) {
 
   return (
     <div className="card">
-      <h3 className="text-sm font-semibold text-slate-300 mb-3">Seasonality (5-year avg)</h3>
+      <h3 className="text-sm font-semibold text-surface-100 mb-3">Seasonality (5-year avg)</h3>
       <ResponsiveContainer width="100%" height={180}>
         <BarChart data={chartData} margin={{ top: 4, right: 0, bottom: 0, left: -20 }}>
-          <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} />
+          <XAxis dataKey="name" tick={{ fill: '#81a1c1', fontSize: 10 }} axisLine={false} tickLine={false} />
           <YAxis hide />
           <Tooltip
-            contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '12px' }}
-            labelStyle={{ color: '#e2e8f0' }}
+            contentStyle={{ background: '#434c5e', border: '1px solid #434c5e', borderRadius: '8px', fontSize: '12px' }}
+            labelStyle={{ color: '#d8dee9' }}
           />
           <Bar dataKey="interest" radius={[3, 3, 0, 0]}>
             {chartData.map((entry, i) => (
-              <Cell key={i} fill={entry.isPeak ? '#818cf8' : '#475569'} />
+              <Cell key={i} fill={entry.isPeak ? '#81a1c1' : '#4c6d96'} />
             ))}
           </Bar>
         </BarChart>
