@@ -25,6 +25,10 @@ jobs:
       - run: npm run build
       - run: npm run smoke
 
+      - name: Link Netlify project
+        if: ${{ env.NETLIFY_AUTH_TOKEN != '' && env.NETLIFY_SITE_ID != '' }}
+        run: npx --yes netlify-cli link --id="$NETLIFY_SITE_ID" --auth="$NETLIFY_AUTH_TOKEN"
+
       - name: Deploy to Netlify
         if: ${{ env.NETLIFY_AUTH_TOKEN != '' && env.NETLIFY_SITE_ID != '' }}
         run: npx --yes netlify-cli deploy --prod --dir=dist --site="$NETLIFY_SITE_ID" --auth="$NETLIFY_AUTH_TOKEN"
