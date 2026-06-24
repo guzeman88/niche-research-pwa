@@ -64,6 +64,7 @@ class StoreConfig:
     listing_count_target: int = 50
     active: bool = True
     created_at: str = ""
+    research_snapshot: dict[str, Any] = field(default_factory=dict)
 
     @property
     def all_niche_terms(self) -> list[str]:
@@ -127,6 +128,7 @@ class StoreConfig:
             listing_count_target=data.get("listing_count_target", 50),
             active=data.get("active", True),
             created_at=data.get("created_at", ""),
+            research_snapshot=data.get("research_snapshot", {}),
         )
 
     @classmethod
@@ -183,6 +185,7 @@ class StoreConfig:
                 "mood_keywords": self.branding.mood_keywords,
             },
             "product_types": self.product_types,
+            "research_snapshot": self.research_snapshot,
         }
         return yaml.dump(data, default_flow_style=False, allow_unicode=True)
 

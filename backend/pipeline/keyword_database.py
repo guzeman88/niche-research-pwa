@@ -574,6 +574,80 @@ def get_top_gaps(limit: int = 100, domain: Optional[str] = None) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> list[dict]:
+    """Latest scanned keyword rows enriched with the newest gap report per keyword."""
+    with _conn() as con:
+        base = """
+            SELECT
+                s.keyword,
+                s.domain,
+                sc.opportunity_score,
+                sc.demand_score,
+                sc.competition_score,
+                sc.margin_score,
+                sc.trend_score,
+                sc.avg_price_usd,
+                sc.monthly_revenue_usd,
+                sc.competition_quality,
+                sc.listing_count,
+                sc.scanned_at,
+                sc.entry_strategy,
+                sc.peak_months,
+                sc.keyword_clusters_json,
+                sc.gap_score,
+                sc.listing_efficiency,
+                sc.score_delta,
+                sc.trajectory,
+                gs.breakout_flag,
+                gr.composite_gap_score,
+                gr.volume_gap_score,
+                gr.quality_gap_score,
+                gr.tag_gap_score,
+                gr.style_gap_score,
+                gr.price_gap_score,
+                gr.recency_gap_score,
+                gr.entry_angle,
+                gr.recommended_price_min,
+                gr.recommended_price_max,
+                gr.listings_analyzed,
+                gr.avg_listing_age_months
+            FROM seeds s
+            JOIN scans sc ON sc.keyword=s.keyword
+            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
+            LEFT JOIN gap_reports gr ON gr.id = (
+                SELECT MAX(id) FROM gap_reports gr2 WHERE gr2.keyword=s.keyword
+            )
+            WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
+              AND (sc.opportunity_score IS NOT NULL OR sc.gap_score IS NOT NULL)
+        """
+        if domain:
+            rows = con.execute(
+                base + """
+                AND s.domain=?
+                ORDER BY
+                    ((COALESCE(sc.opportunity_score, 0) * 0.38)
+                    + (COALESCE(sc.margin_score, 0) * 0.22)
+                    + (COALESCE(sc.gap_score, gr.composite_gap_score, 0) * 0.22)
+                    + (COALESCE(sc.demand_score, 0) * 0.18)) DESC
+                LIMIT ?
+                """,
+                (domain, limit),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                base + """
+                ORDER BY
+                    ((COALESCE(sc.opportunity_score, 0) * 0.38)
+                    + (COALESCE(sc.margin_score, 0) * 0.22)
+                    + (COALESCE(sc.gap_score, gr.composite_gap_score, 0) * 0.22)
+                    + (COALESCE(sc.demand_score, 0) * 0.18)) DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def get_stats() -> dict:
     with _conn() as con:
         total_seeds = con.execute("SELECT COUNT(*) FROM seeds").fetchone()[0]

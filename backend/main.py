@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
-from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores
+from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas
 
 # ── App factory ─────────────────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@ app.include_router(settings.router)
 app.include_router(stream.router)
 app.include_router(export.router)
 app.include_router(stores.router)
+app.include_router(store_ideas.router)
 
 
 # ── Startup ─────────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ class StoreCreateRequest(BaseModel):
     aesthetic: str = ""
     pricing_strategy: str = "competitive"
     listing_target: int = Field(default=50, ge=1, le=1000)
+    research_snapshot: dict = Field(default_factory=dict)
 
 
 def _store_response(store):
@@ -36,6 +37,7 @@ def _store_response(store):
         "brand_voice": ", ".join(store.branding.mood_keywords) if store.branding and store.branding.mood_keywords else "",
         "aesthetic": ", ".join(store.branding.style_keywords) if store.branding and store.branding.style_keywords else "",
         "pricing_strategy": store.pricing.strategy if store.pricing else "competitive",
+        "research_snapshot": getattr(store, "research_snapshot", {}) or {},
     }
 
 
@@ -100,6 +102,7 @@ def create_store(req: StoreCreateRequest):
             ),
             pricing=PricingStrategy(strategy=req.pricing_strategy),
             product_types=products[:12],
+            research_snapshot=req.research_snapshot,
         )
         store.save()
         return _store_response(store)

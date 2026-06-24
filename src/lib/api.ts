@@ -8,6 +8,7 @@ import type {
 } from '../types/api'
 import type { SchedulerStatus, SchedulerHistoryItem } from '../types/scheduler'
 import type { GapReport } from '../types/gaps'
+import type { StoreIdea } from './storeIdeas'
 
 const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || 'https://niche-research-api-kqlt.onrender.com');
 const USE_STATIC_DATA = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
@@ -17,6 +18,7 @@ let lastBackendWake = 0;
 const STATIC_MAP: Record<string, string> = {
   '/api/stats': '/data/stats.json',
   '/api/keywords/opportunities': '/data/opportunities.json',
+  '/api/store-ideas/profitable': '/data/store-ideas.json',
   '/api/gaps': '/data/gaps.json',
   '/api/keywords': '/data/keywords.json',
   '/api/research/reports': '/data/reports.json',
@@ -175,6 +177,12 @@ export function getGapReport(keyword: string): Promise<GapReport> {
   return request(`/api/gaps/${encodeURIComponent(keyword)}`);
 }
 
+// ── Store Ideas ─────────────────────────────────────────────────────────
+
+export function getProfitableStoreIdeas(limit = 12): Promise<StoreIdea[]> {
+  return request(`/api/store-ideas/profitable?limit=${limit}`);
+}
+
 // ── Scheduler ───────────────────────────────────────────────────────────
 
 export function getSchedulerStatus(): Promise<SchedulerStatus> {
@@ -235,6 +243,7 @@ export interface StoreItem {
   target_audience: string; product_types: string[]; active: boolean;
   created_at: string; listing_target: number;
   brand_voice: string; aesthetic: string; pricing_strategy: string;
+  research_snapshot?: Record<string, unknown>;
 }
 
 export interface CreateStorePayload {
@@ -247,6 +256,7 @@ export interface CreateStorePayload {
   aesthetic?: string;
   pricing_strategy?: string;
   listing_target?: number;
+  research_snapshot?: Record<string, unknown>;
 }
 
 const SAMPLE_STORE_SLUGS = new Set([
