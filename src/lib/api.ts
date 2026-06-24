@@ -237,6 +237,18 @@ export interface StoreItem {
   brand_voice: string; aesthetic: string; pricing_strategy: string;
 }
 
+export interface CreateStorePayload {
+  name: string;
+  niche: string;
+  niche_secondary?: string[];
+  target_audience?: string;
+  product_types?: string[];
+  brand_voice?: string;
+  aesthetic?: string;
+  pricing_strategy?: string;
+  listing_target?: number;
+}
+
 const SAMPLE_STORE_SLUGS = new Set([
   'botanical-bliss-prints',
   'dark-academia-decor',
@@ -261,6 +273,13 @@ function isSampleStore(store: StoreItem): boolean {
 export async function getStores(): Promise<StoreItem[]> {
   const stores = await request<StoreItem[]>('/api/stores');
   return stores.filter(store => !isSampleStore(store));
+}
+
+export function createStore(payload: CreateStorePayload): Promise<StoreItem> {
+  return request('/api/stores', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 // ── Export ──────────────────────────────────────────────────────────────
