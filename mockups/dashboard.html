@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard — Mobile + Desktop</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#020617;color:#e2e8f0;display:flex;justify-content:center;min-height:100vh}
+
+/* Phone frame wrapper for mobile preview */
+.app{width:100%;max-width:430px;background:#0f172a;min-height:100vh;position:relative;overflow-x:hidden}
+/* Desktop expands */
+@media(min-width:768px){.app{max-width:100%;display:flex}.app-main{flex:1;margin-left:240px}}
+
+/* ── Top bar (mobile) ── */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#0f172a;border-bottom:1px solid #1e293b;position:sticky;top:0;z-index:20}
+.topbar h1{font-size:16px;font-weight:700}
+.topbar .avatar{width:32px;height:32px;border-radius:50%;background:#4338ca;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+
+/* ── Sidebar (desktop) ── */
+.sidebar{display:none;position:fixed;left:0;top:0;bottom:0;width:240px;background:#0f172a;border-right:1px solid #1e293b;padding:20px 16px;z-index:30;flex-direction:column;overflow-y:auto}
+@media(min-width:768px){.sidebar{display:flex}}
+.sidebar-logo{font-size:18px;font-weight:700;margin-bottom:24px;display:flex;align-items:center;gap:8px}
+.sidebar-logo svg{width:24px;height:24px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;font-size:13px;color:#94a3b8;cursor:pointer;margin-bottom:2px;transition:all .15s}
+.nav-item:hover{background:#1e293b;color:#e2e8f0}
+.nav-item.active{background:#4338ca20;color:#a5b4fc;border:1px solid #4338ca40}
+.nav-item svg{width:18px;height:18px;opacity:.7}
+.nav-item.active svg{opacity:1}
+.sidebar-status{margin-top:auto;padding-top:16px;border-top:1px solid #1e293b;font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px}
+.sidebar-status .dot{width:7px;height:7px;border-radius:50%;background:#34d399}
+
+/* ── Main content ── */
+.main{padding:12px 16px 80px}
+@media(min-width:768px){.main{padding:24px 32px 24px}}
+.section-title{font-size:13px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 10px}
+
+/* ── Stats grid ── */
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(min-width:768px){.stats-grid{grid-template-columns:repeat(4,1fr);gap:12px}}
+.stat-card{background:#1e293b;border-radius:12px;padding:14px;border:1px solid #334155}
+.stat-card .label{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.stat-card .value{font-size:24px;font-weight:700}
+.stat-card .sub{font-size:10px;color:#64748b;margin-top:2px}
+
+/* ── Charts ── */
+.chart-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
+@media(min-width:768px){.chart-grid{grid-template-columns:repeat(2,1fr)}}
+.chart-card{background:#1e293b;border-radius:12px;padding:14px;border:1px solid #334155}
+.chart-card h3{font-size:12px;color:#94a3b8;margin-bottom:10px}
+.chart-wrap{position:relative;height:180px}
+@media(min-width:768px){.chart-wrap{height:200px}}
+
+/* ── List rows ── */
+.list-card{background:#1e293b;border-radius:12px;padding:14px;border:1px solid #334155}
+.list-card h3{font-size:12px;color:#94a3b8;margin-bottom:10px}
+.list-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1e293b;font-size:12px}
+.list-row:last-child{border-bottom:none}
+.list-row .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#cbd5e1}
+.list-row .bar-wrap{flex:1;height:6px;background:#334155;border-radius:3px;overflow:hidden;min-width:40px}
+.list-row .bar-fill{height:100%;border-radius:3px}
+.list-row .score{width:32px;text-align:right;font-weight:600;font-size:11px;flex-shrink:0}
+
+/* ── Badges ── */
+.badge{display:inline-flex;padding:3px 8px;border-radius:12px;font-size:10px;font-weight:600;white-space:nowrap}
+.badge-green{background:#065f46;color:#6ee7b7}
+.badge-amber{background:#78350f;color:#fbbf24}
+.badge-red{background:#7f1d1d;color:#fca5a5}
+
+/* ── Bottom Nav (mobile) ── */
+.bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:#0f172a;border-top:1px solid #1e293b;padding:6px 8px;padding-bottom:max(6px, env(safe-area-inset-bottom));z-index:20}
+@media(min-width:768px){.bottom-nav{display:none}}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:8px;font-size:10px;color:#64748b;cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent;min-height:44px;justify-content:center}
+.nav-tab.active{color:#a5b4fc}
+.nav-tab svg{width:20px;height:20px;opacity:.5}
+.nav-tab.active svg{opacity:1}
+.nav-tab:active{background:#1e293b}
+
+/* ── Mobile-Desktop toggle ── */
+.view-toggle{position:fixed;top:8px;right:8px;z-index:50;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:5px 10px;font-size:10px;color:#94a3b8;cursor:pointer;display:none}
+@media(min-width:768px){.view-toggle{display:block}}
+.view-toggle:hover{color:#e2e8f0}
+</style></head>
+<body>
+
+<!-- Desktop sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    Niche Research
+  </div>
+  <a class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</a>
+  <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Explore</a>
+  <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 2-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8Z"/></svg>Keywords</a>
+  <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Scheduler</a>
+  <a class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4m12.8 12.8 1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>Settings</a>
+  <div class="sidebar-status"><span class="dot"></span> Backend connected</div>
+</aside>
+
+<!-- App container (phone frame on mobile) -->
+<div class="app">
+  <!-- Top bar -->
+  <div class="topbar">
+    <h1>Dashboard</h1>
+    <div class="avatar">JD</div>
+  </div>
+
+  <!-- Main scroll area -->
+  <div class="main">
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid"></div>
+
+    <!-- Charts -->
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>Score Distribution</h3>
+        <div class="chart-wrap"><canvas id="distChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Domains by Avg Opportunity</h3>
+        <div class="chart-wrap"><canvas id="domainChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="section-title">Top Opportunities</div>
+    <div class="list-card" id="topOpps"></div>
+
+    <div class="section-title">Gap Analysis Overview</div>
+    <div class="stats-grid" id="gapOverview" style="margin-top:0"></div>
+  </div>
+
+  <!-- Bottom nav (mobile) -->
+  <nav class="bottom-nav">
+    <div class="nav-tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Home</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Explore</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 2-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8Z"/></svg>Keywords</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Scheduler</div>
+    <div class="nav-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4m12.8 12.8 1.4 1.4"/></svg>Settings</div>
+  </nav>
+</div>
+
+<script>
+const data = {
+  stats:[
+    {label:'Total Keywords',value:'940',sub:'20 domains',color:'#818cf8'},
+    {label:'Avg Opportunity',value:'59.4',sub:'range 41-82',color:'#6ee7b7'},
+    {label:'Breakouts',value:'137',sub:'rapidly rising',color:'#fbbf24'},
+    {label:'Top Gap',value:'81.2',sub:'fall aesthetic',color:'#c4b5fd'},
+  ],
+  opps:[
+    {kw:'trendy stickers with quotes',opp:82.3},{kw:'roman empire',opp:80.1},
+    {kw:'fall aesthetic',opp:80.0},{kw:'villain era',opp:79.8},
+    {kw:'girl dinner',opp:79.4},{kw:'vaporwave',opp:79.2},
+    {kw:'soft girl aesthetic',opp:79.1},{kw:'thanksgiving decor',opp:78.7},
+    {kw:'dark academia decor',opp:77.5},{kw:'golden hour',opp:77.3},
+  ],
+  gaps:[
+    {label:'Volume Gap',val:67,color:'#818cf8'},
+    {label:'Quality Gap',val:55,color:'#6ee7b7'},
+    {label:'Tag Gap',val:58,color:'#fbbf24'},
+    {label:'Price Gap',val:52,color:'#c4b5fd'},
+  ],
+  domainAvgs:[
+    {name:'trending micro niches',avg:72},
+    {name:'aesthetics',avg:68},
+    {name:'pop culture',avg:66},
+    {name:'occasions/holidays',avg:64},
+    {name:'home decor',avg:62},
+    {name:'pets',avg:55},
+  ],
+  dist:[15,32,87,112,178,163,142,98,73],
+};
+
+document.getElementById('statsGrid').innerHTML = data.stats.map(s=>`
+  <div class="stat-card"><div class="label">${s.label}</div><div class="value" style="color:${s.color}">${s.value}</div><div class="sub">${s.sub}</div></div>
+`).join('');
+
+document.getElementById('topOpps').innerHTML = data.opps.map(o=>{
+  const cls = o.opp>=70?'badge-green':o.opp>=55?'badge-amber':'badge-red';
+  return `<div class="list-row">
+    <span class="name">${o.kw}</span>
+    <span class="bar-wrap"><span class="bar-fill" style="width:${o.opp}%;background:${o.opp>=70?'#6ee7b7':o.opp>=55?'#fbbf24':'#fca5a5'}"></span></span>
+    <span class="score"><span class="${cls}">${o.opp.toFixed(0)}</span></span>
+  </div>`;
+}).join('');
+
+document.getElementById('gapOverview').innerHTML = data.gaps.map(g=>`
+  <div class="stat-card"><div class="label">${g.label}</div><div class="value" style="color:${g.color};font-size:20px">${g.val}<span style="font-size:12px">/100</span></div><div style="margin-top:6px;height:4px;background:#334155;border-radius:2px"><div style="width:${g.val}%;height:100%;background:${g.color};border-radius:2px"></div></div></div>
+`).join('');
+
+new Chart(document.getElementById('distChart'),{
+  type:'bar',
+  data:{labels:['<45','45-49','50-54','55-59','60-64','65-69','70-74','75-79','80+'],datasets:[{data:data.dist,backgroundColor:['#fca5a5','#fca5a5','#fbbf24','#fbbf24','#818cf8','#818cf8','#6ee7b7','#6ee7b7','#34d399'],borderRadius:3}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:8},maxRotation:0},grid:{display:false}},y:{ticks:{color:'#64748b',font:{size:8}},grid:{color:'#1e293b'},beginAtZero:true}}}
+});
+new Chart(document.getElementById('domainChart'),{
+  type:'bar',
+  data:{labels:data.domainAvgs.map(d=>d.name),datasets:[{data:data.domainAvgs.map(d=>d.avg),backgroundColor:'#818cf870',borderRadius:3}]},
+  options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:8}},grid:{color:'#1e293b'},beginAtZero:true},y:{ticks:{color:'#94a3b8',font:{size:8}},grid:{display:false}}}}
+});
+</script></body></html>

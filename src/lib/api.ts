@@ -10,32 +10,64 @@ import type { SchedulerStatus, SchedulerHistoryItem } from '../types/scheduler'
 import type { GapReport } from '../types/gaps'
 
 const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
+const USE_STATIC_DATA = import.meta.env.VITE_ALLOW_STATIC_DATA === '1';
 
-// Warm-up: ping backend immediately on load to wake it from Render cold start
-let _warmPromise: Promise<boolean> | null = null;
-export function warmUpBackend(): Promise<boolean> {
-  if (_warmPromise) return _warmPromise;
-  _warmPromise = new Promise((resolve) => {
-    let attempts = 0;
-    const tryPing = () => {
-      fetch(`${BASE_URL}/api/health`, { signal: AbortSignal.timeout(3000) })
-        .then(r => r.ok ? resolve(true) : retry())
-        .catch(() => retry());
-    };
-    const retry = () => {
-      if (++attempts >= 15) { resolve(false); return; }
-      setTimeout(tryPing, 2000);
-    };
-    tryPing();
-  });
-  return _warmPromise;
+// Static CDN data paths — instant, no backend needed for reads
+const STATIC_MAP: Record<string, string> = {
+  '/api/stats': '/data/stats.json',
+  '/api/keywords/opportunities': '/data/opportunities.json',
+  '/api/gaps': '/data/gaps.json',
+  '/api/keywords': '/data/keywords.json',
+  '/api/research/reports': '/data/reports.json',
+  '/api/keywords/breakouts': '/data/breakouts.json',
+};
+
+// Try loading from static CDN JSON first (instant), fall back to API
+async function fetchStatic(path: string): Promise<any | null> {
+  if (!USE_STATIC_DATA) return null;
+  const staticPath = STATIC_MAP[path] || (path.startsWith('/api/keywords?') ? '/data/keywords.json' : null);
+  if (!staticPath) return null;
+  try {
+    const res = await fetch(staticPath);
+    if (res.ok) return res.json();
+  } catch {}
+  return null;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  // Cache-bust GET requests to bypass stale service worker cache
   const isGet = !options?.method || options.method === 'GET';
+
+  // Try live backend API first — returns fresh data on pull-to-refresh
   const sep = path.includes('?') ? '&' : '?';
   const url = `${BASE_URL}${path}${isGet ? `${sep}_t=${Date.now()}` : ''}`;
+
+  if (isGet) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) return res.json() as Promise<T>;
+      }
+    } catch {
+      // Backend unreachable — fall back to static CDN
+      if (!import.meta.env.DEV) {
+        const staticData = await fetchStatic(path.split('?')[0]);
+        if (staticData) return staticData as T;
+      }
+    }
+  }
+
+  // POST requests or backend-down fallback: use static CDN
+  if (isGet && !import.meta.env.DEV) {
+    const staticData = await fetchStatic(path.split('?')[0]);
+    if (staticData) return staticData as T;
+  }
   let res: Response;
   try {
     res = await fetch(url, {
@@ -177,6 +209,41 @@ export function updateSettings(data: { settings?: Record<string, unknown>; guide
 
 export function getAdapterStatus(): Promise<AdapterStatus> {
   return request('/api/settings/adapters');
+}
+
+// ── Stores ─────────────────────────────────────────────────────────────
+
+export interface StoreItem {
+  slug: string; name: string; niche: string; niche_secondary: string[];
+  target_audience: string; product_types: string[]; active: boolean;
+  created_at: string; listing_target: number;
+  brand_voice: string; aesthetic: string; pricing_strategy: string;
+}
+
+const SAMPLE_STORE_SLUGS = new Set([
+  'botanical-bliss-prints',
+  'dark-academia-decor',
+  'minimalist-morning',
+  'nurse-humor-gifts',
+  'retro-wave-tees',
+])
+
+const SAMPLE_STORE_NAMES = new Set([
+  'botanical bliss prints',
+  'dark academia decor',
+  'minimalist morning',
+  'nurse humor gifts',
+  'retro wave tees',
+])
+
+function isSampleStore(store: StoreItem): boolean {
+  return SAMPLE_STORE_SLUGS.has((store.slug || '').toLowerCase())
+    || SAMPLE_STORE_NAMES.has((store.name || '').toLowerCase())
+}
+
+export async function getStores(): Promise<StoreItem[]> {
+  const stores = await request<StoreItem[]>('/api/stores');
+  return stores.filter(store => !isSampleStore(store));
 }
 
 // ── Export ──────────────────────────────────────────────────────────────

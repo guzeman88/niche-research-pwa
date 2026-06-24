@@ -3,41 +3,77 @@
 @tailwind utilities;
 
 @layer base {
-  html {
-    -webkit-tap-highlight-color: transparent;
-  }
+  html { -webkit-tap-highlight-color: transparent; }
   body {
-    @apply bg-surface-950 text-slate-200;
+    @apply bg-surface-950 text-surface-50;
+    background:
+      radial-gradient(circle at top left, rgba(111, 150, 200, 0.12), transparent 34rem),
+      linear-gradient(135deg, #202631 0%, #252d3a 44%, #202631 100%);
     overscroll-behavior: none;
+    font-family: Inter, system-ui, sans-serif;
   }
-  /* Custom scrollbar */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb { background: #607893; border-radius: 3px; }
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
-           transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary-500/50
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold
+           transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-primary-400/40
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-500 active:bg-primary-700;
+    @apply btn bg-primary-400 text-white hover:bg-primary-500 active:bg-primary-400 shadow-[0_12px_28px_rgba(111,150,200,0.2)];
   }
   .btn-secondary {
-    @apply btn bg-surface-700 text-slate-200 hover:bg-surface-600 active:bg-surface-800
-           border border-surface-600;
+    @apply btn bg-surface-800 text-surface-100 hover:bg-surface-700 active:bg-surface-900 border border-surface-600;
   }
   .btn-danger {
-    @apply btn bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-500/30;
+    @apply btn bg-accent-red/10 text-accent-red hover:bg-accent-red/20 border border-accent-red/25;
   }
   .card {
-    @apply bg-surface-800 rounded-xl border border-surface-700 p-4;
+    @apply rounded-lg border border-surface-600/80 bg-surface-800 p-5 shadow-[0_14px_34px_rgba(7,10,14,0.22)];
+  }
+  .card-glass {
+    @apply rounded-lg border border-surface-600/70 bg-surface-800/80 p-5 shadow-[0_14px_34px_rgba(7,10,14,0.22)] backdrop-blur-xl;
   }
   .input {
-    @apply w-full rounded-lg bg-surface-800 border border-surface-600 px-3 py-2 text-sm
-           text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2
-           focus:ring-primary-500/50 focus:border-primary-500;
+    @apply w-full rounded-lg bg-surface-900 border border-surface-600 px-4 py-2.5 text-sm
+           text-surface-50 placeholder:text-surface-300 focus:outline-none focus:ring-2
+           focus:ring-primary-400/40 focus:border-primary-400;
+  }
+  .chip {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-primary-400/10 text-primary-100 border border-primary-400/25;
+  }
+  .tag {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-semibold bg-surface-700/70 text-surface-200 border border-surface-600/50;
+  }
+  .page {
+    @apply p-4 lg:p-6 space-y-5;
+  }
+  .page-header {
+    @apply flex items-center justify-between gap-4 rounded-lg border border-surface-600/70 bg-gradient-to-br from-surface-800 to-surface-900 px-5 py-4 shadow-[0_16px_38px_rgba(7,10,14,0.24)];
+  }
+  .panel {
+    @apply rounded-lg border border-surface-600/70 bg-surface-800/90 shadow-[0_14px_34px_rgba(7,10,14,0.22)];
+  }
+  .panel-soft {
+    @apply rounded-lg border border-surface-600/45 bg-surface-800/55 shadow-[0_10px_26px_rgba(7,10,14,0.16)];
+  }
+  .metric-panel {
+    @apply rounded-lg border border-surface-600/70 bg-gradient-to-br from-surface-800 to-surface-900 p-4 shadow-[0_14px_34px_rgba(7,10,14,0.2)];
+  }
+  .section-label {
+    @apply text-[11px] font-bold uppercase tracking-wider text-surface-200;
+  }
+  .subtle-text {
+    @apply text-surface-300;
+  }
+  .progress-track {
+    @apply h-1.5 overflow-hidden rounded-full bg-surface-900;
+  }
+  .nav-surface {
+    @apply border-surface-600/70 bg-surface-900/95 shadow-[0_18px_42px_rgba(7,10,14,0.22)] backdrop-blur-xl;
   }
 }

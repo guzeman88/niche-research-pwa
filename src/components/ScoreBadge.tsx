@@ -15,7 +15,7 @@ export default function ScoreBadge({ score, label, size = 'md' }: Props) {
 
   return (
     <div className="flex items-center gap-2">
-      {label && <span className="text-sm text-slate-400">{label}</span>}
+      {label && <span className="text-sm text-surface-200">{label}</span>}
       <span
         className={`inline-flex items-center rounded-full font-semibold ${sizeClasses[size]} ${scoreColor(score)} ${scoreBg(score)}`}
       >

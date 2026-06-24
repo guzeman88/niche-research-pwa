@@ -269,55 +269,39 @@ class AutonomousScheduler:
 
         new_seeds_total = 0
 
-        # 1. Autocomplete expansion (level 1 + level 2)
+        # Google Suggest expansion — real buyer search queries, free & unblocked
         try:
-            from adapters.research.etsy_autocomplete import EtsyAutocompleteAdapter
-            from pipeline.stages.keyword_scanner import _deep_autocomplete
-            adapter = EtsyAutocompleteAdapter()
-            sigs = adapter.search(keyword)
-            autocomplete_kws = [s.keyword.strip().lower() for s in sigs
-                                if s.keyword.strip().lower() != keyword]
-            if autocomplete_kws:
-                added = kdb.record_expansion(keyword, autocomplete_kws, "autocomplete", depth + 1)
+            from adapters.research.google_suggest import GoogleSuggestAdapter
+            gs = GoogleSuggestAdapter()
+            sigs = gs.search(keyword)
+            gs_kws = [s.keyword for s in sigs if s.keyword != keyword.lower()]
+            if gs_kws:
+                added = kdb.record_expansion(keyword, gs_kws[:10], "google_suggest", depth + 1)
                 new_seeds_total += added
                 if added:
-                    self._log(f"[scheduler]   +{added} seeds from autocomplete expansion")
-                # Level-2 expansion: run autocomplete on level-1 suggestions
-                level2_kws = _deep_autocomplete(autocomplete_kws)
-                if level2_kws:
-                    added2 = kdb.record_expansion(keyword, level2_kws, "autocomplete_l2", depth + 2)
-                    new_seeds_total += added2
-                    if added2:
-                        self._log(f"[scheduler]   +{added2} seeds from level-2 autocomplete expansion")
+                    self._log(f"[scheduler]   +{added} seeds from Google Suggest")
         except Exception as e:
-            self._log(f"[scheduler]   Autocomplete expansion failed: {e}")
+            self._log(f"[scheduler]   Google Suggest failed: {e}")
 
-        # 2. Competitor tag mining from scraper data
+        # LLM-based expansion — fallback for deeper keyword generation
         try:
-            if hasattr(report, "__dataclass_fields__"):
-                import dataclasses
-                r_dict = dataclasses.asdict(report)
-            else:
-                r_dict = dict(report)
-            tags = _extract_competitor_tags(r_dict)
-            if tags:
-                added = kdb.record_expansion(keyword, tags, "competitor_tags", depth + 1)
-                new_seeds_total += added
-                if added:
-                    self._log(f"[scheduler]   +{added} seeds from competitor tags")
+            from adapters.registry import get_llm_with_fallback
+            llm = get_llm_with_fallback()
+            if llm.health_check():
+                prompt = f"""Generate 5-8 Etsy search keywords related to "{keyword}" that buyers might type.
+Return ONLY a JSON array of strings: ["keyword1", "keyword2", ...]
+Make them specific, 2-5 words, realistic search phrases. No markdown, no explanation."""
+                resp = llm.complete(prompt, json_mode=True)
+                related = json.loads(resp.content)
+                if isinstance(related, list) and related:
+                    valid = [k.strip().lower() for k in related if isinstance(k, str) and len(k.strip()) > 3 and k.strip().lower() != keyword.lower()]
+                    if valid:
+                        added = kdb.record_expansion(keyword, valid, "llm_related", depth + 1)
+                        new_seeds_total += added
+                        if added:
+                            self._log(f"[scheduler]   +{added} seeds from LLM expansion")
         except Exception as e:
-            self._log(f"[scheduler]   Competitor tag expansion failed: {e}")
-
-        # 3. Google Trends related queries
-        try:
-            related = _extract_trends_related(keyword)
-            if related:
-                added = kdb.record_expansion(keyword, related, "trends_related", depth + 1)
-                new_seeds_total += added
-                if added:
-                    self._log(f"[scheduler]   +{added} seeds from trends related queries")
-        except Exception as e:
-            self._log(f"[scheduler]   Trends related failed: {e}")
+            self._log(f"[scheduler]   LLM expansion failed: {e}")
 
         return new_seeds_total
 

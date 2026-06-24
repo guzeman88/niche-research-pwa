@@ -7,16 +7,18 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Force immediate activation — critical for mobile Safari where users can't hard-refresh
       includeAssets: ['favicon.svg', 'icon-72x72.png', 'icon-96x96.png', 'icon-128x128.png', 'icon-144x144.png', 'icon-152x152.png', 'icon-192x192.png', 'icon-384x384.png', 'icon-512x512.png'],
+      injectRegister: 'inline',
       manifest: {
         name: 'Niche Research',
         short_name: 'NicheResearch',
         description: 'Multi-source Etsy niche intelligence tool',
-        theme_color: '#6366f1',
-        background_color: '#0f172a',
+        theme_color: '#202631',
+        background_color: '#202631',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/',
+        start_url: '/?v=8',
         icons: [
           { src: 'icon-72x72.png', sizes: '72x72', type: 'image/png' },
           { src: 'icon-96x96.png', sizes: '96x96', type: 'image/png' },
@@ -32,16 +34,11 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https?:\/\/.*\/api\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
-            },
-          },
-        ],
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        cacheId: 'etsy-niches-v8',
+        runtimeCaching: [],
       },
     }),
   ],

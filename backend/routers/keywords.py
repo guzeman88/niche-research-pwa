@@ -16,7 +16,7 @@ def _ensure_db():
 @router.get("", response_model=list[KeywordItem])
 def list_keywords(
     domain: str | None = Query(default=None),
-    limit: int = Query(default=2000, le=5000),
+    limit: int = Query(default=5000, le=15000),
 ):
     """List all seed keywords with scan status."""
     _ensure_db()

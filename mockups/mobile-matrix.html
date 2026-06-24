@@ -1,0 +1,147 @@
+<!doctype html><html lang=en><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Opportunity Matrix</title>
+<script src=https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#06080d;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:32px 16px}
+.phone{width:390px;height:844px;background:linear-gradient(180deg,#0b0f19,#0f172a);border-radius:44px;overflow:hidden;border:2px solid #1e293b;position:relative;box-shadow:0 0 0 8px #111827,0 0 0 10px #1e293b,0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.phone-notch{height:48px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:10px;flex-shrink:0}
+.phone-notch .pill{width:96px;height:5px;background:#334155;border-radius:100px}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:72px}
+.navbar{display:flex;align-items:center;gap:12px;padding:8px 20px;position:sticky;top:0;z-index:10;background:#0b0f19f0;backdrop-filter:blur(20px)}
+.navbar .back{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#111827;border:1px solid #1e293b;color:#94a3b8;font-size:16px;cursor:pointer}
+.navbar h1{font-size:17px;font-weight:800;letter-spacing:-.3px}
+.sec{padding:0 20px}
+.sec-title{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin:18px 0 10px}
+/* Legend */
+.legend{display:flex;flex-wrap:wrap;gap:12px;padding:4px 20px 2px;font-size:10px;font-weight:600}
+.leg-item{display:flex;align-items:center;gap:5px}
+.leg-dot{width:8px;height:8px;border-radius:3px}
+/* Matrix */
+.chart-card{background:#111827;border:1px solid #1e293b;border-radius:18px;padding:16px;margin-bottom:10px}
+.chart-title{font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.chart-title .dot{width:5px;height:5px;border-radius:50%}
+.chart-wrap{position:relative}
+.chart-h{height:290px}
+.chart-md{height:200px}
+/* Quad labels */
+.quad{position:absolute;font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;pointer-events:none;z-index:2}
+/* Counters */
+.counters{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.counter{background:#111827;border:1px solid #1e293b;border-radius:14px;padding:12px;text-align:center}
+.counter .c-val{font-size:24px;font-weight:800;letter-spacing:-.5px}
+.counter .c-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-top:2px}
+/* Sweet list */
+.sweet-list{margin-top:4px}
+.sweet-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #1e293b30}
+.sweet-row:last-child{border-bottom:none}
+.sweet-name{flex:1;font-size:11px;font-weight:600;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sweet-metric{font-size:10px;font-weight:700;padding:3px 6px;border-radius:6px;flex-shrink:0}
+.met-high{background:#065f4620;color:#34d399}
+.met-low{background:#78350f20;color:#fbbf24}
+.sweet-price{font-size:10px;color:#a78bfa;font-weight:700;width:32px;text-align:right;flex-shrink:0}
+/* Domain bubbles */
+.domain-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.dom-chip{display:flex;align-items:center;gap:4px;font-size:9px;color:#94a3b8;font-weight:600}
+.dom-chip .d-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+/* Bottom nav */
+.bottom-nav{display:flex;position:absolute;bottom:0;left:0;right:0;background:#0b0f19f0;backdrop-filter:blur(20px);border-top:1px solid #1e293b40;padding:6px 12px;z-index:10}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:12px;font-size:9px;font-weight:600;color:#475569;cursor:pointer}
+.nav-tab.active{color:#a5b4fc}
+.nav-tab svg{width:22px;height:22px}
+</style></head>
+<body>
+<div class=phone>
+  <div class=phone-notch><div class=pill></div></div>
+  <div class=navbar><button class=back>←</button><h1>📍 Opportunity Matrix</h1></div>
+
+  <div class=scroll>
+    <div class=legend>
+      <div class=leg-item><span class=leg-dot style=background:#34d399></span> Sweet Spot</div>
+      <div class=leg-item><span class=leg-dot style=background:#818cf8></span> High Demand</div>
+      <div class=leg-item><span class=leg-dot style=background:#fbbf24></span> Niche Play</div>
+      <div class=leg-item><span class=leg-dot style=background:#f87171></span> Saturated</div>
+    </div>
+
+    <div class=sec>
+      <div class=chart-card style=position:relative>
+        <div class=chart-title><span class=dot style=background:#6366f1></span> Demand vs Competition · 940 Keywords</div>
+        <div class="chart-wrap chart-h"><canvas id=matrix></canvas></div>
+        <div class=quad style=top:18px;left:18px>✦ Sweet Spot</div>
+        <div class=quad style=top:18px;right:18px>⚡ High Demand</div>
+        <div class=quad style=bottom:12px;left:18px>🔍 Niche Play</div>
+        <div class=quad style=bottom:12px;right:18px>⚠ Saturated</div>
+      </div>
+    </div>
+
+    <div class=sec>
+      <div class=sec-title>Market Breakdown</div>
+      <div class=counters>
+        <div class=counter><div class=c-val style=color:#34d399>142</div><div class=c-label>Sweet Spot<br>high demand, low comp</div></div>
+        <div class=counter><div class=c-val style=color:#818cf8>315</div><div class=c-label>High Demand<br>worth competing</div></div>
+        <div class=counter><div class=c-val style=color:#fbbf24>203</div><div class=c-label>Niche Play<br>low comp, any demand</div></div>
+        <div class=counter><div class=c-val style=color:#f87171>280</div><div class=c-label>Saturated<br>comp > 65</div></div>
+      </div>
+    </div>
+
+    <div class=sec>
+      <div class=sec-title>Sweet Spot Keywords</div>
+      <div class=chart-card style=padding:12px>
+        <div class=sweet-list id=sweetList></div>
+      </div>
+    </div>
+
+    <div class=sec>
+      <div class=sec-title>Domain Positioning</div>
+      <div class=chart-card>
+        <div class="chart-wrap chart-md"><canvas id=domain></canvas></div>
+        <div class=domain-legend id=domLegend></div>
+      </div>
+    </div>
+
+    <div class=sec>
+      <div style=display:grid;grid-template-columns:1fr 1fr;gap:8px>
+        <div class=chart-card>
+          <div class=chart-title><span class=dot style=background:#34d399></span> Trend Direction</div>
+          <div class=chart-wrap style=height:150px><canvas id=trend></canvas></div>
+        </div>
+        <div class=chart-card>
+          <div class=chart-title><span class=dot style=background:#f59e0b></span> Competition</div>
+          <div style="display:flex;flex-direction:column;gap:10px;padding:8px 0">
+            <div><div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-bottom:3px"><span>Low (&lt;35)</span><span style=color:#34d399>38%</span></div><div style="height:4px;background:#1e293b;border-radius:2px;overflow:hidden"><div style="width:38%;height:100%;background:linear-gradient(90deg,#34d399,#10b981);border-radius:2px"></div></div></div>
+            <div><div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-bottom:3px"><span>Med (35–65)</span><span style=color:#fbbf24>44%</span></div><div style="height:4px;background:#1e293b;border-radius:2px;overflow:hidden"><div style="width:44%;height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:2px"></div></div></div>
+            <div><div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-bottom:3px"><span>High (&gt;65)</span><span style=color:#f87171>18%</span></div><div style="height:4px;background:#1e293b;border-radius:2px;overflow:hidden"><div style="width:18%;height:100%;background:linear-gradient(90deg,#f87171,#ef4444);border-radius:2px"></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style=height:20px></div>
+  </div>
+
+  <div class=bottom-nav>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><rect x=3 y=3 width=7 height=7 rx=1.5/><rect x=14 y=3 width=7 height=7 rx=1.5/><rect x=14 y=14 width=7 height=7 rx=1.5/><rect x=3 y=14 width=7 height=7 rx=1.5/></svg>Home</div>
+    <div class="nav-tab active"><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><circle cx=11 cy=11 r=7/><path d="m20 20-3.5-3.5"/></svg>Explore</div>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><path d="m20 2-2 2"/><circle cx=13 cy=13 r=8/></svg>Keywords</div>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><circle cx=12 cy=12 r=10/><polyline points="12 6 12 12 15 15"/></svg>Schdlr</div>
+    <div class=nav-tab><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.5><circle cx=12 cy=12 r=3/></svg>Settings</div>
+  </div>
+</div>
+
+<script>
+const domains=['trending niches','aesthetics','occasions','hobbies','pets','professions','home decor','pop culture'];
+const domAvgs=[[45,22],[55,30],[75,58],[35,25],[50,45],[40,20],[60,50],[55,28]];
+const domColors=['#6366f1','#34d399','#fbbf24','#f87171','#a78bfa','#fb923c','#10b981','#818cf8'];
+const pts=[];
+for(let i=0;i<940;i++){const d=i%8,[bd,bc]=domAvgs[d];pts.push({x:Math.max(2,Math.min(100,bc+(Math.random()-.5)*25)),y:Math.max(2,Math.min(100,bd+(Math.random()-.5)*35)),d})}
+
+new Chart(document.getElementById('matrix'),{type:'scatter',data:{datasets:[{data:pts.map(p=>({x:p.x,y:p.y})),backgroundColor:pts.map(p=>p.y>60&&p.x<35?'#34d39908':p.y>60?'#818cf808':p.x<35?'#fbbf2408':'#f8717108'),borderColor:pts.map(p=>p.y>60&&p.x<35?'#34d39940':p.y>60?'#818cf840':p.x<35?'#fbbf2440':'#f8717140'),borderWidth:.5,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`Demand ${c.raw.y.toFixed(0)} · Comp ${c.raw.x.toFixed(0)}`}}},scales:{x:{title:{text:'Competition →',display:true,color:'#64748b',font:{size:9,weight:600}},min:0,max:100,ticks:{color:'#475569',font:{size:8}},grid:{color:'#1e293b40'},reverse:true},y:{title:{text:'Demand →',display:true,color:'#64748b',font:{size:9,weight:600}},min:0,max:100,ticks:{color:'#475569',font:{size:8}},grid:{color:'#1e293b40'}}}});
+
+const sweet=[{kw:'trendy stickers',d:62,c:19,p:71},{kw:'roman empire',d:64,c:13,p:58},{kw:'fall aesthetic',d:72,c:23,p:77},{kw:'villain era',d:67,c:21,p:74},{kw:'girl dinner',d:54,c:15,p:84},{kw:'dark academia decor',d:70,c:12,p:82},{kw:'soft girl aesthetic',d:65,c:12,p:61}];
+document.getElementById('sweetList').innerHTML=sweet.map(k=>`<div class=sweet-row><span class=sweet-name>${k.kw}</span><span class="sweet-metric met-high">D:${k.d}</span><span class="sweet-metric met-low">C:${k.c}</span><span class=sweet-price>$${k.p}</span></div>`).join('');
+
+new Chart(document.getElementById('domain'),{type:'bubble',data:{datasets:domAvgs.map(([bd,bc],i)=>({label:domains[i],data:[{x:bc,y:bd,r:14+Math.random()*6}],backgroundColor:domColors[i]+'30',borderColor:domColors[i],borderWidth:1.5}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{text:'Competition',display:true,color:'#64748b',font:{size:8}},ticks:{color:'#475569',font:{size:7}},grid:{color:'#1e293b40'}},y:{title:{text:'Demand',display:true,color:'#64748b',font:{size:8}},ticks:{color:'#475569',font:{size:7}},grid:{color:'#1e293b40'}}}});
+document.getElementById('domLegend').innerHTML=domains.map((d,i)=>`<div class=dom-chip><span class=d-dot style=background:${domColors[i]}></span>${d}</div>`).join('');
+
+new Chart(document.getElementById('trend'),{type:'doughnut',data:{labels:['Rising ↑','Stable →','Declining ↓'],datasets:[{data:[340,480,120],backgroundColor:['#34d399','#818cf8','#f87171'],borderWidth:2,borderColor:'#111827'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:9},padding:8,boxWidth:8,usePointStyle:true}}},cutout:'60%'});
+</script></body></html>

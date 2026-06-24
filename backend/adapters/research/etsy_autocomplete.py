@@ -9,13 +9,26 @@ import httpx
 from adapters.base.research import BaseResearchAdapter, NicheSignal
 
 
-_AUTOCOMPLETE_URL = "https://www.etsy.com/api/v3/ajax/autocomplete/etsy_search"
+# Etsy changed their autocomplete endpoint — using the current suggestions API
+_AUTOCOMPLETE_URL = "https://www.etsy.com/api/v3/ajax/suggest/keywords"
 _SEARCH_URL = "https://www.etsy.com/search"
 
-_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept-Language": "en-US,en;q=0.9",
-}
+import random
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
+]
+
+def _get_headers():
+    return {
+        "User-Agent": random.choice(_USER_AGENTS),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "DNT": "1",
+        "Connection": "keep-alive",
+    }
 
 
 class EtsyAutocompleteAdapter(BaseResearchAdapter):
@@ -23,7 +36,7 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
 
     def __init__(self, request_delay: float = 0.5):
         self._delay = request_delay
-        self._client = httpx.Client(headers=_HEADERS, timeout=15, follow_redirects=True)
+        self._client = httpx.Client(headers=_get_headers(), timeout=15, follow_redirects=True)
 
     @property
     def name(self) -> str:

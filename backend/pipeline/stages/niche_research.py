@@ -407,18 +407,21 @@ def _aggregate_scores(
             demand = min(100.0, demand + fav_boost)
 
     # ── Competition ───────────────────────────────────────────────────────────
-    # Use scraper's quality score (more accurate) if available; fall back to signal average
+    # Use scraper's quality score (more accurate) if available; fall back to signal data
     if scrape_data:
-        # competition_quality_score is "how hard to compete"; we invert for our score
-        # (high quality_score = very established competitors = low opportunity)
         avg_quality = sum(k.competition_quality_score for k in scrape_data) / len(scrape_data)
         competition = round(avg_quality, 1)   # 0=easy, 100=saturated
     else:
+        # Use autocomplete competition scores (based on real Etsy listing counts)
         comp_vals = [s.competition_score for s in signals if s.competition_score > 0]
-        competition = sum(comp_vals) / len(comp_vals) if comp_vals else 50.0
+        if comp_vals:
+            # Weighted: lower-listing-count keywords = less competition (lower score)
+            competition = sum(comp_vals) / len(comp_vals)
+        else:
+            competition = 50.0
 
     # ── Margin ────────────────────────────────────────────────────────────────
-    # Use real scraped prices if available
+    # Use real scraped prices if available; estimate from competition if not
     if scrape_data:
         prices = [k.avg_price_usd for k in scrape_data if k.avg_price_usd > 0]
     else:
@@ -435,7 +438,9 @@ def _aggregate_scores(
         else:
             margin = 20.0 + avg_price / 10 * 20
     else:
-        margin = 40.0
+        # Estimate margin from competition: lower competition = better margin potential
+        # Range: 25 (high comp) to 75 (low comp)
+        margin = round(75.0 - competition * 0.5, 1)
 
     # ── Trend ─────────────────────────────────────────────────────────────────
     trend_map = {"rising": 85.0, "stable": 50.0, "declining": 20.0}
