@@ -1,0 +1,20 @@
+active: true
+created_at: '2026-06-10T18:25:37.546877+00:00'
+display_name: Minimalist Morning
+etsy_shop_id: ''
+listing_count_target: 50
+niche:
+  primary: Clean aesthetic lifestyle merchandise for mindful living
+  secondary:
+  - minimalist decor
+  - clean aesthetic
+  subreddits:
+  - minimalism
+  - simpleliving
+  target_audience: Minimalists 25-40, wellness community, design lovers
+product_types:
+- mug
+- tote
+- journal
+- digital_download
+store_slug: minimalist-morning

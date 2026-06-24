@@ -12,6 +12,110 @@ from config import WORKSPACE
 router = APIRouter(prefix="/api/research", tags=["research"])
 
 
+def _report_id_for_row(row: dict) -> str:
+    scan_date = row.get("scanned_at", "")
+    keyword = row.get("keyword", "")
+    return f"rpt_{keyword.replace(' ','_')[:30]}_{scan_date[:10] if scan_date else 'unknown'}"
+
+
+def _as_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_int(value, default: int = 0) -> int:
+    try:
+        return int(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _json_list(value) -> list:
+    if isinstance(value, list):
+        return value
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _price_sweet_spot(avg_price: float) -> str:
+    if avg_price <= 0:
+        return ""
+    low = max(1.0, avg_price * 0.8)
+    high = avg_price * 1.2
+    return f"${low:.0f}-${high:.0f}"
+
+
+def _db_report_from_opportunity(row: dict, store_slug: str) -> dict:
+    keyword = row.get("keyword", "")
+    avg_price = _as_float(row.get("avg_price_usd"))
+    monthly_revenue = _as_float(row.get("monthly_revenue_usd"))
+    competition_quality = _as_float(row.get("competition_quality"))
+    listing_count = _as_int(row.get("listing_count"))
+    price_sweet_spot = _price_sweet_spot(avg_price)
+    report_id = _report_id_for_row(row)
+
+    return {
+        "store_slug": store_slug,
+        "generated_at": row.get("scanned_at") or "",
+        "seed_keywords": [keyword] if keyword else [],
+        "keyword_signals": [{
+            "keyword": keyword,
+            "monthly_searches": 0,
+            "competition_score": _as_float(row.get("competition_score")),
+            "avg_price_usd": avg_price,
+            "trend_direction": row.get("trajectory") or "stable",
+            "source": "keyword_database",
+        }],
+        "keyword_search_data": [{
+            "keyword": keyword,
+            "total_listing_count": listing_count,
+            "avg_price_usd": avg_price,
+            "price_min": 0,
+            "price_p25": 0,
+            "price_median": avg_price,
+            "price_p75": 0,
+            "price_max": 0,
+            "price_sweet_spot": price_sweet_spot,
+            "avg_review_count": 0,
+            "pct_star_sellers": 0,
+            "pct_bestsellers": 0,
+            "competition_quality_score": competition_quality,
+            "estimated_market_monthly_revenue_usd": monthly_revenue,
+            "top_listing_titles": [],
+            "avg_favorites": 0,
+            "max_favorites": 0,
+            "pct_high_favorites": 0,
+        }],
+        "demand_score": _as_float(row.get("demand_score")),
+        "competition_score": _as_float(row.get("competition_score")),
+        "margin_score": _as_float(row.get("margin_score")),
+        "trend_velocity_score": _as_float(row.get("trend_score")),
+        "opportunity_score": _as_float(row.get("opportunity_score")),
+        "avg_price_usd": avg_price,
+        "price_sweet_spot": price_sweet_spot,
+        "estimated_market_monthly_revenue_usd": monthly_revenue,
+        "avg_competition_quality": competition_quality,
+        "seasonality": [],
+        "peak_months": _json_list(row.get("peak_months")),
+        "keyword_clusters": [],
+        "underserved_angles": [],
+        "winning_styles": [],
+        "recommended_product_types": [],
+        "competitor_gaps": [],
+        "pricing_insights": "",
+        "entry_strategy": row.get("entry_strategy") or "",
+        "sources_used": ["keyword_database"],
+        "report_id": report_id,
+    }
+
+
 @router.post("/run", response_model=ResearchRunResponse)
 def run_research(req: ResearchRunRequest):
     """Start a niche research run in the background. Returns run_id for SSE tracking."""
@@ -38,7 +142,7 @@ def list_reports(store_slug: str = "__global__", limit: int = 50):
         scan_date = o.get("scanned_at", "")
         kw = o.get("keyword", "")
         reports.append(ReportListItem(
-            report_id=f"rpt_{kw.replace(' ','_')[:30]}_{scan_date[:10] if scan_date else 'unknown'}",
+            report_id=_report_id_for_row(o),
             store_slug=store_slug,
             seed_keywords=[kw],
             opportunity_score=o.get("opportunity_score", 0) or 0,
@@ -67,16 +171,20 @@ def latest_report(store_slug: str = "__global__"):
 def get_report(report_id: str, store_slug: str = "__global__"):
     """Get a specific report by ID."""
     report_dir = WORKSPACE / store_slug / "_niche_research"
-    if not report_dir.exists():
-        raise HTTPException(status_code=404, detail="No reports directory found")
+    if report_dir.exists():
+        for f in sorted(report_dir.glob("niche_report_*.json")):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                if data.get("report_id") == report_id:
+                    return data
+            except Exception:
+                continue
 
-    for f in sorted(report_dir.glob("niche_report_*.json")):
-        try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-            if data.get("report_id") == report_id:
-                return data
-        except Exception:
-            continue
+    from pipeline import keyword_database as kdb
+    kdb.init_db()
+    for row in kdb.get_top_opportunities(limit=10000):
+        if _report_id_for_row(row) == report_id:
+            return _db_report_from_opportunity(row, store_slug)
 
     raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
 

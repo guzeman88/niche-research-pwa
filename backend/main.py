@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
-from routers import research, keywords, gaps, scheduler, stats, settings, stream, export
+from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores
 
 # ── App factory ─────────────────────────────────────────────────────────────
 
@@ -44,6 +44,7 @@ app.include_router(stats.router)
 app.include_router(settings.router)
 app.include_router(stream.router)
 app.include_router(export.router)
+app.include_router(stores.router)
 
 
 # ── Startup ─────────────────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ app.include_router(export.router)
 @app.on_event("startup")
 async def startup():
     """Initialize database, seed from seed_data/ on first run, and load seed library."""
-    import shutil
+    import shutil, os
     from pathlib import Path
 
     seed_dir = BACKEND_DIR / "seed_data"
@@ -62,11 +63,16 @@ async def startup():
     print(f"[startup] seed_dir exists={seed_dir.exists()}")
     print(f"[startup] db_path exists={db_path.exists()}")
 
-    # Seed if: seed_data exists AND (no DB yet OR seed_data DB is newer/better)
+    # Seed if: seed_data exists AND (no DB yet OR forced OR seed_data DB is newer)
+    force_reseed = os.environ.get("FORCE_RESEED", "") == "1"
     needs_seed = False
     if seed_dir.exists():
         seed_db = seed_dir / "_keyword_db" / "keywords.sqlite"
-        if not db_path.exists():
+        if force_reseed:
+            print("[startup] FORCE_RESEED=1 — re-seeding")
+            shutil.rmtree(workspace_dir, ignore_errors=True)
+            needs_seed = True
+        elif not db_path.exists():
             needs_seed = True
         elif seed_db.exists() and seed_db.stat().st_size > db_path.stat().st_size:
             # Seed data has been updated — replace workspace with fresh seed

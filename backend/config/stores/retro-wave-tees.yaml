@@ -1,0 +1,19 @@
+active: true
+created_at: '2026-06-10T18:25:37.546870+00:00'
+display_name: Retro Wave Tees
+etsy_shop_id: ''
+listing_count_target: 50
+niche:
+  primary: Vaporwave & synthwave apparel for music lovers
+  secondary:
+  - vaporwave shirt
+  - retro music merch
+  subreddits:
+  - VaporwaveAesthetics
+  - outrun
+  target_audience: Music fans 18-35, festival-goers, retro enthusiasts
+product_types:
+- apparel
+- t-shirt
+- hoodie
+store_slug: retro-wave-tees
