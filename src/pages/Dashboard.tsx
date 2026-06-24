@@ -25,14 +25,14 @@ export default function Dashboard() {
 
   return (
     <PullToRefresh onRefresh={refresh}>
-    <div className="p-4 lg:p-6 space-y-5">
+    <div className="page">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <p className="text-[13px] text-surface-200 font-medium">Good morning</p>
+          <p className="text-[12px] text-primary-100 font-semibold">Etsy intelligence</p>
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Dashboard</h2>
         </div>
-        <Link to="/explore" className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-400 hover:bg-primary-500 text-surface-50 text-[13px] font-semibold rounded-xl transition-colors">
+        <Link to="/explore" className="btn-primary text-[13px]">
           <Icon name="plus-circle" size={16} />
           Research
         </Link>
@@ -62,12 +62,12 @@ export default function Dashboard() {
 
       {/* Top Opportunities ranked list */}
       <Section title="Top Opportunities" link="/keywords" linkLabel="See all">
-        <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl overflow-hidden">
+        <div className="panel overflow-hidden">
           {opportunities.length > 0 ? opportunities.map((r, i) => (
             <Link
               key={r.report_id}
               to={`/reports/${r.report_id}`}
-              className="flex items-center gap-3 px-4 py-3 border-b border-surface-500/30 last:border-b-0 hover:bg-surface-600/30 transition-colors"
+              className="flex items-center gap-3 px-4 py-3 border-b border-surface-600/35 last:border-b-0 hover:bg-surface-700/45 transition-colors"
             >
               <RankBadge rank={i + 1} />
               <div className="flex-1 min-w-0">
@@ -75,7 +75,7 @@ export default function Dashboard() {
                 <div className="text-[10px] text-surface-300 mt-0.5">{fmtDate(r.generated_at)}</div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-12 h-1.5 bg-surface-700 rounded-full overflow-hidden hidden sm:block">
+                <div className="progress-track w-12 hidden sm:block">
                   <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, (r.opportunity_score || 0))}%` }} />
                 </div>
                 <span className={`text-[13px] font-bold tabular-nums ${scoreColor(r.opportunity_score || 0)}`}>{(r.opportunity_score || 0).toFixed(1)}</span>
@@ -90,11 +90,11 @@ export default function Dashboard() {
       {/* Two-column: domains + breakouts */}
       <div className="grid lg:grid-cols-2 gap-5">
         <Section title="Domain Breakdown" subtitle="by keyword volume">
-          <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl p-4 space-y-2.5">
+          <div className="panel p-4 space-y-2.5">
             {domains.length > 0 ? domains.map((d: any) => (
               <div key={d.domain} className="flex items-center gap-3">
                 <span className="text-[11px] text-surface-200 w-20 text-right truncate flex-shrink-0">{d.domain}</span>
-                <div className="flex-1 h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                <div className="progress-track flex-1">
                   <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, (d.cnt / (Math.max(...(domains.map((x: any) => x.cnt) || [1])) || 1)) * 100)}%` }} />
                 </div>
                 <span className="text-[11px] font-bold text-surface-100 w-8 text-right tabular-nums">{d.cnt}</span>
@@ -118,7 +118,7 @@ function Chip({ val, label, sub, color }: { val: string; label: string; sub: str
   const colors = { indigo: 'from-surface-800 to-surface-700/50 border-accent-blue/20', emerald: 'from-accent-green/20 to-accent-green/10 border-accent-green/20', amber: 'from-accent-amber/20 to-accent-amber/10 border-accent-amber/20', violet: 'from-accent-violet/20 to-accent-violet/10 border-accent-violet/20' }
   const textColors = { indigo: 'text-accent-blue', emerald: 'text-accent-green', amber: 'text-accent-amber', violet: 'text-accent-violet' }
   return (
-    <div className={`flex-shrink-0 bg-gradient-to-b ${colors[color]} border rounded-2xl px-4 py-2.5 min-w-[90px]`}>
+    <div className={`flex-shrink-0 bg-gradient-to-b ${colors[color]} border rounded-lg px-4 py-2.5 min-w-[98px] shadow-[0_10px_24px_rgba(7,10,14,0.14)]`}>
       <div className={`text-lg font-extrabold tracking-tight ${textColors[color]}`}>{val}</div>
       <div className="text-[10px] text-surface-200 font-medium">{label}</div>
       <div className="text-[9px] text-surface-400 mt-0.5">{sub}</div>
@@ -130,7 +130,7 @@ function MetricCard({ icon, label, value, sub, color }: { icon: import('../compo
   const borders = { indigo: 'border-t-indigo-500/30', emerald: 'border-t-emerald-500/30', amber: 'border-t-amber-500/30', violet: 'border-t-violet-500/30' }
   const textColors = { indigo: 'text-accent-blue', emerald: 'text-accent-green', amber: 'text-accent-amber', violet: 'text-accent-violet' }
   return (
-    <div className={`bg-surface-700/80 border border-surface-500/60 border-t-2 ${borders[color]} rounded-2xl p-4`}>
+    <div className={`metric-panel border-t-2 ${borders[color]}`}>
       <Icon name={icon} size={18} className={`${textColors[color]} mb-2`} />
       <div className="text-xl font-extrabold text-surface-50 tracking-tight">{value}</div>
       <div className="text-[10px] text-surface-300 mt-0.5 uppercase tracking-wide font-semibold">{label}</div>
@@ -152,7 +152,7 @@ function Section({ title, subtitle, link, linkLabel, icon, children }: { title: 
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-1.5">
           {icon && <Icon name={icon} size={14} className="text-surface-300" />}
-          <span className="text-[12px] font-bold text-surface-200 uppercase tracking-wider">{title}</span>
+          <span className="section-label">{title}</span>
           {subtitle && <span className="text-[10px] text-surface-400 ml-1">{subtitle}</span>}
         </div>
         {link && linkLabel && <Link to={link} className="text-[11px] font-semibold text-primary-200 hover:text-primary-200">{linkLabel} →</Link>}

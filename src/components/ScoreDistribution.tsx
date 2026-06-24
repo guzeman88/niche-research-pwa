@@ -32,16 +32,16 @@ export default function ScoreDistribution() {
   }, [opps])
 
   return (
-    <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl p-4">
+    <div className="panel p-4">
       <div className="flex items-center gap-2 mb-3">
         <Icon name="bar-chart" size={14} className="text-primary-200" />
-        <span className="text-[11px] font-bold text-surface-200 uppercase tracking-wider">Score Distribution</span>
+        <span className="section-label">Score Distribution</span>
       </div>
       <ResponsiveContainer width="100%" height={160}>
         <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
           <XAxis dataKey="label" tick={{ fill: '#5e81ac', fontSize: 9, fontWeight: 500 }} axisLine={false} tickLine={false} />
           <YAxis hide />
-          <Tooltip contentStyle={{ background: '#434c5e', border: '1px solid #434c5e', borderRadius: '8px', fontSize: 11 }} labelStyle={{ color: '#d8dee9' }} formatter={(v: number) => [`${v} keywords`, 'Count']} />
+          <Tooltip contentStyle={{ background: '#303948', border: '1px solid #465365', borderRadius: '8px', fontSize: 11 }} labelStyle={{ color: '#d9e1ec' }} formatter={(v: number) => [`${v} keywords`, 'Count']} />
           <Bar dataKey="count" radius={[3, 3, 0, 0]}>
             {chartData.map((d, i) => <Cell key={i} fill={d.color} />)}
           </Bar>

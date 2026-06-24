@@ -24,10 +24,10 @@ export default function GapOverview() {
   })
 
   return (
-    <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl p-4">
+    <div className="panel p-4">
       <div className="flex items-center gap-2 mb-4">
         <Icon name="activity" size={14} className="text-primary-200" />
-        <span className="text-[11px] font-bold text-surface-200 uppercase tracking-wider">Gap Analysis Overview</span>
+        <span className="section-label">Gap Analysis Overview</span>
       </div>
       <div className="grid grid-cols-3 gap-3">
         {averages.map(g => (
@@ -35,7 +35,7 @@ export default function GapOverview() {
             <Icon name={g.icon} size={16} className="mx-auto mb-1.5" />
             <div className="text-lg font-extrabold tracking-tight" style={{ color: g.color }}>{g.avg}</div>
             <div className="text-[9px] text-surface-300 uppercase font-semibold tracking-wide">{g.label}</div>
-            <div className="mt-2 h-1 bg-surface-700 rounded-full overflow-hidden">
+            <div className="progress-track mt-2 h-1">
               <div className="h-full rounded-full transition-all" style={{ width: `${g.avg}%`, backgroundColor: g.color }} />
             </div>
           </div>

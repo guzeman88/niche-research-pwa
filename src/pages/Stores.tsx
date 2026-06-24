@@ -6,7 +6,7 @@ import Icon from '../components/Icon'
 import PullToRefresh from '../components/PullToRefresh'
 import { StoresSkeleton } from '../components/Skeleton'
 
-const COLORS = ['#5e81ac','#a3be8c','#ebcb8b','#b48ead','#d08770','#b48ead','#14b8a6','#e11d48']
+const COLORS = ['#6f96c8','#a9c88f','#f0cf89','#c29ad4','#c86f7a','#7f9fc6']
 
 export default function Stores() {
   const qc = useQueryClient()
@@ -23,7 +23,7 @@ export default function Stores() {
   // ── Mobile + Desktop: Master list ──
   const masterList = (
     <div className="flex flex-col h-full">
-      <div className="px-4 pt-4 pb-3 border-b border-surface-500/60">
+      <div className="px-4 pt-4 pb-3 border-b border-surface-600/60 bg-surface-900/45">
         <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">My Stores</h2>
         <p className="text-[12px] text-surface-300 mt-0.5">{stores?.length || 0} stores · {stores?.filter(s => s.active).length || 0} active</p>
       </div>
@@ -35,10 +35,10 @@ export default function Stores() {
             <button
               key={s.slug}
               onClick={() => setSelected(s.slug)}
-              className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl text-left transition-all duration-150 active:scale-[0.98]"
-              style={{ backgroundColor: selected === s.slug ? color + '10' : '#3b4252', border: `1px solid ${selected === s.slug ? color + '30' : '#434c5e'}` }}
+              className="w-full flex items-center gap-3.5 p-3.5 rounded-lg text-left transition-all duration-150 active:scale-[0.98]"
+              style={{ backgroundColor: selected === s.slug ? color + '12' : '#303948', border: `1px solid ${selected === s.slug ? color + '38' : '#465365'}` }}
             >
-              <span className="w-10 h-10 rounded-xl flex items-center justify-center text-[15px] font-extrabold flex-shrink-0"
+              <span className="w-10 h-10 rounded-lg flex items-center justify-center text-[15px] font-extrabold flex-shrink-0"
                 style={{ backgroundColor: color + '15', color, border: `1px solid ${color}30` }}>
                 {s.name[0]}
               </span>
@@ -65,7 +65,7 @@ export default function Stores() {
   const detailView = current && (
     <div className="flex flex-col h-full">
       {/* Header with back button */}
-      <div className="px-3 pt-3 pb-3 border-b border-surface-500/60">
+      <div className="px-4 pt-4 pb-4 border-b border-surface-600/60 bg-surface-900/45">
         <button onClick={() => setSelected('')} className="lg:hidden flex items-center gap-1.5 text-[13px] text-surface-200 font-medium mb-3">
           <Icon name="chevron-left" size={16} /> Back
         </button>
@@ -81,11 +81,11 @@ export default function Stores() {
         {/* Chips row */}
         <div className="flex flex-wrap gap-1.5">
           {(current.product_types || []).map(t => (
-            <span key={t} className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-surface-700/50 text-surface-200 border border-surface-500/40">
+            <span key={t} className="tag py-1">
               {t.replace(/_/g, ' ')}
             </span>
           ))}
-          <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg ${
+          <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-md ${
             current.active ? 'bg-accent-green/10 text-accent-green border border-accent-green/20' : 'bg-accent-amber/10 text-accent-amber border border-accent-amber/20'
           }`}>
             {current.active ? 'Active' : 'Draft'}
@@ -93,7 +93,7 @@ export default function Stores() {
         </div>
 
         {/* Key metrics */}
-        <div className="bg-surface-700/60 border border-surface-500/50 rounded-2xl p-4">
+        <div className="panel p-4">
           <div className="text-[10px] text-surface-300 uppercase font-bold tracking-wider mb-3">Store Details</div>
           <div className="space-y-2.5">
             <DetailRow label="Target Audience" value={current.target_audience || 'Not specified'} />
@@ -111,7 +111,7 @@ export default function Stores() {
             <div className="text-[10px] text-surface-300 uppercase font-bold tracking-wider mb-2">Secondary Niches</div>
             <div className="flex flex-wrap gap-2">
               {current.niche_secondary.map(n => (
-                <span key={n} className="text-[11px] px-3 py-1.5 rounded-full bg-accent-violet/10 text-accent-violet font-medium border border-accent-violet/15">
+                <span key={n} className="chip bg-accent-violet/10 text-accent-violet border-accent-violet/20">
                   {n}
                 </span>
               ))}
@@ -133,7 +133,7 @@ export default function Stores() {
     <>
       {/* Desktop: split panel */}
       <div className="hidden lg:flex h-full">
-        <div className="w-80 flex-shrink-0 border-r border-surface-500/60 bg-surface-800/50">
+        <div className="w-80 flex-shrink-0 border-r border-surface-600/60 bg-surface-900/45">
           {masterList}
         </div>
         <div className="flex-1">

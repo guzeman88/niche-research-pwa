@@ -5,7 +5,7 @@ import { getOpportunities, getTopGaps } from '../lib/api'
 import Icon from '../components/Icon'
 import { scoreColor } from '../lib/utils'
 
-const COLORS = ['#5e81ac','#a3be8c','#ebcb8b','#b48ead','#d08770','#b48ead','#14b8a6','#e11d48']
+const COLORS = ['#6f96c8','#a9c88f','#f0cf89','#c29ad4','#c86f7a','#7f9fc6']
 
 export default function StoreGenerator() {
   const { data: opps } = useQuery({ queryKey: ['opportunities', 200], queryFn: () => getOpportunities(undefined, 200) })
@@ -40,12 +40,15 @@ export default function StoreGenerator() {
   }, [opps])
 
   return (
-    <div className="p-4 lg:p-6 space-y-5">
-      <div>
+    <div className="page">
+      <div className="page-header">
+        <div>
         <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Store Generator</h2>
         <p className="text-[13px] text-surface-200 mt-0.5">
           {concepts.length} store concepts generated from top market opportunities
         </p>
+        </div>
+        <span className="chip">{concepts.length} concepts</span>
       </div>
 
       {concepts.length > 0 ? (
@@ -54,7 +57,7 @@ export default function StoreGenerator() {
             const sc = scoreColor(c.avgOpportunity)
             const color = COLORS[i % COLORS.length]
             return (
-              <div key={c.domain} className="bg-surface-700/80 border border-surface-500/60 rounded-2xl overflow-hidden">
+              <div key={c.domain} className="panel overflow-hidden">
                 {/* Top accent */}
                 <div className="h-1" style={{ background: `linear-gradient(90deg, ${color}, ${color}80)` }} />
                 <div className="p-5 space-y-4">
@@ -70,7 +73,7 @@ export default function StoreGenerator() {
                   {/* Keywords */}
                   <div className="flex flex-wrap gap-1.5">
                     {c.keywords.map((kw: string) => (
-                      <span key={kw} className="text-[10px] px-2.5 py-1 rounded-full bg-primary-400/10 text-primary-200 font-medium border border-primary-400/15">
+                      <span key={kw} className="chip text-[10px] py-1">
                         {kw}
                       </span>
                     ))}
@@ -80,7 +83,7 @@ export default function StoreGenerator() {
                   <div className="flex flex-wrap gap-1.5">
                     <span className="text-[9px] text-surface-300 uppercase font-bold tracking-wider">Suggested Products:</span>
                     {c.productTypes.map((pt: string) => (
-                      <span key={pt} className="text-[10px] px-2.5 py-0.5 rounded-lg bg-surface-700/50 text-surface-200 border border-surface-500/30">
+                      <span key={pt} className="tag">
                         {pt.replace(/_/g, ' ')}
                       </span>
                     ))}
@@ -89,7 +92,7 @@ export default function StoreGenerator() {
                   {/* Gap indicator */}
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-surface-300 uppercase font-bold tracking-wider">Avg Gap:</span>
-                    <div className="flex-1 h-1.5 bg-surface-700 rounded-full overflow-hidden max-w-[120px]">
+                    <div className="progress-track flex-1 max-w-[120px]">
                       <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${c.avgGap}%` }} />
                     </div>
                     <span className={`text-[11px] font-bold ${scoreColor(c.avgGap)}`}>{c.avgGap}/100</span>
@@ -100,7 +103,7 @@ export default function StoreGenerator() {
           })}
         </div>
       ) : (
-        <div className="bg-surface-700/40 border border-surface-500/30 rounded-2xl p-12 text-center">
+        <div className="panel-soft p-12 text-center">
           <Icon name="layers" size={48} className="text-surface-400 mx-auto mb-4" />
           <h3 className="text-[15px] font-bold text-surface-200 mb-2">No store concepts yet</h3>
           <p className="text-[13px] text-surface-400 max-w-md mx-auto">

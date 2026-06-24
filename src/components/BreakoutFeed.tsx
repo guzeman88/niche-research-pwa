@@ -11,10 +11,10 @@ export default function BreakoutFeed() {
 
   if (!breakouts || breakouts.length === 0) {
     return (
-      <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl p-4">
+      <div className="panel p-4">
         <div className="flex items-center gap-2 mb-3">
           <Icon name="trending-up" size={14} className="text-accent-green" />
-          <span className="text-[11px] font-bold text-surface-200 uppercase tracking-wider">Breakout Feed</span>
+          <span className="section-label">Breakout Feed</span>
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-auto" />
         </div>
         <p className="text-[12px] text-surface-300 text-center py-6">No breakouts yet — run more scans to detect velocity</p>
@@ -23,16 +23,16 @@ export default function BreakoutFeed() {
   }
 
   return (
-    <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl p-4">
+    <div className="panel p-4">
       <div className="flex items-center gap-2 mb-3">
         <Icon name="trending-up" size={14} className="text-accent-green" />
-        <span className="text-[11px] font-bold text-surface-200 uppercase tracking-wider">Breakout Feed</span>
+        <span className="section-label">Breakout Feed</span>
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-auto" />
         <span className="text-[10px] text-surface-400 font-medium">{breakouts.length} rising</span>
       </div>
       <div className="space-y-1 max-h-[300px] overflow-y-auto">
         {breakouts.map((b, i) => (
-          <div key={b.keyword} className="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-600/30 transition-colors border-b border-surface-500/20 last:border-0">
+          <div key={b.keyword} className="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-700/35 transition-colors border-b border-surface-600/25 last:border-0">
             <span className="text-[10px] text-surface-400 w-5 flex-shrink-0 font-bold tabular-nums">{i + 1}</span>
             <Icon name="trending-up" size={12} className="text-accent-green flex-shrink-0" />
             <span className="text-[12px] text-surface-100 font-medium truncate flex-1">{b.keyword}</span>

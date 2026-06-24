@@ -70,8 +70,8 @@ export default function Keywords() {
 
   return (
     <PullToRefresh onRefresh={refresh}>
-    <div className="p-4 lg:p-6 space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="page">
+      <div className="page-header">
         <div>
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Keywords</h2>
           <p className="text-[13px] text-surface-200 mt-0.5">{keywords ? `${sorted.length} keywords` : 'Loading…'}</p>
@@ -79,7 +79,7 @@ export default function Keywords() {
         <button
           onClick={() => discoverMutation.mutate({})}
           disabled={discoverMutation.isPending}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-400 hover:bg-primary-500 disabled:opacity-50 text-surface-50 text-[13px] font-semibold rounded-xl transition-colors"
+          className="btn-primary text-[13px]"
         >
           <Icon name="plus-circle" size={16} />
           {discoverMutation.isPending ? 'Discovering…' : 'Discover'}
@@ -90,20 +90,20 @@ export default function Keywords() {
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-300" />
-          <input type="text" className="w-full bg-surface-800 border border-surface-500 rounded-xl pl-9 pr-3 py-2.5 text-[13px] text-surface-50 placeholder:text-surface-300 focus:outline-none focus:border-primary-500/50 font-medium" placeholder="Search keywords…" value={search} onChange={e => { setSearch(e.target.value); setDomain('') }} />
+          <input type="text" className="input pl-9 text-[13px] font-medium" placeholder="Search keywords…" value={search} onChange={e => { setSearch(e.target.value); setDomain('') }} />
         </div>
-        <select className="bg-surface-800 border border-surface-500 rounded-xl px-3 py-2.5 text-[13px] text-surface-100 focus:outline-none focus:border-primary-500/50 font-medium" value={domain} onChange={e => { setDomain(e.target.value); setSearch('') }}>
+        <select className="input w-auto min-w-36 text-[13px] font-medium" value={domain} onChange={e => { setDomain(e.target.value); setSearch('') }}>
           <option value="">All domains</option>
           {domains?.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
       </div>
 
       {/* Table */}
-      <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl overflow-hidden">
+      <div className="panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[12px]">
             <thead>
-              <tr className="border-b-2 border-surface-500 bg-surface-800/50">
+              <tr className="border-b border-surface-600 bg-surface-900/65">
                 {COLUMNS.map(({ key, label, align }) => (
                   <th
                     key={key}
@@ -128,21 +128,21 @@ export default function Keywords() {
                 const oppColor = oppScore >= 70 ? 'text-accent-green' : oppScore >= 50 ? 'text-accent-amber' : 'text-accent-red'
                 const gapColor = gapScore >= 70 ? 'text-accent-green' : gapScore >= 50 ? 'text-accent-amber' : 'text-accent-red'
                 return (
-                  <tr key={kw.keyword} className="border-b border-surface-500/30 hover:bg-surface-600/20 transition-colors">
+                  <tr key={kw.keyword} className="border-b border-surface-600/35 hover:bg-surface-700/35 transition-colors">
                     <td className="px-4 py-3 text-surface-50 font-semibold whitespace-nowrap">{kw.keyword}</td>
-                    <td className="px-4 py-3"><span className="text-[10px] px-2.5 py-0.5 rounded-lg bg-accent-violet/10 text-accent-violet font-semibold border border-accent-violet/15 whitespace-nowrap">{kw.domain}</span></td>
+                    <td className="px-4 py-3"><span className="tag bg-accent-violet/10 text-accent-violet border-accent-violet/20 whitespace-nowrap">{kw.domain}</span></td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {kw.scanned ? <span className="text-[11px] text-accent-green font-medium">Scanned {fmtDate(kw.last_scanned_at)}</span> : <span className="text-[11px] text-accent-amber font-medium">Pending</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="w-10 h-1 bg-surface-700 rounded-full overflow-hidden hidden sm:inline-block"><span className="block h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, oppScore)}%` }} /></span>
+                        <span className="progress-track w-10 hidden sm:inline-block"><span className="block h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, oppScore)}%` }} /></span>
                         <span className={`font-bold tabular-nums ${oppColor}`}>{kw.opportunity_score != null ? oppScore.toFixed(0) : '—'}</span>
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="w-10 h-1 bg-surface-700 rounded-full overflow-hidden hidden sm:inline-block"><span className="block h-full rounded-full bg-gradient-to-r from-accent-green to-accent-green/80" style={{ width: `${Math.min(100, gapScore)}%` }} /></span>
+                        <span className="progress-track w-10 hidden sm:inline-block"><span className="block h-full rounded-full bg-gradient-to-r from-accent-green to-accent-green/80" style={{ width: `${Math.min(100, gapScore)}%` }} /></span>
                         <span className={`font-bold tabular-nums ${gapColor}`}>{kw.gap_score != null ? gapScore.toFixed(0) : '—'}</span>
                       </span>
                     </td>

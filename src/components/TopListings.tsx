@@ -22,14 +22,14 @@ export default function TopListings({ data }: Props) {
   const estRevenuePerListing = estSales > 0 && listings > 0 ? (estSales * avgPrice) / Math.min(listings, 20) : 0
 
   return (
-    <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl p-4">
+    <div className="panel p-4">
       <div className="flex items-center gap-2 mb-3">
         <Icon name="package" size={14} className="text-accent-amber" />
-        <span className="text-[11px] font-bold text-surface-200 uppercase tracking-wider">Top Listings Overview</span>
+        <span className="section-label">Top Listings Overview</span>
       </div>
 
       {/* Revenue estimate card */}
-      <div className="bg-surface-800/50 rounded-xl p-3 mb-3 border border-surface-500/40">
+      <div className="rounded-lg border border-surface-600/45 bg-surface-900/45 p-3 mb-3">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[10px] text-surface-300 uppercase font-semibold">Est. Market Revenue</div>
@@ -68,7 +68,7 @@ export default function TopListings({ data }: Props) {
         <div className="text-[10px] text-surface-300 uppercase font-semibold mb-1.5">Sample Top Listings</div>
         <div className="space-y-1">
           {(data.top_listing_titles || []).slice(0, 5).map((title: string, i: number) => (
-            <div key={i} className="flex items-center gap-2 text-[11px] text-surface-200 py-1 border-b border-surface-500/30 last:border-0">
+            <div key={i} className="flex items-center gap-2 text-[11px] text-surface-200 py-1 border-b border-surface-600/30 last:border-0">
               <span className="text-surface-400 text-[10px] w-4 flex-shrink-0">{i + 1}.</span>
               <span className="truncate">{title}</span>
             </div>

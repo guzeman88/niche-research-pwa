@@ -23,17 +23,17 @@ export default function PriceDistribution({ data }: Props) {
   }))
 
   return (
-    <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl p-4">
+    <div className="panel p-4">
       <div className="flex items-center gap-2 mb-3">
         <Icon name="dollar-sign" size={14} className="text-accent-green" />
-        <span className="text-[11px] font-bold text-surface-200 uppercase tracking-wider">Price Distribution</span>
+        <span className="section-label">Price Distribution</span>
         <span className="text-[10px] text-surface-400 ml-auto">{data.total_listing_count?.toLocaleString()} listings</span>
       </div>
       <ResponsiveContainer width="100%" height={140}>
         <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
           <XAxis dataKey="name" tick={{ fill: '#5e81ac', fontSize: 9 }} axisLine={false} tickLine={false} />
           <YAxis hide />
-          <Tooltip contentStyle={{ background: '#434c5e', border: '1px solid #434c5e', borderRadius: '8px', fontSize: 11 }} formatter={(v: number) => [`$${v.toFixed(2)}`, '']} />
+          <Tooltip contentStyle={{ background: '#303948', border: '1px solid #465365', borderRadius: '8px', fontSize: 11 }} formatter={(v: number) => [`$${v.toFixed(2)}`, '']} />
           <Bar dataKey="price" radius={[3, 3, 0, 0]}>
             {chartData.map((d, i) => <Cell key={i} fill={d.color} />)}
           </Bar>

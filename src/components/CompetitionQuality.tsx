@@ -15,10 +15,10 @@ export default function CompetitionQuality({ data }: Props) {
   const color = score > 70 ? '#bf616a' : score > 40 ? '#ebcb8b' : '#a3be8c'
 
   return (
-    <div className="bg-surface-700/80 border border-surface-500/60 rounded-2xl p-4">
+    <div className="panel p-4">
       <div className="flex items-center gap-2 mb-3">
         <Icon name="sliders" size={14} className="text-accent-amber" />
-        <span className="text-[11px] font-bold text-surface-200 uppercase tracking-wider">Competition Quality</span>
+        <span className="section-label">Competition Quality</span>
       </div>
 
       <div className="flex items-center gap-4 mb-4">
@@ -27,7 +27,7 @@ export default function CompetitionQuality({ data }: Props) {
           <div className="text-[10px] text-surface-300 mb-1">
             {score > 70 ? 'Hard to compete — very established market' : score > 40 ? 'Moderate competition — achievable with good SEO' : 'Easy entry — weak incumbent listings'}
           </div>
-          <div className="h-2 bg-surface-700 rounded-full overflow-hidden">
+          <div className="progress-track h-2">
             <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, backgroundColor: color }} />
           </div>
         </div>
@@ -51,7 +51,7 @@ function BreakdownRow({ label, points, max, detail }: { label: string; points: n
         <span className="text-surface-200">{label}</span>
         <span className="text-surface-300">{detail}</span>
       </div>
-      <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+      <div className="progress-track">
         <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400" style={{ width: `${pct}%` }} />
       </div>
     </div>

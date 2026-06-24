@@ -27,12 +27,12 @@ export default function GapMeter({ signals, compositeScore }: Props) {
               <span className="text-surface-200">{s.label}</span>
               <span className="text-surface-300">wt: {s.weight.toFixed(2)}</span>
             </div>
-            <div className="h-2 bg-surface-700 rounded-full overflow-hidden">
+            <div className="progress-track h-2">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
                   width: `${Math.min(s.score, maxBarWidth)}%`,
-                  backgroundColor: s.score >= 60 ? '#a3be8c' : s.score >= 40 ? '#ebcb8b' : '#bf616a',
+                  backgroundColor: s.score >= 60 ? '#a9c88f' : s.score >= 40 ? '#f0cf89' : '#c86f7a',
                 }}
               />
             </div>

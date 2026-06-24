@@ -23,10 +23,12 @@ export default function Settings() {
   })
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-surface-50">Settings</h2>
-        <p className="text-sm text-surface-300 mt-1">Configuration and adapter status</p>
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Settings</h2>
+          <p className="text-sm text-surface-300 mt-1">Configuration and adapter status</p>
+        </div>
       </div>
 
       {/* Adapter status */}
@@ -34,7 +36,7 @@ export default function Settings() {
         <h3 className="text-sm font-semibold text-surface-100 mb-3">Adapter Status</h3>
         <div className="space-y-2">
           {adapters && Object.entries(adapters).map(([name, status]) => (
-            <div key={name} className="flex items-center justify-between py-2 border-b border-surface-500 last:border-0">
+            <div key={name} className="flex items-center justify-between py-2 border-b border-surface-600/45 last:border-0">
               <span className="text-sm text-surface-200">{name}</span>
               <div className="flex items-center gap-2">
                 <span className={`w-2 h-2 rounded-full ${status.healthy ? 'bg-emerald-400' : status.available ? 'bg-amber-400' : 'bg-red-400'}`} />
@@ -56,7 +58,7 @@ export default function Settings() {
         {settings?.settings?.niche_scoring ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {Object.entries(settings.settings.niche_scoring as Record<string, number>).map(([key, value]) => (
-              <div key={key} className="p-3 rounded-lg bg-surface-700/50">
+              <div key={key} className="panel-soft p-3">
                 <div className="text-xs text-surface-300 mb-1">{key.replace(/_/g, ' ')}</div>
                 <div className="text-lg font-bold text-surface-50">{value}</div>
               </div>

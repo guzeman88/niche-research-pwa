@@ -3,9 +3,9 @@ import Sidebar from './Sidebar'
 
 export default function Layout() {
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-surface-950 text-surface-50">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-64 flex-shrink-0 border-r border-surface-500 bg-surface-800">
+      <aside className="hidden lg:flex w-64 flex-shrink-0 border-r nav-surface">
         <Sidebar />
       </aside>
       {/* Main content */}
@@ -13,7 +13,7 @@ export default function Layout() {
         <Outlet />
       </main>
       {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-surface-500 bg-surface-800">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t nav-surface">
         <Sidebar mobile />
       </nav>
     </div>

@@ -20,7 +20,7 @@ export default function LogPanel({ entries, maxHeight = 'h-64' }: Props) {
 
   return (
     <div className={`card overflow-hidden p-0 ${maxHeight}`}>
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-surface-500 bg-surface-800/50">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-surface-600 bg-surface-900/55">
         <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
         <span className="text-xs font-medium text-surface-200">Live Log</span>
         <span className="text-xs text-surface-400 ml-auto">{entries.length} entries</span>

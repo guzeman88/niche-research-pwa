@@ -15,9 +15,9 @@ const colorMap = {
 
 export default function StatsCard({ label, value, subtitle, color = 'default' }: Props) {
   return (
-    <div className="card">
-      <div className="text-xs text-surface-300 mb-1">{label}</div>
-      <div className={`text-2xl font-bold ${colorMap[color]}`}>{value}</div>
+    <div className="metric-panel">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-surface-300 mb-1.5">{label}</div>
+      <div className={`text-2xl font-extrabold tracking-tight ${colorMap[color]}`}>{value}</div>
       {subtitle && <div className="text-xs text-surface-300 mt-1">{subtitle}</div>}
     </div>
   )

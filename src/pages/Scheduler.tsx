@@ -72,10 +72,12 @@ export default function Scheduler() {
   }, [queryClient])
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-surface-50">Scheduler</h2>
-        <p className="text-sm text-surface-300 mt-1">Autonomous keyword scanner</p>
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Scheduler</h2>
+          <p className="text-sm text-surface-300 mt-1">Autonomous keyword scanner</p>
+        </div>
       </div>
 
       {status && (
@@ -96,7 +98,7 @@ export default function Scheduler() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-surface-500">
+              <tr className="border-b border-surface-600">
                 <th className="text-left px-3 py-2 text-xs text-surface-200">Started</th>
                 <th className="text-left px-3 py-2 text-xs text-surface-200">Status</th>
                 <th className="text-left px-3 py-2 text-xs text-surface-200">Mode</th>
@@ -106,7 +108,7 @@ export default function Scheduler() {
             </thead>
             <tbody>
               {history?.map((h) => (
-                <tr key={h.id} className="border-b border-surface-500/50">
+                <tr key={h.id} className="border-b border-surface-600/45">
                   <td className="px-3 py-2 text-surface-200">{fmtDateTime(h.started_at)}</td>
                   <td className="px-3 py-2">
                     <span className={`text-xs ${h.status === 'running' ? 'text-accent-green' : h.status === 'stopped' ? 'text-accent-amber' : 'text-surface-300'}`}>
