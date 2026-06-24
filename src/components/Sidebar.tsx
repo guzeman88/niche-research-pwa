@@ -15,12 +15,14 @@ const NAV_ITEMS: { to: string; label: string; icon: IconName }[] = [
 ]
 
 export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
+  const fastDataReady = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0'
   const { data: health } = useQuery({
     queryKey: ['health'],
     queryFn: getHealth,
     refetchInterval: 30_000,
   })
   const dbOk = health?.integrity === 'ok'
+  const statusOk = dbOk || fastDataReady
 
   if (mobile) {
     return (
@@ -80,9 +82,9 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
 
       <div className="pt-4 border-t border-surface-600/60">
         <div className="flex items-center gap-2 rounded-lg border border-surface-600/55 bg-surface-800/55 px-3 py-2 text-[11px]">
-          <span className={`w-2 h-2 rounded-full ${dbOk ? 'bg-emerald-400 shadow-[0_0_6px_#a3be8c]' : 'bg-red-400'}`} />
+          <span className={`w-2 h-2 rounded-full ${dbOk ? 'bg-emerald-400 shadow-[0_0_6px_#a3be8c]' : statusOk ? 'bg-amber-400' : 'bg-red-400'}`} />
           <span className="text-surface-300 font-medium">
-            {dbOk ? 'Backend connected' : 'Offline'}
+            {dbOk ? 'Backend connected' : statusOk ? 'Fast data ready' : 'Offline'}
           </span>
         </div>
       </div>

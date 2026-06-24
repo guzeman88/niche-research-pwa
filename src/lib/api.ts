@@ -9,8 +9,9 @@ import type {
 import type { SchedulerStatus, SchedulerHistoryItem } from '../types/scheduler'
 import type { GapReport } from '../types/gaps'
 
-const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
-const USE_STATIC_DATA = import.meta.env.VITE_ALLOW_STATIC_DATA === '1';
+const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || 'https://niche-research-api-kqlt.onrender.com');
+const USE_STATIC_DATA = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
+let lastBackendWake = 0;
 
 // Static CDN data paths — instant, no backend needed for reads
 const STATIC_MAP: Record<string, string> = {
@@ -34,6 +35,16 @@ async function fetchStatic(path: string): Promise<any | null> {
   return null;
 }
 
+function wakeBackend() {
+  if (!BASE_URL) return;
+  const now = Date.now();
+  if (now - lastBackendWake < 60_000) return;
+  lastBackendWake = now;
+  fetch(`${BASE_URL}/api/health?_t=${now}`, {
+    headers: { 'Content-Type': 'application/json' },
+  }).catch(() => {});
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const isGet = !options?.method || options.method === 'GET';
 
@@ -42,6 +53,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${path}${isGet ? `${sep}_t=${Date.now()}` : ''}`;
 
   if (isGet) {
+    const staticData = await fetchStatic(path.split('?')[0]);
+    if (staticData) {
+      wakeBackend();
+      return staticData as T;
+    }
+
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
