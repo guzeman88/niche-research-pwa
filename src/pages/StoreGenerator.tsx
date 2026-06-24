@@ -1,101 +1,146 @@
-/** Store Generator — top opportunities grouped into store concepts for the PWA */
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getOpportunities, getTopGaps } from '../lib/api'
 import Icon from '../components/Icon'
 import { scoreColor } from '../lib/utils'
+import { generateStoreIdeas } from '../lib/storeIdeas'
 
-const COLORS = ['#6f96c8','#a9c88f','#f0cf89','#c29ad4','#c86f7a','#7f9fc6']
+const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
 
 export default function StoreGenerator() {
-  const { data: opps } = useQuery({ queryKey: ['opportunities', 200], queryFn: () => getOpportunities(undefined, 200) })
-  const { data: gaps } = useQuery({ queryKey: ['gaps', 200], queryFn: () => getTopGaps(200) })
+  const { data: opps, isLoading: oppsLoading, error: oppsError } = useQuery({
+    queryKey: ['opportunities', 300],
+    queryFn: () => getOpportunities(undefined, 300),
+  })
+  const { data: gaps, isLoading: gapsLoading } = useQuery({
+    queryKey: ['gaps', 250],
+    queryFn: () => getTopGaps(250),
+  })
 
-  // Group top opportunities by domain → store concept ideas
-  const concepts = useMemo(() => {
-    if (!opps || !Array.isArray(opps)) return []
-    const byDomain: Record<string, any[]> = {}
-    for (const o of opps.slice(0, 100)) {
-      const domain = (o as any).domain || 'discovered'
-      if (!byDomain[domain]) byDomain[domain] = []
-      if (byDomain[domain].length < 5) byDomain[domain].push(o)
-    }
-    return Object.entries(byDomain)
-      .filter(([_, kws]) => kws.length >= 2)
-      .map(([domain, kws]) => {
-        const avgOpp = kws.reduce((s: number, k: any) => s + (k.opportunity_score || 0), 0) / kws.length
-        const avgGap = kws.reduce((s: number, k: any) => s + (k.gap_score || 0), 0) / kws.length
-        const productTypes = inferProductTypes(domain, kws)
-        return {
-          name: `${domain.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} Store`,
-          domain,
-          keywords: kws.map((k: any) => k.keyword),
-          avgOpportunity: Math.round(avgOpp),
-          avgGap: Math.round(avgGap),
-          productTypes,
-          rationale: `${kws.length} related keywords with ${avgOpp.toFixed(0)} avg opportunity in the ${domain.replace(/_/g, ' ')} niche`,
-        }
-      })
-      .sort((a, b) => b.avgOpportunity - a.avgOpportunity)
-  }, [opps])
+  const concepts = useMemo(() => generateStoreIdeas(opps || [], gaps || []), [opps, gaps])
+  const isLoading = oppsLoading || gapsLoading
+  const bestConcept = concepts[0]
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
-        <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Store Generator</h2>
-        <p className="text-[13px] text-surface-200 mt-0.5">
-          {concepts.length} store concepts generated from top market opportunities
-        </p>
+          <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Store Idea Generator</h2>
+          <p className="text-[13px] text-surface-200 mt-0.5">
+            {concepts.length > 0
+              ? `${concepts.length} niche clusters built from top keyword performance`
+              : 'Find storeable niches that can hold multiple related keywords'}
+          </p>
         </div>
         <span className="chip">{concepts.length} concepts</span>
       </div>
 
-      {concepts.length > 0 ? (
+      {oppsError ? (
+        <div className="panel-soft p-12 text-center">
+          <Icon name="wifi-off" size={48} className="text-surface-400 mx-auto mb-4" />
+          <h3 className="text-[15px] font-bold text-surface-200 mb-2">Keyword data is unavailable</h3>
+          <p className="text-[13px] text-surface-400 max-w-md mx-auto">
+            Connect the backend and run keyword scans before generating store ideas.
+          </p>
+        </div>
+      ) : isLoading ? (
+        <div className="space-y-4" aria-busy="true" aria-label="Loading store ideas">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="panel p-5">
+              <div className="h-4 w-36 rounded bg-surface-500/40 animate-pulse" />
+              <div className="mt-4 h-3 w-full max-w-xl rounded bg-surface-500/30 animate-pulse" />
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="h-16 rounded bg-surface-500/20 animate-pulse" />
+                <div className="h-16 rounded bg-surface-500/20 animate-pulse" />
+                <div className="h-16 rounded bg-surface-500/20 animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : concepts.length > 0 ? (
         <div className="space-y-4">
-          {concepts.map((c, i) => {
-            const sc = scoreColor(c.avgOpportunity)
-            const color = COLORS[i % COLORS.length]
+          {concepts.map((concept, index) => {
+            const color = COLORS[index % COLORS.length]
             return (
-              <div key={c.domain} className="panel overflow-hidden">
-                {/* Top accent */}
+              <div key={concept.id} className="panel overflow-hidden">
                 <div className="h-1" style={{ background: `linear-gradient(90deg, ${color}, ${color}80)` }} />
                 <div className="p-5 space-y-4">
-                  {/* Header */}
-                  <div className="flex items-start justify-between">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
-                      <h3 className="text-[16px] font-extrabold text-surface-50">{c.name}</h3>
-                      <p className="text-[11px] text-surface-300 mt-0.5">{c.rationale}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-[16px] font-extrabold text-surface-50">{concept.name}</h3>
+                        {index === 0 && <span className="tag border-accent-gold/30 bg-accent-gold/10 text-accent-gold">best fit</span>}
+                      </div>
+                      <p className="text-[11px] text-surface-300 mt-1">{concept.focus}</p>
+                      <p className="text-[13px] text-surface-200 mt-3 max-w-3xl leading-relaxed">{concept.rationale}</p>
                     </div>
-                    <div className={`text-2xl font-extrabold ${sc}`}>{c.avgOpportunity}</div>
-                  </div>
-
-                  {/* Keywords */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {c.keywords.map((kw: string) => (
-                      <span key={kw} className="chip text-[10px] py-1">
-                        {kw}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Product types */}
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-[9px] text-surface-300 uppercase font-bold tracking-wider">Suggested Products:</span>
-                    {c.productTypes.map((pt: string) => (
-                      <span key={pt} className="tag">
-                        {pt.replace(/_/g, ' ')}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Gap indicator */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-surface-300 uppercase font-bold tracking-wider">Avg Gap:</span>
-                    <div className="progress-track flex-1 max-w-[120px]">
-                      <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${c.avgGap}%` }} />
+                    <div className="text-right">
+                      <div className={`text-3xl font-extrabold tabular-nums ${scoreColor(concept.nicheScore)}`}>{concept.nicheScore}</div>
+                      <div className="text-[10px] uppercase font-bold tracking-wider text-surface-400">niche score</div>
                     </div>
-                    <span className={`text-[11px] font-bold ${scoreColor(c.avgGap)}`}>{c.avgGap}/100</span>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <Signal label="Opportunity" value={concept.avgOpportunity} />
+                    <Signal label="Gap" value={concept.avgGap} />
+                    <Signal label="Cohesion" value={concept.cohesion} />
+                    <Signal label="Trend lift" value={concept.trendLift} suffix="/10" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="section-label">Product mix</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {concept.productTypes.map((product) => (
+                        <span key={product} className="tag">{product}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+                    <div className="space-y-3">
+                      <div className="section-label">Keyword evidence</div>
+                      <div className="space-y-2">
+                        {concept.keywords.map((keyword) => (
+                          <div key={keyword.keyword} className="flex items-center gap-3 text-[12px]">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-bold text-surface-100">{keyword.keyword}</div>
+                              <div className="text-[10px] text-surface-400">{keyword.product}</div>
+                            </div>
+                            <span className={`tabular-nums font-bold ${scoreColor(keyword.opportunity)}`}>{keyword.opportunity}</span>
+                            <span className={`tabular-nums font-bold ${scoreColor(keyword.gap)}`}>{keyword.gap}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="section-label">Why this works</div>
+                      <ul className="space-y-2 text-[12px] leading-relaxed text-surface-200">
+                        {concept.evidence.map((item) => (
+                          <li key={item} className="flex gap-2">
+                            <Icon name="check-circle" size={14} className="mt-0.5 flex-shrink-0 text-accent-green" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 border-t border-surface-500/40 pt-4 lg:grid-cols-2">
+                    <div className="space-y-2">
+                      <div className="section-label">First listing angles</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {concept.listingIdeas.map((idea) => (
+                          <span key={idea} className="chip text-[10px] py-1">{idea}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="section-label">Validation notes</div>
+                      <div className="space-y-1.5 text-[12px] text-surface-300">
+                        {concept.risks.map((risk) => <div key={risk}>{risk}</div>)}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -107,24 +152,35 @@ export default function StoreGenerator() {
           <Icon name="layers" size={48} className="text-surface-400 mx-auto mb-4" />
           <h3 className="text-[15px] font-bold text-surface-200 mb-2">No store concepts yet</h3>
           <p className="text-[13px] text-surface-400 max-w-md mx-auto">
-            Run keyword scans to discover opportunities. The generator groups related keywords into store concepts automatically.
+            Run keyword scans to discover enough related opportunities for niche clustering.
           </p>
+        </div>
+      )}
+
+      {bestConcept && (
+        <div className="panel-soft p-4 mt-4">
+          <div className="flex items-start gap-3">
+            <Icon name="target" size={18} className="mt-0.5 text-primary-200" />
+            <div>
+              <div className="text-[12px] font-bold text-surface-100">Best current direction: {bestConcept.name}</div>
+              <div className="text-[12px] text-surface-300 mt-1">
+                Start with {bestConcept.keywords.slice(0, 3).map((keyword) => keyword.keyword).join(', ')} and validate the first product collection before expanding.
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function inferProductTypes(domain: string, keywords: any[]): string[] {
-  const kwText = keywords.map((k: any) => k.keyword || '').join(' ').toLowerCase()
-  const types: string[] = []
-  if (/art|print|poster|wall|decor|frame|canvas/i.test(kwText) || /aesthetic|decor|home/i.test(domain)) types.push('wall_art')
-  if (/shirt|tee|hoodie|sweatshirt|apparel|clothing/i.test(kwText)) types.push('apparel')
-  if (/mug|cup|drink/i.test(kwText)) types.push('mug')
-  if (/sticker|decal/i.test(kwText)) types.push('sticker')
-  if (/tote|bag/i.test(kwText)) types.push('tote')
-  if (/digital|download|printable|svg|pdf/i.test(kwText)) types.push('digital_download')
-  if (/journal|notebook|planner/i.test(kwText)) types.push('journal')
-  if (types.length === 0) types.push('wall_art', 'digital_download')
-  return [...new Set(types || [])].slice(0, 5)
+function Signal({ label, value, suffix = '/100' }: { label: string; value: number; suffix?: string }) {
+  return (
+    <div className="rounded-md border border-surface-500/50 bg-surface-900/20 px-3 py-2">
+      <div className={`text-[18px] font-extrabold tabular-nums ${scoreColor(value)}`}>
+        {value}<span className="text-[10px] text-surface-400">{suffix}</span>
+      </div>
+      <div className="text-[10px] uppercase font-bold tracking-wider text-surface-400">{label}</div>
+    </div>
+  )
 }
