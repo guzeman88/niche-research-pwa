@@ -37,6 +37,11 @@ export interface StoreIdeaKeyword {
   opportunity: number
   gap: number
   product: string
+  demand?: number
+  margin?: number
+  estimatedRevenue?: number
+  avgPrice?: number
+  competitionEase?: number
 }
 
 export interface StoreIdea {
@@ -49,12 +54,25 @@ export interface StoreIdea {
   avgOpportunity: number
   avgGap: number
   nicheScore: number
+  profitScore?: number
+  profitGrade?: string
   cohesion: number
   trendLift: number
+  demandScore?: number
+  marginScore?: number
+  competitionEase?: number
+  buyerIntent?: number
+  confidenceScore?: number
+  avgPrice?: number
+  priceRange?: { min: number; max: number }
+  estimatedGrossMargin?: number
+  estimatedMonthlyRevenue?: number
   rationale: string
   evidence: string[]
   listingIdeas: string[]
   risks: string[]
+  profitDrivers?: string[]
+  validationChecklist?: string[]
 }
 
 const STOP_WORDS = new Set([

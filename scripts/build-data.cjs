@@ -31,6 +31,7 @@ function fetch(url) {
   const endpoints = [
     ['stats.json', '/api/stats'],
     ['opportunities.json', '/api/keywords/opportunities?limit=500'],
+    ['store-ideas.json', '/api/store-ideas/profitable?limit=12&signal_limit=1000'],
     ['gaps.json', '/api/gaps?limit=500'],
     ['keywords.json', '/api/keywords?limit=15000'],
     ['breakouts.json', '/api/keywords/breakouts?limit=100'],
@@ -49,6 +50,9 @@ function fetch(url) {
   for (const [filename, endpoint] of endpoints) {
     try {
       let data = await fetch(`${API}${endpoint}`);
+      if (filename === 'store-ideas.json' && !Array.isArray(data)) {
+        throw new Error(`store ideas snapshot expected an array, got ${typeof data}`);
+      }
       if (filename === 'stats.json' && data && data.total_seeds < MIN_KEYWORD_SNAPSHOT_COUNT) {
         useSeedFallback = true;
         const fallback = readFallback(filename);
@@ -85,6 +89,13 @@ function fetch(url) {
         console.warn(`  ${filename}: using seed snapshot fallback after fetch failure - ${e.message}`);
         console.log(`  ${filename}: ${Array.isArray(fallback) ? fallback.length : Object.keys(fallback).length} entries (${kb} KB)`);
       } else {
+        if (filename === 'store-ideas.json') {
+          const filepath = path.join(OUT, filename);
+          fs.writeFileSync(filepath, JSON.stringify([]));
+          console.warn(`  ${filename}: endpoint unavailable, writing empty snapshot - ${e.message}`);
+          console.log(`  ${filename}: 0 entries (2 bytes)`);
+          continue;
+        }
         console.error(`  ${filename}: FAILED - ${e.message}`);
         failed = true;
       }
