@@ -20,13 +20,14 @@ export default function Dashboard() {
 
   const opportunities = (reports || []).sort((a, b) => (b.opportunity_score || 0) - (a.opportunity_score || 0)).slice(0, 8)
   const domains = (stats?.domains || []).sort((a: any, b: any) => (b.cnt || 0) - (a.cnt || 0)).slice(0, 6)
+  const topOpportunity = opportunities[0]
+  const topGap = (stats as any)?.top_gap_keyword
 
   if (!stats && !reports) return <DashboardSkeleton />
 
   return (
     <PullToRefresh onRefresh={refresh}>
     <div className="page">
-      {/* Header */}
       <div className="page-header">
         <div>
           <p className="text-[12px] text-primary-100 font-semibold">Etsy intelligence</p>
@@ -38,29 +39,25 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Chip stats row - horizontal scroll on mobile */}
       <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
         <Chip val={fmt(stats?.total_seeds)} label="Keywords" sub={`${stats?.total_seeds || 0} seeds`} color="indigo" />
-        <Chip val={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '—'} label="Avg Opp" sub={`range 41–82`} color="emerald" />
+        <Chip val={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} label="Avg Opp" sub={topOpportunity ? 'from reports' : 'no reports'} color="emerald" />
         <Chip val={fmt(stats?.breakout_count)} label="Breakouts" sub="rising fast" color="amber" />
-        <Chip val={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '—'} label="Avg Gap" sub="best: 81.2" color="violet" />
+        <Chip val={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} label="Avg Gap" sub={topGap?.keyword ? 'top gap available' : 'no gap data'} color="violet" />
       </div>
 
-      {/* Big metric cards */}
       <div className="grid grid-cols-2 gap-2.5">
         <MetricCard icon="database" label="Coverage" value={`${stats?.coverage_pct || 0}%`} sub={`${fmt(stats?.scanned)} of ${fmt(stats?.total_seeds)} scanned`} color="indigo" />
-        <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '—'} sub="Top: trendy stickers 82.3" color="emerald" />
+        <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} sub={topOpportunity ? `Top: ${topOpportunity.seed_keywords?.join(', ') || 'Unnamed'} ${(topOpportunity.opportunity_score || 0).toFixed(1)}` : 'No reports yet'} color="emerald" />
         <MetricCard icon="zap" label="Total Scans" value={fmt(stats?.total_scans)} sub={`${fmt(stats?.domains?.length)} domains`} color="amber" />
-        <MetricCard icon="activity" label="Avg Gap Score" value={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '—'} sub="Best: fall aesthetic 81.2" color="violet" />
+        <MetricCard icon="activity" label="Avg Gap Score" value={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} sub={topGap?.keyword ? `Top: ${topGap.keyword} ${(topGap.gap_score || 0).toFixed(1)}` : 'No gap data yet'} color="violet" />
       </div>
 
-      {/* Score distribution chart + Gap overview */}
       <div className="grid lg:grid-cols-2 gap-5">
         <ScoreDistribution />
         <GapOverview />
       </div>
 
-      {/* Top Opportunities ranked list */}
       <Section title="Top Opportunities" link="/keywords" linkLabel="See all">
         <div className="panel overflow-hidden">
           {opportunities.length > 0 ? opportunities.map((r, i) => (
@@ -82,12 +79,11 @@ export default function Dashboard() {
               </div>
             </Link>
           )) : (
-            <div className="px-4 py-10 text-center text-sm text-surface-300">No reports yet. Run your first research!</div>
+            <div className="px-4 py-10 text-center text-sm text-surface-300">No reports yet.</div>
           )}
         </div>
       </Section>
 
-      {/* Two-column: domains + breakouts */}
       <div className="grid lg:grid-cols-2 gap-5">
         <Section title="Domain Breakdown" subtitle="by keyword volume">
           <div className="panel p-4 space-y-2.5">
@@ -111,8 +107,6 @@ export default function Dashboard() {
     </PullToRefresh>
   )
 }
-
-// ── Sub-components ──
 
 function Chip({ val, label, sub, color }: { val: string; label: string; sub: string; color: 'indigo' | 'emerald' | 'amber' | 'violet' }) {
   const colors = { indigo: 'from-surface-800 to-surface-700/50 border-accent-blue/20', emerald: 'from-accent-green/20 to-accent-green/10 border-accent-green/20', amber: 'from-accent-amber/20 to-accent-amber/10 border-accent-amber/20', violet: 'from-accent-violet/20 to-accent-violet/10 border-accent-violet/20' }
@@ -155,7 +149,7 @@ function Section({ title, subtitle, link, linkLabel, icon, children }: { title: 
           <span className="section-label">{title}</span>
           {subtitle && <span className="text-[10px] text-surface-400 ml-1">{subtitle}</span>}
         </div>
-        {link && linkLabel && <Link to={link} className="text-[11px] font-semibold text-primary-200 hover:text-primary-200">{linkLabel} →</Link>}
+        {link && linkLabel && <Link to={link} className="text-[11px] font-semibold text-primary-200 hover:text-primary-200">{linkLabel} -&gt;</Link>}
       </div>
       {children}
     </div>

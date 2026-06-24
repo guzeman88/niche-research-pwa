@@ -33,7 +33,6 @@ function fetch(url) {
     ['keywords.json', '/api/keywords?limit=15000'],
     ['breakouts.json', '/api/keywords/breakouts?limit=100'],
     ['reports.json', '/api/research/reports?limit=50'],
-    ['stores.json', '/api/stores'],
   ];
 
   for (const [filename, endpoint] of endpoints) {

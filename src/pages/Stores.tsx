@@ -6,30 +6,30 @@ import Icon from '../components/Icon'
 import PullToRefresh from '../components/PullToRefresh'
 import { StoresSkeleton } from '../components/Skeleton'
 
-const COLORS = ['#6f96c8','#a9c88f','#f0cf89','#c29ad4','#c86f7a','#7f9fc6']
+const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
 
 export default function Stores() {
   const qc = useQueryClient()
-  const { data: stores, isLoading } = useQuery<StoreItem[]>({ queryKey: ['stores'], queryFn: getStores })
+  const { data: rawStores, isLoading, isError } = useQuery<StoreItem[]>({ queryKey: ['stores'], queryFn: getStores })
+  const stores = rawStores || []
   const [selected, setSelected] = useState<string>('')
-  const current = stores?.find(s => s.slug === selected)
+  const current = stores.find(s => s.slug === selected)
   const showDetail = !!current
   const refresh = () => { qc.invalidateQueries(); return Promise.resolve() }
 
-  const colorFor = (slug: string) => COLORS[(stores || []).findIndex(s => s.slug === slug) % COLORS.length]
+  const colorFor = (slug: string) => COLORS[Math.max(0, stores.findIndex(s => s.slug === slug)) % COLORS.length]
 
-  if (!stores && isLoading) return <StoresSkeleton />
+  if (!rawStores && isLoading) return <StoresSkeleton />
 
-  // ── Mobile + Desktop: Master list ──
   const masterList = (
     <div className="flex flex-col h-full">
       <div className="px-4 pt-4 pb-3 border-b border-surface-600/60 bg-surface-900/45">
         <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">My Stores</h2>
-        <p className="text-[12px] text-surface-300 mt-0.5">{stores?.length || 0} stores · {stores?.filter(s => s.active).length || 0} active</p>
+        <p className="text-[12px] text-surface-300 mt-0.5">{stores.length} stores / {stores.filter(s => s.active).length} active</p>
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
-        {isLoading && <p className="text-xs text-surface-300 text-center py-12">Loading…</p>}
-        {stores?.map(s => {
+        {isLoading && <p className="text-xs text-surface-300 text-center py-12">Loading...</p>}
+        {stores.map(s => {
           const color = colorFor(s.slug)
           return (
             <button
@@ -50,21 +50,21 @@ export default function Stores() {
             </button>
           )
         })}
-        {stores?.length === 0 && !isLoading && (
+        {stores.length === 0 && !isLoading && (
           <div className="text-center py-12">
             <Icon name="package" size={40} className="text-surface-400 mx-auto mb-3" />
             <p className="text-[13px] text-surface-300">No stores yet</p>
-            <p className="text-[11px] text-surface-400 mt-1">Save stores from the Pipeline</p>
+            <p className="text-[11px] text-surface-400 mt-1">
+              {isError ? 'Connect the backend to load saved stores.' : 'Saved stores will appear here.'}
+            </p>
           </div>
         )}
       </div>
     </div>
   )
 
-  // ── Detail view ──
   const detailView = current && (
     <div className="flex flex-col h-full">
-      {/* Header with back button */}
       <div className="px-4 pt-4 pb-4 border-b border-surface-600/60 bg-surface-900/45">
         <button onClick={() => setSelected('')} className="lg:hidden flex items-center gap-1.5 text-[13px] text-surface-200 font-medium mb-3">
           <Icon name="chevron-left" size={16} /> Back
@@ -78,7 +78,6 @@ export default function Stores() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {/* Chips row */}
         <div className="flex flex-wrap gap-1.5">
           {(current.product_types || []).map(t => (
             <span key={t} className="tag py-1">
@@ -92,7 +91,6 @@ export default function Stores() {
           </span>
         </div>
 
-        {/* Key metrics */}
         <div className="panel p-4">
           <div className="text-[10px] text-surface-300 uppercase font-bold tracking-wider mb-3">Store Details</div>
           <div className="space-y-2.5">
@@ -105,7 +103,6 @@ export default function Stores() {
           </div>
         </div>
 
-        {/* Secondary niches */}
         {current.niche_secondary?.length > 0 && (
           <div>
             <div className="text-[10px] text-surface-300 uppercase font-bold tracking-wider mb-2">Secondary Niches</div>
@@ -119,7 +116,6 @@ export default function Stores() {
           </div>
         )}
 
-        {/* Back button for desktop */}
         <button onClick={() => setSelected('')} className="hidden lg:flex items-center gap-1.5 text-[13px] text-surface-200 font-medium">
           <Icon name="chevron-left" size={16} /> Back to stores
         </button>
@@ -127,11 +123,9 @@ export default function Stores() {
     </div>
   )
 
-  // ── Desktop layout: side-by-side ──
   return (
     <PullToRefresh onRefresh={refresh}>
     <>
-      {/* Desktop: split panel */}
       <div className="hidden lg:flex h-full">
         <div className="w-80 flex-shrink-0 border-r border-surface-600/60 bg-surface-900/45">
           {masterList}
@@ -149,7 +143,6 @@ export default function Stores() {
         </div>
       </div>
 
-      {/* Mobile: master-detail toggle */}
       <div className="lg:hidden h-full">
         {showDetail ? (
           <div className="h-full">{detailView}</div>

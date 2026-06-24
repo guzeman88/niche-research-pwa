@@ -63,9 +63,9 @@ export default function TopListings({ data }: Props) {
         </div>
       </div>
 
-      {/* Sample listing titles */}
+      {/* Listing titles from the report payload */}
       <div className="mt-3">
-        <div className="text-[10px] text-surface-300 uppercase font-semibold mb-1.5">Sample Top Listings</div>
+        <div className="text-[10px] text-surface-300 uppercase font-semibold mb-1.5">Top Listings</div>
         <div className="space-y-1">
           {(data.top_listing_titles || []).slice(0, 5).map((title: string, i: number) => (
             <div key={i} className="flex items-center gap-2 text-[11px] text-surface-200 py-1 border-b border-surface-600/30 last:border-0">

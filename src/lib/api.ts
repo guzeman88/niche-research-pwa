@@ -10,6 +10,7 @@ import type { SchedulerStatus, SchedulerHistoryItem } from '../types/scheduler'
 import type { GapReport } from '../types/gaps'
 
 const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
+const USE_STATIC_DATA = import.meta.env.VITE_ALLOW_STATIC_DATA === '1';
 
 // Static CDN data paths — instant, no backend needed for reads
 const STATIC_MAP: Record<string, string> = {
@@ -18,12 +19,12 @@ const STATIC_MAP: Record<string, string> = {
   '/api/gaps': '/data/gaps.json',
   '/api/keywords': '/data/keywords.json',
   '/api/research/reports': '/data/reports.json',
-  '/api/stores': '/data/stores.json',
   '/api/keywords/breakouts': '/data/breakouts.json',
 };
 
 // Try loading from static CDN JSON first (instant), fall back to API
 async function fetchStatic(path: string): Promise<any | null> {
+  if (!USE_STATIC_DATA) return null;
   const staticPath = STATIC_MAP[path] || (path.startsWith('/api/keywords?') ? '/data/keywords.json' : null);
   if (!staticPath) return null;
   try {

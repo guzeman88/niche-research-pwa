@@ -14,11 +14,11 @@ export default defineConfig({
         name: 'Niche Research',
         short_name: 'NicheResearch',
         description: 'Multi-source Etsy niche intelligence tool',
-        theme_color: '#6366f1',
-        background_color: '#0f172a',
+        theme_color: '#202631',
+        background_color: '#202631',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/?v=7',
+        start_url: '/?v=8',
         icons: [
           { src: 'icon-72x72.png', sizes: '72x72', type: 'image/png' },
           { src: 'icon-96x96.png', sizes: '96x96', type: 'image/png' },
@@ -37,20 +37,8 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        // Force unique cache namespace so old SW cache is completely orphaned
-        cacheId: 'etsy-niches-v7',
-        runtimeCaching: [
-          {
-            // GET requests: serve cached instantly, refresh in background
-            urlPattern: /^https?:\/\/.*\/api\/.*/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'api-cache-v4',
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
+        cacheId: 'etsy-niches-v8',
+        runtimeCaching: [],
       },
     }),
   ],
