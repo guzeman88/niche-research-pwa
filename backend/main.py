@@ -114,6 +114,19 @@ async def startup():
     count = kdb.load_seeds_from_library()
     print(f"[startup] Keyword DB initialized. {count} library seeds loaded.")
 
+    auto_start_scheduler = os.environ.get("AUTO_START_SCHEDULER", "1") != "0"
+    if auto_start_scheduler:
+        try:
+            from services.scheduler_service import start_scheduler
+            mode = os.environ.get("SCHEDULER_MODE", "continuous")
+            batch_size = int(os.environ.get("SCHEDULER_BATCH_SIZE", "5"))
+            result = start_scheduler(mode=mode, batch_size=batch_size)
+            print(f"[startup] Scheduler auto-start result: {result}")
+        except Exception as exc:
+            print(f"[startup] Scheduler auto-start failed: {exc}", flush=True)
+    else:
+        print("[startup] Scheduler auto-start disabled by AUTO_START_SCHEDULER=0")
+
 
 @app.on_event("shutdown")
 async def shutdown():
