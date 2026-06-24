@@ -10,8 +10,6 @@ export default function TopListings({ data }: Props) {
   // Simulated top listings from scraper data — the scraper collects this but we need to surface it
   // For now, show the market-level aggregates with revenue estimates
   const estMonthlyRevenue = data.estimated_market_monthly_revenue_usd || 0
-  const avgPrice = data.avg_price_usd || 0
-  const listings = data.total_listing_count || 0
   const reviewCount = data.avg_review_count || 0
   const starPct = data.pct_star_sellers || 0
   const bestPct = data.pct_bestsellers || 0
@@ -19,8 +17,6 @@ export default function TopListings({ data }: Props) {
 
   // Revenue calculation explanation (EverBee heuristic)
   const estSales = Math.round(reviewCount * 20) // reviews × 20 = estimated lifetime sales
-  const estRevenuePerListing = estSales > 0 && listings > 0 ? (estSales * avgPrice) / Math.min(listings, 20) : 0
-
   return (
     <div className="panel p-4">
       <div className="flex items-center gap-2 mb-3">

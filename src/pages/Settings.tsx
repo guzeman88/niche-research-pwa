@@ -1,11 +1,9 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSettings, updateSettings, getAdapterStatus, getExportCsvUrl, getExportJsonUrl } from '../lib/api'
+import { useQuery } from '@tanstack/react-query'
+import { getSettings, getAdapterStatus, getExportCsvUrl, getExportJsonUrl } from '../lib/api'
 import Icon from '../components/Icon'
 import type { AdapterStatus } from '../types/api'
 
 export default function Settings() {
-  const queryClient = useQueryClient()
-
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: getSettings,
@@ -15,11 +13,6 @@ export default function Settings() {
     queryKey: ['adapter-status'],
     queryFn: getAdapterStatus,
     refetchInterval: 10_000,
-  })
-
-  const saveMutation = useMutation({
-    mutationFn: updateSettings,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
   })
 
   return (

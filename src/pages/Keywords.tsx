@@ -4,7 +4,7 @@ import { listKeywords, getDomains, runDiscovery } from '../lib/api'
 import Icon from '../components/Icon'
 import PullToRefresh from '../components/PullToRefresh'
 import { KeywordsSkeleton } from '../components/Skeleton'
-import { fmtDate, scoreColor } from '../lib/utils'
+import { fmtDate } from '../lib/utils'
 import type { KeywordItem } from '../types/api'
 
 type SortKey = 'keyword' | 'domain' | 'status' | 'opportunity' | 'gap' | 'trajectory'

@@ -21,14 +21,18 @@ export default function Explore() {
     if (!kw.length) return
     setPhase('running'); setLogs([]); setReport(null)
     try {
-      const { run_id } = await runResearch(kw)
+      await runResearch(kw)
       const es = new EventSource('/api/stream')
       eventSourceRef.current = es
-      es.addEventListener('log', e => { try { setLogs(p => [...p.slice(-200), JSON.parse(e.data)]) } catch {} })
-      es.addEventListener('complete', async () => { es.close(); setPhase('complete'); try { setReport(await getLatestReport() as NicheReport) } catch {} })
+      es.addEventListener('log', e => { try { setLogs(p => [...p.slice(-200), JSON.parse(e.data)]) } catch {
+        // Ignore malformed SSE log events.
+      } })
+      es.addEventListener('complete', async () => { es.close(); setPhase('complete'); try { setReport(await getLatestReport() as NicheReport) } catch {
+        // Completion still matters even if the latest report fetch misses.
+      } })
       es.addEventListener('error', () => { es.close(); if (phase === 'running') { setPhase('error'); setLogs(p => [...p, { level: 'error', message: 'Connection lost', timestamp: new Date().toISOString() }]) } })
     } catch (err: any) { setPhase('error'); setLogs(p => [...p, { level: 'error', message: `Failed: ${err.message}`, timestamp: new Date().toISOString() }]) }
-  }, [keywords])
+  }, [keywords, phase])
 
   return (
     <div className="page">

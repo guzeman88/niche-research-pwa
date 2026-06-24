@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { getStats, getBreakouts, listReports } from '../lib/api'
+import { getStats, listReports } from '../lib/api'
 import Icon from '../components/Icon'
 import ScoreDistribution from '../components/ScoreDistribution'
 import GapOverview from '../components/GapOverview'
@@ -14,7 +14,6 @@ import type { ReportListItem } from '../types/research'
 export default function Dashboard() {
   const qc = useQueryClient()
   const { data: stats } = useQuery<StatsResponse>({ queryKey: ['stats'], queryFn: getStats, refetchInterval: 15_000 })
-  const { data: breakouts } = useQuery<{ keyword: string }[]>({ queryKey: ['breakouts'], queryFn: () => getBreakouts(8) })
   const { data: reports } = useQuery<ReportListItem[]>({ queryKey: ['reports'], queryFn: () => listReports('__global__', 12) })
   const refresh = () => { qc.invalidateQueries(); return Promise.resolve() }
 

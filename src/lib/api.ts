@@ -33,7 +33,9 @@ async function fetchStatic(path: string): Promise<any | null> {
   try {
     const res = await fetch(staticPath);
     if (res.ok) return res.json();
-  } catch {}
+  } catch {
+    // Static data is an optional fast path; callers fall back to the API.
+  }
   return null;
 }
 
@@ -94,7 +96,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       ...options,
     });
   } catch (err) {
-    throw new Error(`Network error: backend unreachable at ${url}`);
+    const error = new Error(`Network error: backend unreachable at ${url}`) as Error & { cause?: unknown };
+    error.cause = err;
+    throw error;
   }
   const contentType = res.headers.get('content-type') || '';
   // If we got HTML instead of JSON, the backend is unreachable
