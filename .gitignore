@@ -14,3 +14,4 @@ backend/workspace/
 logs/
 .netlify/
 render-*.png
+public/data/*.json
