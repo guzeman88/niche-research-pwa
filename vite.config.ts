@@ -18,7 +18,7 @@ export default defineConfig({
         background_color: '#202631',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/?v=8',
+        start_url: '/?v=9',
         icons: [
           { src: 'icon-72x72.png', sizes: '72x72', type: 'image/png' },
           { src: 'icon-96x96.png', sizes: '96x96', type: 'image/png' },
@@ -37,7 +37,7 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        cacheId: 'etsy-niches-v8',
+        cacheId: 'etsy-niches-v9',
         runtimeCaching: [],
       },
     }),
