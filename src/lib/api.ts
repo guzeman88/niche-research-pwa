@@ -220,8 +220,30 @@ export interface StoreItem {
   brand_voice: string; aesthetic: string; pricing_strategy: string;
 }
 
-export function getStores(): Promise<StoreItem[]> {
-  return request('/api/stores');
+const SAMPLE_STORE_SLUGS = new Set([
+  'botanical-bliss-prints',
+  'dark-academia-decor',
+  'minimalist-morning',
+  'nurse-humor-gifts',
+  'retro-wave-tees',
+])
+
+const SAMPLE_STORE_NAMES = new Set([
+  'botanical bliss prints',
+  'dark academia decor',
+  'minimalist morning',
+  'nurse humor gifts',
+  'retro wave tees',
+])
+
+function isSampleStore(store: StoreItem): boolean {
+  return SAMPLE_STORE_SLUGS.has((store.slug || '').toLowerCase())
+    || SAMPLE_STORE_NAMES.has((store.name || '').toLowerCase())
+}
+
+export async function getStores(): Promise<StoreItem[]> {
+  const stores = await request<StoreItem[]>('/api/stores');
+  return stores.filter(store => !isSampleStore(store));
 }
 
 // ── Export ──────────────────────────────────────────────────────────────
