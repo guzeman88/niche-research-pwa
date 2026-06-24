@@ -7,6 +7,7 @@ const path = require('path');
 
 const API = process.env.VITE_API_URL || 'https://niche-research-api-kqlt.onrender.com';
 const OUT = path.join(__dirname, '..', 'public', 'data');
+const FALLBACK = path.join(__dirname, '..', 'backend', 'seed_data', 'static');
 const MIN_KEYWORD_SNAPSHOT_COUNT = Number(process.env.MIN_KEYWORD_SNAPSHOT_COUNT || 13000);
 
 function fetch(url) {
@@ -37,20 +38,56 @@ function fetch(url) {
   ];
 
   let failed = false;
+  let useSeedFallback = false;
+
+  function readFallback(filename) {
+    const filepath = path.join(FALLBACK, filename);
+    if (!fs.existsSync(filepath)) return null;
+    return JSON.parse(fs.readFileSync(filepath, 'utf8'));
+  }
 
   for (const [filename, endpoint] of endpoints) {
     try {
-      const data = await fetch(`${API}${endpoint}`);
+      let data = await fetch(`${API}${endpoint}`);
+      if (filename === 'stats.json' && data && data.total_seeds < MIN_KEYWORD_SNAPSHOT_COUNT) {
+        useSeedFallback = true;
+        const fallback = readFallback(filename);
+        if (!fallback || fallback.total_seeds < MIN_KEYWORD_SNAPSHOT_COUNT) {
+          throw new Error(`stats snapshot only reports ${data.total_seeds} keywords; fallback is missing or too small`);
+        }
+        console.warn(`  ${filename}: backend only reports ${data.total_seeds} keywords; using seed snapshot stats`);
+        data = fallback;
+      } else if (useSeedFallback) {
+        const fallback = readFallback(filename);
+        if (fallback) {
+          console.warn(`  ${filename}: using seed snapshot because backend stats are undersized`);
+          data = fallback;
+        }
+      }
       if (filename === 'keywords.json' && Array.isArray(data) && data.length < MIN_KEYWORD_SNAPSHOT_COUNT) {
-        throw new Error(`keyword snapshot only has ${data.length} rows; expected at least ${MIN_KEYWORD_SNAPSHOT_COUNT}`);
+        const fallback = readFallback(filename);
+        if (!Array.isArray(fallback) || fallback.length < MIN_KEYWORD_SNAPSHOT_COUNT) {
+          throw new Error(`keyword snapshot only has ${data.length} rows; fallback is missing or too small`);
+        }
+        console.warn(`  ${filename}: backend only returned ${data.length}; using ${fallback.length}-row seed snapshot`);
+        data = fallback;
       }
       const filepath = path.join(OUT, filename);
       fs.writeFileSync(filepath, JSON.stringify(data));
       const kb = (fs.statSync(filepath).size / 1024).toFixed(1);
       console.log(`  ${filename}: ${Array.isArray(data) ? data.length : Object.keys(data).length} entries (${kb} KB)`);
     } catch (e) {
-      console.error(`  ${filename}: FAILED - ${e.message}`);
-      failed = true;
+      const fallback = readFallback(filename);
+      if (fallback) {
+        const filepath = path.join(OUT, filename);
+        fs.writeFileSync(filepath, JSON.stringify(fallback));
+        const kb = (fs.statSync(filepath).size / 1024).toFixed(1);
+        console.warn(`  ${filename}: using seed snapshot fallback after fetch failure - ${e.message}`);
+        console.log(`  ${filename}: ${Array.isArray(fallback) ? fallback.length : Object.keys(fallback).length} entries (${kb} KB)`);
+      } else {
+        console.error(`  ${filename}: FAILED - ${e.message}`);
+        failed = true;
+      }
     }
   }
 
