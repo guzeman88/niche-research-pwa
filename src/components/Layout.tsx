@@ -9,12 +9,17 @@ export default function Layout() {
         <Sidebar />
       </aside>
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto pb-16 lg:pb-0">
+      <main className="flex-1 overflow-y-auto pb-24 lg:pb-0">
         <Outlet />
       </main>
       {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t nav-surface">
-        <Sidebar mobile />
+      <nav
+        aria-label="Primary"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden"
+      >
+        <div className="pointer-events-auto w-full max-w-[25rem] rounded-lg border mobile-nav-surface">
+          <Sidebar mobile />
+        </div>
       </nav>
     </div>
   )

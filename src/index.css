@@ -76,4 +76,7 @@
   .nav-surface {
     @apply border-surface-600/70 bg-surface-900/95 shadow-[0_18px_42px_rgba(7,10,14,0.22)] backdrop-blur-xl;
   }
+  .mobile-nav-surface {
+    @apply border-surface-500/45 bg-surface-900/90 shadow-[0_18px_46px_rgba(7,10,14,0.42),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-2xl;
+  }
 }
