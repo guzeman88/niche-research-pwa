@@ -6,7 +6,7 @@
   "background_color": "#202631",
   "display": "standalone",
   "orientation": "any",
-  "start_url": "/?v=14",
+  "start_url": "/?v=15",
   "scope": "/",
   "icons": [
     { "src": "/icon-72x72.png", "sizes": "72x72", "type": "image/png" },

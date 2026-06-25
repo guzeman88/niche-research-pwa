@@ -8,27 +8,47 @@
 
 [[redirects]]
   from = "/explore"
-  to = "/?v=14"
+  to = "/?v=15"
   status = 301
   force = true
 
 [[redirects]]
   from = "/scheduler"
-  to = "/?v=14"
+  to = "/?v=15"
   status = 301
   force = true
 
 [[redirects]]
   from = "/settings"
-  to = "/?v=14"
+  to = "/?v=15"
   status = 301
   force = true
 
 [[redirects]]
   from = "/reports/*"
-  to = "/?v=14"
+  to = "/?v=15"
   status = 301
   force = true
+
+[[redirects]]
+  from = "/assets/index-DoXtF8yg.js"
+  to = "/assets/app.js"
+  status = 200
+
+[[redirects]]
+  from = "/assets/index-DBDt_jGF.js"
+  to = "/assets/app.js"
+  status = 200
+
+[[redirects]]
+  from = "/assets/index-XQM_7qib.js"
+  to = "/assets/app.js"
+  status = 200
+
+[[redirects]]
+  from = "/assets/*"
+  to = "/asset-missing.js"
+  status = 404
 
 [[redirects]]
   from = "/*"
@@ -54,6 +74,21 @@
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/app.js"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/assets/app.css"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/asset-missing.js"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0, must-revalidate"
 
 [[headers]]
   for = "/sw.js"
