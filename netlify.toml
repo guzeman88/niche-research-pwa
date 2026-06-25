@@ -7,9 +7,48 @@
 # Set: VITE_API_URL = https://niche-research-api-kqlt.onrender.com
 
 [[redirects]]
+  from = "/explore"
+  to = "/?v=13"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/scheduler"
+  to = "/?v=13"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/settings"
+  to = "/?v=13"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/reports/*"
+  to = "/?v=13"
+  status = 301
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0, must-revalidate"
 
 [[headers]]
   for = "/assets/*"
@@ -19,7 +58,7 @@
 [[headers]]
   for = "/sw.js"
   [headers.values]
-    Cache-Control = "no-cache"
+    Cache-Control = "no-store, max-age=0, must-revalidate"
     Service-Worker-Allowed = "/"
 
 [[headers]]

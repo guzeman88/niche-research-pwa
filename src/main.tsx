@@ -4,7 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import ErrorBoundary from './components/ErrorBoundary'
+import { registerPwaUpdates } from './pwa'
 import './index.css'
+
+registerPwaUpdates()
 
 const queryClient = new QueryClient({
   defaultOptions: {
