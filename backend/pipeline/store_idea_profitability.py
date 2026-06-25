@@ -203,7 +203,7 @@ def _to_signal(row: dict[str, Any]) -> KeywordSignal | None:
         demand=_score(row.get("demand_score") or row.get("opportunity_score")),
         margin=_score(row.get("margin_score")),
         trend=_score(row.get("trend_score")),
-        competition_quality=_score(row.get("competition_quality") or row.get("competition_score") or 50),
+        competition_quality=_score(row.get("competition_quality") or row.get("competition_score")),
         avg_price=_number(row.get("avg_price_usd")),
         revenue=_number(row.get("monthly_revenue_usd")),
         listing_count=int(_number(row.get("listing_count"))),
@@ -279,8 +279,9 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
     trend_score = _calculate_trend_score(signals)
     buyer_intent = _calculate_buyer_intent(signals)
     confidence = _calculate_confidence(signals)
-    price_floor, price_ceiling = _price_range(signals, product_types, avg_price)
-    gross_margin = _estimated_gross_margin(product_types, price_floor, price_ceiling)
+    has_price_basis = avg_price > 0 or any(signal.price_min > 0 and signal.price_max > 0 for signal in signals)
+    price_floor, price_ceiling = _price_range(signals, product_types, avg_price) if has_price_basis else (0.0, 0.0)
+    gross_margin = _estimated_gross_margin(product_types, price_floor, price_ceiling) if has_price_basis else 0.0
     price_power = _calculate_price_power(price_floor, price_ceiling, avg_price, gross_margin)
     fulfillment_ease = _average([PRODUCT_ECONOMICS.get(product, PRODUCT_ECONOMICS["digital_download"])["ease"] for product in product_types])
 
@@ -323,7 +324,7 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
                 "product": _format_product(signal.products[0] if signal.products else product_types[0]),
                 "estimatedRevenue": round(signal.revenue) if signal.revenue > 0 else None,
                 "avgPrice": round(signal.avg_price, 2) if signal.avg_price > 0 else None,
-                "competitionEase": round(100 - signal.competition_quality),
+                "competitionEase": round(100 - signal.competition_quality) if signal.competition_quality > 0 else None,
             }
             for signal in signals[:8]
         ],
@@ -336,13 +337,13 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
         "cohesion": round(cohesion),
         "trendLift": round(min(10, trend_score / 10)),
         "demandScore": round(avg_demand),
-        "marginScore": round(gross_margin),
+        "marginScore": round(gross_margin) if has_price_basis else None,
         "competitionEase": round(competition_ease),
         "buyerIntent": round(buyer_intent),
         "confidenceScore": round(confidence),
         "avgPrice": round(avg_price, 2) if avg_price > 0 else None,
-        "priceRange": {"min": round(price_floor, 2), "max": round(price_ceiling, 2)},
-        "estimatedGrossMargin": round(gross_margin),
+        "priceRange": {"min": round(price_floor, 2), "max": round(price_ceiling, 2)} if has_price_basis else None,
+        "estimatedGrossMargin": round(gross_margin) if has_price_basis else None,
         "estimatedMonthlyRevenue": round(revenue) if revenue_signals else None,
         "rationale": _make_rationale(signals, focus, product_types, profit_score, gross_margin),
         "evidence": _make_evidence(signals, cluster, product_types, revenue, competition_ease),
@@ -455,7 +456,7 @@ def _calculate_trend_score(signals: list[KeywordSignal]) -> float:
     values = []
     for signal in signals:
         trajectory = signal.trajectory.lower()
-        value = signal.trend or 50
+        value = signal.trend
         if signal.breakout:
             value = max(value, 92)
         elif "rising" in trajectory or "up" in trajectory:
@@ -499,11 +500,15 @@ def _calculate_confidence(signals: list[KeywordSignal]) -> float:
 def _calculate_competition_ease(signals: list[KeywordSignal]) -> float:
     values = []
     for signal in signals:
-        quality_ease = 100 - signal.competition_quality
-        listing_bonus = 0
+        components = []
+        if signal.competition_quality > 0:
+            components.append((100 - signal.competition_quality) * 0.72)
         if signal.listing_count > 0:
-            listing_bonus = _clamp(30 - math.log10(max(10, signal.listing_count)) * 5)
-        values.append(_clamp(quality_ease * 0.72 + signal.gap * 0.18 + listing_bonus))
+            components.append(_clamp(30 - math.log10(max(10, signal.listing_count)) * 5))
+        if signal.gap > 0:
+            components.append(signal.gap * 0.18)
+        if components:
+            values.append(_clamp(sum(components)))
     return _average(values)
 
 
@@ -534,17 +539,20 @@ def _estimated_gross_margin(products: list[str], price_floor: float, price_ceili
 
 
 def _calculate_price_power(price_floor: float, price_ceiling: float, avg_price: float, gross_margin: float) -> float:
+    if price_floor <= 0 or price_ceiling <= 0:
+        return 0.0
     spread = max(0.0, price_ceiling - price_floor)
     spread_score = _clamp(spread / max(price_ceiling, 1) * 140)
-    premium_room = _clamp((price_ceiling - avg_price) / max(avg_price, 1) * 100 + 50) if avg_price > 0 else 55
+    premium_room = _clamp((price_ceiling - avg_price) / max(avg_price, 1) * 100 + 50) if avg_price > 0 else 0
     return _clamp(spread_score * 0.30 + premium_room * 0.30 + gross_margin * 0.40)
 
 
 def _make_rationale(signals: list[KeywordSignal], focus: str, products: list[str], profit: float, margin: float) -> str:
     product_text = ", ".join(_format_product(product) for product in products[:3])
+    margin_text = f"{round(margin)}% estimated gross margin" if margin > 0 else "no populated gross-margin data"
     return (
         f"{len(signals)} related keywords form a storeable {focus} niche with "
-        f"{round(profit)}/100 profit potential, {round(margin)}% estimated gross margin, "
+        f"{round(profit)}/100 profit potential, {margin_text}, "
         f"and a launchable mix across {product_text}."
     )
 
@@ -572,13 +580,18 @@ def _make_listing_ideas(cluster: ClusterSeed, products: list[str]) -> list[str]:
 
 
 def _make_profit_drivers(margin: float, revenue: float, competition_ease: float, buyer_intent: float, confidence: float) -> list[str]:
+    margin_driver = (
+        f"{round(margin)}% estimated gross margin after product cost and fee reserve."
+        if margin > 0
+        else "Gross-margin data is not populated yet."
+    )
     revenue_driver = (
         f"${round(revenue):,}/mo sampled revenue signal across supporting keywords."
         if revenue > 0
         else "Revenue signal is not populated yet; use price, margin, gap, and demand as pre-validation signals."
     )
     return [
-        f"{round(margin)}% estimated gross margin after product cost and fee reserve.",
+        margin_driver,
         revenue_driver,
         f"{round(competition_ease)}/100 competition ease from gap and incumbent quality signals.",
         f"{round(buyer_intent)}/100 buyer intent from gift, custom, event, and price cues.",
@@ -606,9 +619,14 @@ def _make_risks(signals: list[KeywordSignal], avg_gap: float, cohesion: float, p
 def _make_validation_checklist(signals: list[KeywordSignal], products: list[str], price_floor: float, price_ceiling: float) -> list[str]:
     keywords = ", ".join(signal.keyword for signal in signals[:3])
     product = _format_product(products[0])
+    price_text = (
+        f"in the ${round(price_floor)}-${round(price_ceiling)} range"
+        if price_floor > 0 and price_ceiling > 0
+        else "after collecting price data"
+    )
     return [
         f"Check page-one Etsy results for {keywords}.",
-        f"Prototype 5 {product} listings in the ${round(price_floor)}-${round(price_ceiling)} range.",
+        f"Prototype 5 {product} listings {price_text}.",
         "Confirm top competitors have weak titles, tags, photos, or stale listings.",
         "Run a second scan after the first collection keywords are selected.",
     ]

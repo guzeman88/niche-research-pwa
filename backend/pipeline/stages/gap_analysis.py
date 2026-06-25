@@ -201,8 +201,8 @@ def run(
           (ksd_list[0] if ksd_list else {})
 
     listing_count = ksd.get("total_listing_count", 0) or 0
-    trend_score = niche_report_data.get("trend_velocity_score", 50.0) or 50.0
-    demand_score = niche_report_data.get("demand_score", 50.0) or 50.0
+    trend_score = niche_report_data.get("trend_velocity_score") or 0.0
+    demand_score = niche_report_data.get("demand_score") or 0.0
     avg_favorites = ksd.get("avg_favorites", 0) or 0
 
     # Volume gap = demand signal / log(supply)
@@ -214,9 +214,9 @@ def run(
 
     # ── Step 5: Quality gap (weak incumbent listings) ─────────────────────────
     competition_quality = niche_report_data.get("avg_competition_quality") or \
-                          ksd.get("competition_quality_score", 50.0) or 50.0
+                          ksd.get("competition_quality_score") or 0.0
     # Quality gap = how low the bar is. Low quality incumbents = easy to rank above them.
-    quality_gap = max(0.0, min(100.0, 100.0 - competition_quality))
+    quality_gap = max(0.0, min(100.0, 100.0 - competition_quality)) if competition_quality > 0 else 0.0
     report.quality_gap_score = round(quality_gap, 1)
 
     # ── Step 6: Price gap (underserved price range) ───────────────────────────

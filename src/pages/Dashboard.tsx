@@ -17,7 +17,7 @@ export default function Dashboard() {
   const { data: reports } = useQuery<ReportListItem[]>({ queryKey: ['reports'], queryFn: () => listReports('__global__', 12) })
   const refresh = () => { qc.invalidateQueries(); return Promise.resolve() }
 
-  const opportunities = (reports || []).sort((a, b) => (b.opportunity_score || 0) - (a.opportunity_score || 0)).slice(0, 8)
+  const opportunities = (reports || []).sort((a, b) => numericScore(b.opportunity_score) - numericScore(a.opportunity_score)).slice(0, 8)
   const domains = (stats?.domains || []).sort((a: any, b: any) => (b.cnt || 0) - (a.cnt || 0)).slice(0, 6)
   const topOpportunity = opportunities[0]
   const topGap = (stats as any)?.top_gap_keyword
@@ -39,17 +39,17 @@ export default function Dashboard() {
       </div>
 
       <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-        <Chip val={fmt(stats?.total_seeds)} label="Keywords" sub={`${stats?.total_seeds || 0} seeds`} color="indigo" />
+        <Chip val={fmt(stats?.total_seeds)} label="Keywords" sub={stats?.total_seeds ? `${stats.total_seeds} seeds` : 'No data'} color="indigo" />
         <Chip val={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} label="Avg Opp" sub={topOpportunity ? 'from reports' : 'no reports'} color="emerald" />
         <Chip val={fmt(stats?.breakout_count)} label="Breakouts" sub="rising fast" color="amber" />
         <Chip val={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} label="Avg Gap" sub={topGap?.keyword ? 'top gap available' : 'no gap data'} color="violet" />
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <MetricCard icon="database" label="Coverage" value={`${stats?.coverage_pct || 0}%`} sub={`${fmt(stats?.scanned)} of ${fmt(stats?.total_seeds)} scanned`} color="indigo" />
-        <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} sub={topOpportunity ? `Top: ${topOpportunity.seed_keywords?.join(', ') || 'Unnamed'} ${(topOpportunity.opportunity_score || 0).toFixed(1)}` : 'No reports yet'} color="emerald" />
+        <MetricCard icon="database" label="Coverage" value={stats?.coverage_pct == null ? '-' : `${stats.coverage_pct}%`} sub={`${fmt(stats?.scanned)} of ${fmt(stats?.total_seeds)} scanned`} color="indigo" />
+        <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} sub={topOpportunity ? `Top: ${topOpportunity.seed_keywords?.join(', ') || 'Unnamed'} ${formatScore(topOpportunity.opportunity_score)}` : 'No reports yet'} color="emerald" />
         <MetricCard icon="zap" label="Total Scans" value={fmt(stats?.total_scans)} sub={`${fmt(stats?.domains?.length)} domains`} color="amber" />
-        <MetricCard icon="activity" label="Avg Gap Score" value={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} sub={topGap?.keyword ? `Top: ${topGap.keyword} ${(topGap.gap_score || 0).toFixed(1)}` : 'No gap data yet'} color="violet" />
+        <MetricCard icon="activity" label="Avg Gap Score" value={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} sub={topGap?.keyword ? `Top: ${topGap.keyword} ${formatScore(topGap.gap_score)}` : 'No gap data yet'} color="violet" />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
@@ -71,9 +71,9 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="progress-track w-12 hidden sm:block">
-                  <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, (r.opportunity_score || 0))}%` }} />
+                  {r.opportunity_score != null && <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, r.opportunity_score)}%` }} />}
                 </div>
-                <span className={`text-[13px] font-bold tabular-nums ${scoreColor(r.opportunity_score || 0)}`}>{(r.opportunity_score || 0).toFixed(1)}</span>
+                <span className={`text-[13px] font-bold tabular-nums ${r.opportunity_score == null ? 'text-surface-400' : scoreColor(r.opportunity_score)}`}>{formatScore(r.opportunity_score)}</span>
               </div>
             </div>
           )) : (
@@ -152,4 +152,12 @@ function Section({ title, subtitle, link, linkLabel, icon, children }: { title: 
       {children}
     </div>
   )
+}
+
+function numericScore(value: number | null | undefined): number {
+  return Number.isFinite(value) ? Number(value) : -1
+}
+
+function formatScore(value: number | null | undefined): string {
+  return Number.isFinite(value) ? Number(value).toFixed(1) : '-'
 }
