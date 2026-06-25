@@ -11,7 +11,27 @@ jobs:
     steps:
       - name: Trigger Render deploy hook
         if: ${{ env.RENDER_DEPLOY_HOOK_URL != '' }}
-        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            echo "Triggering Render deploy hook (attempt ${attempt}/5)..."
+            body="$(mktemp)"
+            status="$(curl -sS -o "$body" -w "%{http_code}" -X POST "$RENDER_DEPLOY_HOOK_URL" || true)"
+            echo "Render deploy hook status: ${status}"
+            if [ -s "$body" ]; then
+              sed -e 's/[[:cntrl:]]//g' "$body" | head -c 1200
+              echo
+            fi
+            if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
+              exit 0
+            fi
+            if [ "$status" != "409" ]; then
+              exit 1
+            fi
+            sleep $((attempt * 30))
+          done
+          echo "Render kept returning 409. The service may be suspended or locked by a deploy already in progress."
+          exit 1
 
       - name: Explain missing deploy hook
         if: ${{ env.RENDER_DEPLOY_HOOK_URL == '' }}
@@ -25,8 +45,9 @@ jobs:
 
       - name: Verify backend health and scheduler
         run: |
-          curl -fsS https://niche-research-api-kqlt.onrender.com/api/health
-          curl -fsS https://niche-research-api-kqlt.onrender.com/api/stats | tee stats.json
+          curl -i -fsS https://niche-research-api-kqlt.onrender.com/api/health
+          curl -i -fsS https://niche-research-api-kqlt.onrender.com/api/stats | tee stats.raw
+          sed -n '/^{/,$p' stats.raw > stats.json
           node -e "const s=require('./stats.json'); if ((s.total_seeds || 0) < 13000) throw new Error('Backend has fewer than 13000 keywords')"
           STATUS=$(curl -fsS https://niche-research-api-kqlt.onrender.com/api/scheduler/status || echo '{}')
           echo "$STATUS"
