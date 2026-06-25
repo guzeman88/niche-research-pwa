@@ -32,9 +32,9 @@ export default function Dashboard() {
           <p className="text-[12px] text-primary-100 font-semibold">Etsy intelligence</p>
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Dashboard</h2>
         </div>
-        <Link to="/explore" className="btn-primary text-[13px]">
+        <Link to="/store-generator" className="btn-primary text-[13px]">
           <Icon name="plus-circle" size={16} />
-          Research
+          Generate Ideas
         </Link>
       </div>
 
@@ -60,10 +60,9 @@ export default function Dashboard() {
       <Section title="Top Opportunities" link="/keywords" linkLabel="See all">
         <div className="panel overflow-hidden">
           {opportunities.length > 0 ? opportunities.map((r, i) => (
-            <Link
+            <div
               key={r.report_id}
-              to={`/reports/${r.report_id}`}
-              className="flex items-center gap-3 px-4 py-3 border-b border-surface-600/35 last:border-b-0 hover:bg-surface-700/45 transition-colors"
+              className="flex items-center gap-3 px-4 py-3 border-b border-surface-600/35 last:border-b-0"
             >
               <RankBadge rank={i + 1} />
               <div className="flex-1 min-w-0">
@@ -76,7 +75,7 @@ export default function Dashboard() {
                 </div>
                 <span className={`text-[13px] font-bold tabular-nums ${scoreColor(r.opportunity_score || 0)}`}>{(r.opportunity_score || 0).toFixed(1)}</span>
               </div>
-            </Link>
+            </div>
           )) : (
             <div className="px-4 py-10 text-center text-sm text-surface-300">No reports yet.</div>
           )}
