@@ -55,7 +55,7 @@ export default function Stores() {
             <Icon name="package" size={40} className="text-surface-400 mx-auto mb-3" />
             <p className="text-[13px] text-surface-300">No stores yet</p>
             <p className="text-[11px] text-surface-400 mt-1">
-              {isError ? 'Connect the backend to load saved stores.' : 'Saved stores will appear here.'}
+              {isError ? 'Stores saved on this device will still appear here.' : 'Saved stores will appear here.'}
             </p>
           </div>
         )}

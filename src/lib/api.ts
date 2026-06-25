@@ -242,21 +242,120 @@ const SAMPLE_STORE_NAMES = new Set([
   'retro wave tees',
 ])
 
+const LOCAL_STORES_KEY = 'niche-research-pwa:stores:v1'
+
 function isSampleStore(store: StoreItem): boolean {
   return SAMPLE_STORE_SLUGS.has((store.slug || '').toLowerCase())
     || SAMPLE_STORE_NAMES.has((store.name || '').toLowerCase())
 }
 
-export async function getStores(): Promise<StoreItem[]> {
-  const stores = await request<StoreItem[]>('/api/stores');
-  return stores.filter(store => !isSampleStore(store));
+function hasBrowserStorage(): boolean {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 }
 
-export function createStore(payload: CreateStorePayload): Promise<StoreItem> {
-  return request('/api/stores', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+function readLocalStores(): StoreItem[] {
+  if (!hasBrowserStorage()) return []
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORES_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter(isValidStore) : []
+  } catch {
+    return []
+  }
+}
+
+function writeLocalStores(stores: StoreItem[]): void {
+  if (!hasBrowserStorage()) return
+  window.localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores.filter(isValidStore)))
+}
+
+function isValidStore(store: unknown): store is StoreItem {
+  if (!store || typeof store !== 'object') return false
+  const item = store as Partial<StoreItem>
+  return typeof item.slug === 'string' && typeof item.name === 'string' && typeof item.niche === 'string'
+}
+
+function slugifyStoreName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/g, '') || 'store'
+}
+
+function storeFromPayload(payload: CreateStorePayload, existing: StoreItem[] = []): StoreItem {
+  const existingSlugs = new Set(existing.map(store => store.slug))
+  const baseSlug = slugifyStoreName(payload.name)
+  let slug = baseSlug
+  let suffix = 2
+  while (existingSlugs.has(slug)) {
+    slug = `${baseSlug.slice(0, 56).replace(/-+$/g, '')}-${suffix}`
+    suffix += 1
+  }
+
+  return {
+    slug,
+    name: payload.name.trim(),
+    niche: payload.niche.trim(),
+    niche_secondary: payload.niche_secondary || [],
+    target_audience: payload.target_audience || '',
+    product_types: payload.product_types?.length ? payload.product_types : ['digital_download'],
+    active: true,
+    created_at: new Date().toISOString(),
+    listing_target: payload.listing_target || 50,
+    brand_voice: payload.brand_voice || '',
+    aesthetic: payload.aesthetic || '',
+    pricing_strategy: payload.pricing_strategy || 'competitive',
+    research_snapshot: {
+      ...(payload.research_snapshot || {}),
+      saved_offline: true,
+    },
+  }
+}
+
+function mergeStores(serverStores: StoreItem[], localStores: StoreItem[]): StoreItem[] {
+  const bySlug = new Map<string, StoreItem>()
+  for (const store of [...serverStores, ...localStores]) {
+    if (!isValidStore(store) || isSampleStore(store)) continue
+    bySlug.set(store.slug, store)
+  }
+  return Array.from(bySlug.values()).sort((a, b) => {
+    const aTime = Date.parse(a.created_at || '')
+    const bTime = Date.parse(b.created_at || '')
+    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0)
+  })
+}
+
+function saveLocalStore(store: StoreItem): StoreItem {
+  const stores = readLocalStores()
+  const next = mergeStores([], [store, ...stores])
+  writeLocalStores(next)
+  return store
+}
+
+export async function getStores(): Promise<StoreItem[]> {
+  const localStores = readLocalStores()
+  try {
+    const stores = await request<StoreItem[]>('/api/stores')
+    return mergeStores(stores, localStores)
+  } catch {
+    return mergeStores([], localStores)
+  }
+}
+
+export async function createStore(payload: CreateStorePayload): Promise<StoreItem> {
+  try {
+    const store = await request<StoreItem>('/api/stores', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    saveLocalStore(store)
+    return store
+  } catch {
+    return saveLocalStore(storeFromPayload(payload, readLocalStores()))
+  }
 }
 
 // ── Export ──────────────────────────────────────────────────────────────
