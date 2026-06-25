@@ -16,18 +16,22 @@ const BARS = [
 export default function PriceDistribution({ data }: Props) {
   if (!data || !data.avg_price_usd) return null
 
-  const chartData = BARS.map(b => ({
-    name: b.label,
-    price: (data as any)[`price_${b.key}`] || 0,
-    color: b.color,
-  }))
+  const chartData = BARS
+    .map(b => ({
+      name: b.label,
+      price: positiveNumber((data as any)[`price_${b.key}`]),
+      color: b.color,
+    }))
+    .filter((item): item is { name: string; price: number; color: string } => item.price != null)
+
+  if (chartData.length === 0) return null
 
   return (
     <div className="panel p-4">
       <div className="flex items-center gap-2 mb-3">
         <Icon name="dollar-sign" size={14} className="text-accent-green" />
         <span className="section-label">Price Distribution</span>
-        <span className="text-[10px] text-surface-400 ml-auto">{data.total_listing_count?.toLocaleString()} listings</span>
+        <span className="text-[10px] text-surface-400 ml-auto">{data.total_listing_count ? `${data.total_listing_count.toLocaleString()} listings` : 'No listing count'}</span>
       </div>
       <ResponsiveContainer width="100%" height={140}>
         <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
@@ -48,4 +52,9 @@ export default function PriceDistribution({ data }: Props) {
       </div>
     </div>
   )
+}
+
+function positiveNumber(value: unknown): number | null {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null
 }

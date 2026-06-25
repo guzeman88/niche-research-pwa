@@ -507,7 +507,7 @@ def _calculate_gap_score(
     buyer_intent = score_keyword_buyer_intent(keyword)
     supply_gap = _score_supply_gap(listing_count)
     listing_eff = _score_listing_efficiency(monthly_rev or 0, listing_count)
-    quality_gap = 100.0 - (comp_quality or 50.0)
+    quality_gap = 100.0 - comp_quality if comp_quality and comp_quality > 0 else 0.0
 
     lightweight = (
         (demand or 0) * 0.18
@@ -552,7 +552,7 @@ def save_scan(keyword: str, report) -> None:
     opp = r.get("opportunity_score") or 0
     demand = r.get("demand_score") or 0
     trend = r.get("trend_velocity_score") or 0
-    comp_q = comp_quality or 50
+    comp_q = comp_quality if comp_quality and comp_quality > 0 else 0
     margin = r.get("margin_score") or 0
     monthly_rev = r.get("estimated_market_monthly_revenue_usd") or 0
 
@@ -671,7 +671,7 @@ def rebuild_gap_scores() -> int:
             r["keyword"],
             demand=r["demand_score"] or 0,
             trend=r["trend_score"] or 0,
-            comp_quality=r["competition_quality"] or 50,
+            comp_quality=r["competition_quality"] or 0,
             margin=r["margin_score"] or 0,
             monthly_rev=r["monthly_revenue_usd"] or 0,
             listing_count=r["listing_count"],
@@ -1224,7 +1224,7 @@ def save_gap_report(
             kw,
             demand=latest["demand_score"] or 0,
             trend=latest["trend_score"] or 0,
-            comp_quality=latest["competition_quality"] or 50,
+            comp_quality=latest["competition_quality"] or 0,
             margin=latest["margin_score"] or 0,
             monthly_rev=latest["monthly_revenue_usd"] or 0,
             listing_count=latest["listing_count"],

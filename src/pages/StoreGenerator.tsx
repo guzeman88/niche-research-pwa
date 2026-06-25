@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createStore, getOpportunities, getProfitableStoreIdeas, getTopGaps } from '../lib/api'
+import { createStore, getProfitableStoreIdeas } from '../lib/api'
 import Icon from '../components/Icon'
 import { fmtPrice, scoreColor } from '../lib/utils'
-import { generateStoreIdeas } from '../lib/storeIdeas'
 import type { StoreIdea } from '../lib/storeIdeas'
 
 const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
@@ -22,24 +21,12 @@ export default function StoreGenerator() {
     queryFn: () => getProfitableStoreIdeas(12),
   })
 
-  const { data: opps, isLoading: oppsLoading, error: oppsError } = useQuery({
-    queryKey: ['opportunities', 300],
-    queryFn: () => getOpportunities(undefined, 300),
-    enabled: !profitableIdeas?.length,
-  })
-  const { data: gaps, isLoading: gapsLoading } = useQuery({
-    queryKey: ['gaps', 250],
-    queryFn: () => getTopGaps(250),
-    enabled: !profitableIdeas?.length,
-  })
-
-  const fallbackConcepts = useMemo(() => generateStoreIdeas(opps || [], gaps || []), [opps, gaps])
-  const concepts = profitableIdeas?.length ? profitableIdeas : fallbackConcepts
+  const concepts = useMemo(() => profitableIdeas || [], [profitableIdeas])
   const isProfitRanked = Boolean(profitableIdeas?.length)
-  const isLoading = profitableLoading || (!profitableIdeas?.length && (oppsLoading || gapsLoading))
-  const loadError = profitableError && oppsError
+  const isLoading = profitableLoading
+  const loadError = profitableError
   const bestConcept = concepts[0]
-  const scoreLabel = isProfitRanked ? 'profit' : 'keyword fit'
+  const scoreLabel = 'profit'
 
   const saveStore = useMutation({
     mutationFn: (concept: StoreIdea) => createStore(toStorePayload(concept)),
@@ -60,12 +47,12 @@ export default function StoreGenerator() {
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Store Idea Generator</h2>
           <p className="text-[13px] text-surface-200 mt-0.5">
             {concepts.length > 0
-              ? `${concepts.length} ${isProfitRanked ? 'profit-ranked' : 'keyword-fit'} concepts built from keyword intelligence`
+              ? `${concepts.length} profit-ranked concepts built from keyword intelligence`
               : 'Find storeable niches that can hold multiple related keywords'}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <span className="chip">{isProfitRanked ? 'profit model' : 'keyword proxy'}</span>
+          <span className="chip">{isProfitRanked ? 'profit model' : 'no data'}</span>
           {savedConcepts.size > 0 && (
             <span className="text-[11px] font-semibold text-accent-green">{savedConcepts.size} saved to My Stores</span>
           )}
@@ -102,16 +89,11 @@ export default function StoreGenerator() {
         </div>
       ) : concepts.length > 0 ? (
         <div className="space-y-4">
-          {!isProfitRanked && (
-            <div className="panel-soft border-primary-300/20 bg-primary-400/10 p-3 text-[12px] text-surface-200">
-              Store ideas are using the static keyword snapshot because the profit-ranked backend feed is empty. Scores are niche-fit proxies from demand, gap, margin, competition, and cohesion signals; revenue and price stay blank until marketplace data exists.
-            </div>
-          )}
           {concepts.map((concept, index) => {
             const color = COLORS[index % COLORS.length]
             const isSaved = savedConcepts.has(concept.id)
             const isSaving = saveStore.isPending && saveStore.variables?.id === concept.id
-            const displayScore = isProfitRanked ? profitScore(concept) : concept.nicheScore
+            const displayScore = profitScore(concept)
             const grade = concept.profitGrade || gradeFor(displayScore)
             return (
               <div key={concept.id} className="panel overflow-hidden">
@@ -251,9 +233,9 @@ export default function StoreGenerator() {
       ) : (
         <div className="panel-soft p-12 text-center">
           <Icon name="layers" size={48} className="text-surface-400 mx-auto mb-4" />
-          <h3 className="text-[15px] font-bold text-surface-200 mb-2">No store concepts yet</h3>
+          <h3 className="text-[15px] font-bold text-surface-200 mb-2">No store idea data yet</h3>
           <p className="text-[13px] text-surface-400 max-w-md mx-auto">
-            Run keyword scans to discover enough related opportunities for niche clustering.
+            No profit-ranked store ideas are available from the current keyword data.
           </p>
         </div>
       )}
@@ -339,7 +321,7 @@ function toStorePayload(concept: StoreIdea) {
     pricing_strategy: profit >= 78 || (concept.estimatedGrossMargin || 0) >= 58 ? 'premium' : concept.avgGap >= 60 ? 'competitive' : 'penetration',
     listing_target: profit >= 78 ? 75 : 50,
     research_snapshot: {
-      source: concept.profitScore ? 'profitability_engine' : 'niche_cluster_fallback',
+      source: 'profitability_engine',
       profit_score: concept.profitScore,
       keyword_fit_score: concept.nicheScore,
       profit_grade: concept.profitGrade || gradeFor(profit),
