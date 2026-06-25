@@ -14,6 +14,13 @@ interface KeywordSignal {
   domain: string
   opportunity: number
   gap: number
+  demand?: number
+  margin?: number
+  competitionEase?: number
+  buyerIntent?: number
+  avgPrice?: number
+  estimatedRevenue?: number
+  priceRange?: { min: number; max: number }
   trajectory: string
   breakout: boolean
   products: string[]
@@ -155,13 +162,13 @@ const INTENTS: TaxonomyItem[] = [
 ]
 
 export function generateStoreIdeas(opportunities: OpportunityLike[] = [], gaps: GapReport[] = []): StoreIdea[] {
-  const gapScores = new Map<string, number>()
+  const gapReports = new Map<string, GapReport>()
   for (const gap of gaps) {
-    gapScores.set(normalizeKeyword(gap.keyword), toScore(gap.composite_gap_score))
+    gapReports.set(normalizeKeyword(gap.keyword), gap)
   }
 
   const signals = opportunities
-    .map((item) => toKeywordSignal(item, gapScores))
+    .map((item) => toKeywordSignal(item, gapReports))
     .filter((signal): signal is KeywordSignal => Boolean(signal))
     .filter((signal) => signal.opportunity > 0 || signal.gap > 0)
     .sort((a, b) => weightedKeywordScore(b) - weightedKeywordScore(a))
@@ -176,20 +183,34 @@ export function generateStoreIdeas(opportunities: OpportunityLike[] = [], gaps: 
     .slice(0, 12)
 }
 
-function toKeywordSignal(item: OpportunityLike, gapScores: Map<string, number>): KeywordSignal | null {
+function toKeywordSignal(item: OpportunityLike, gapReports: Map<string, GapReport>): KeywordSignal | null {
   const keyword = String(item.keyword || '').trim()
   if (!keyword) return null
 
   const normalized = normalizeKeyword(keyword)
   const domain = String(item.domain || 'discovered').replace(/_/g, ' ')
+  const gapReport = gapReports.get(normalized)
+  const competition = firstFinite(item.competition_score, item.competition_quality)
+  const recommendedMin = positiveNumber(gapReport?.recommended_price_min)
+  const recommendedMax = positiveNumber(gapReport?.recommended_price_max)
+  const priceRange = recommendedMin && recommendedMax && recommendedMax >= recommendedMin
+    ? { min: recommendedMin, max: recommendedMax }
+    : undefined
 
   return {
     keyword,
     domain,
     opportunity: toScore(item.opportunity_score),
-    gap: toScore(item.gap_score ?? gapScores.get(normalized)),
+    gap: toScore(item.gap_score ?? gapReport?.composite_gap_score),
+    demand: optionalScore(item.demand_score),
+    margin: optionalScore(item.margin_score),
+    competitionEase: competition == null ? undefined : clampScore(100 - competition),
+    buyerIntent: optionalScore(gapReport?.buyer_intent_score),
+    avgPrice: positiveNumber(item.avg_price_usd),
+    estimatedRevenue: positiveNumber(item.monthly_revenue_usd),
+    priceRange,
     trajectory: String(item.trajectory || ''),
-    breakout: Boolean(item.breakout),
+    breakout: Boolean(item.breakout || item.breakout_flag),
     products: matchProducts(normalized, domain),
     audience: matchTaxonomy(normalized, AUDIENCES),
     theme: matchTaxonomy(normalized, THEMES),
@@ -263,6 +284,13 @@ function toStoreIdea(cluster: ClusterSeed): StoreIdea | null {
 
   const avgOpportunity = average(signals.map((signal) => signal.opportunity))
   const avgGap = average(signals.map((signal) => signal.gap))
+  const avgDemand = optionalAverage(signals.map((signal) => signal.demand))
+  const avgMargin = optionalAverage(signals.map((signal) => signal.margin))
+  const avgCompetitionEase = optionalAverage(signals.map((signal) => signal.competitionEase))
+  const avgBuyerIntent = optionalAverage(signals.map((signal) => signal.buyerIntent))
+  const avgPrice = positiveAverage(signals.map((signal) => signal.avgPrice))
+  const revenueSignals = signals.map((signal) => signal.estimatedRevenue).filter(isPositiveNumber)
+  const priceRanges = signals.map((signal) => signal.priceRange).filter((range): range is { min: number; max: number } => Boolean(range))
   const productTypes = rankProducts(signals)
   const cohesion = calculateCohesion(signals, cluster)
   const trendLift = calculateTrendLift(signals)
@@ -290,6 +318,11 @@ function toStoreIdea(cluster: ClusterSeed): StoreIdea | null {
       opportunity: Math.round(signal.opportunity),
       gap: Math.round(signal.gap),
       product: formatProduct(signal.products[0] || productTypes[0] || 'digital_download'),
+      demand: maybeRound(signal.demand),
+      margin: maybeRound(signal.margin),
+      estimatedRevenue: signal.estimatedRevenue,
+      avgPrice: signal.avgPrice,
+      competitionEase: maybeRound(signal.competitionEase),
     })),
     productTypes: productTypes.map(formatProduct),
     avgOpportunity: Math.round(avgOpportunity),
@@ -297,6 +330,21 @@ function toStoreIdea(cluster: ClusterSeed): StoreIdea | null {
     nicheScore: Math.round(nicheScore),
     cohesion: Math.round(cohesion),
     trendLift: Math.round(trendLift),
+    demandScore: maybeRound(avgDemand),
+    marginScore: maybeRound(avgMargin),
+    competitionEase: maybeRound(avgCompetitionEase),
+    buyerIntent: maybeRound(avgBuyerIntent),
+    confidenceScore: Math.round(calculateConfidence(signals, cohesion)),
+    avgPrice,
+    priceRange: priceRanges.length > 0
+      ? {
+          min: Math.min(...priceRanges.map((range) => range.min)),
+          max: Math.max(...priceRanges.map((range) => range.max)),
+        }
+      : undefined,
+    estimatedMonthlyRevenue: revenueSignals.length > 0
+      ? Math.round(revenueSignals.reduce((sum, value) => sum + value, 0))
+      : undefined,
     rationale: makeRationale(signals, focus, productTypes),
     evidence: makeEvidence(signals, cluster, productTypes),
     listingIdeas: makeListingIdeas(cluster, productTypes),
@@ -418,6 +466,32 @@ function calculateTrendLift(signals: KeywordSignal[]): number {
   return Math.min(10, lift)
 }
 
+function calculateConfidence(signals: KeywordSignal[], cohesion: number): number {
+  const scanDepth = Math.min(100, signals.length * 14)
+  const coreFields = signals.reduce((sum, signal) => (
+    sum
+    + (signal.demand == null ? 0 : 1)
+    + (signal.margin == null ? 0 : 1)
+    + (signal.competitionEase == null ? 0 : 1)
+    + (signal.gap > 0 ? 1 : 0)
+  ), 0)
+  const marketFields = signals.reduce((sum, signal) => (
+    sum
+    + (signal.buyerIntent == null ? 0 : 1)
+    + (signal.avgPrice == null ? 0 : 1)
+    + (signal.estimatedRevenue == null ? 0 : 1)
+  ), 0)
+  const coreCompleteness = signals.length > 0 ? (coreFields / (signals.length * 4)) * 100 : 0
+  const marketCompleteness = signals.length > 0 ? (marketFields / (signals.length * 3)) * 100 : 0
+  const confidence = clampScore(
+    cohesion * 0.35
+    + coreCompleteness * 0.35
+    + marketCompleteness * 0.15
+    + scanDepth * 0.15,
+  )
+  return marketCompleteness === 0 ? Math.min(confidence, 82) : confidence
+}
+
 function makeRationale(signals: KeywordSignal[], focus: string, products: string[]): string {
   const avgOpp = Math.round(average(signals.map((signal) => signal.opportunity)))
   const avgGap = Math.round(average(signals.map((signal) => signal.gap)))
@@ -492,15 +566,53 @@ function weightedKeywordScore(signal: KeywordSignal): number {
   return signal.opportunity * 0.62 + signal.gap * 0.32 + (signal.breakout ? 6 : 0)
 }
 
-function average(values: number[]): number {
-  const usable = values.filter((value) => Number.isFinite(value))
+function average(values: Array<number | null | undefined>): number {
+  const usable = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
   if (usable.length === 0) return 0
   return usable.reduce((sum, value) => sum + value, 0) / usable.length
+}
+
+function positiveAverage(values: Array<number | null | undefined>): number | undefined {
+  const usable = values.filter(isPositiveNumber)
+  if (usable.length === 0) return undefined
+  return usable.reduce((sum, value) => sum + value, 0) / usable.length
+}
+
+function optionalAverage(values: Array<number | null | undefined>): number | undefined {
+  const usable = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  if (usable.length === 0) return undefined
+  return usable.reduce((sum, value) => sum + value, 0) / usable.length
+}
+
+function firstFinite(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const numeric = typeof value === 'number' ? value : Number(value)
+    if (Number.isFinite(numeric)) return numeric
+  }
+  return undefined
 }
 
 function toScore(value: unknown): number {
   const numeric = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(numeric) ? clampScore(numeric) : 0
+}
+
+function optionalScore(value: unknown): number | undefined {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) ? clampScore(numeric) : undefined
+}
+
+function positiveNumber(value: unknown): number | undefined {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : undefined
+}
+
+function isPositiveNumber(value: number | null | undefined): value is number {
+  return Number.isFinite(value) && Number(value) > 0
+}
+
+function maybeRound(value: number | null | undefined): number | undefined {
+  return Number.isFinite(value) ? Math.round(Number(value)) : undefined
 }
 
 function clampScore(value: number): number {

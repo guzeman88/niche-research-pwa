@@ -39,6 +39,7 @@ export default function StoreGenerator() {
   const isLoading = profitableLoading || (!profitableIdeas?.length && (oppsLoading || gapsLoading))
   const loadError = profitableError && oppsError
   const bestConcept = concepts[0]
+  const scoreLabel = isProfitRanked ? 'profit' : 'keyword fit'
 
   const saveStore = useMutation({
     mutationFn: (concept: StoreIdea) => createStore(toStorePayload(concept)),
@@ -59,12 +60,12 @@ export default function StoreGenerator() {
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Store Idea Generator</h2>
           <p className="text-[13px] text-surface-200 mt-0.5">
             {concepts.length > 0
-              ? `${concepts.length} ${isProfitRanked ? 'profit-ranked' : 'niche'} concepts built from keyword intelligence`
+              ? `${concepts.length} ${isProfitRanked ? 'profit-ranked' : 'keyword-fit'} concepts built from keyword intelligence`
               : 'Find storeable niches that can hold multiple related keywords'}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <span className="chip">{isProfitRanked ? 'profit model' : 'fallback model'}</span>
+          <span className="chip">{isProfitRanked ? 'profit model' : 'keyword proxy'}</span>
           {savedConcepts.size > 0 && (
             <span className="text-[11px] font-semibold text-accent-green">{savedConcepts.size} saved to My Stores</span>
           )}
@@ -101,12 +102,17 @@ export default function StoreGenerator() {
         </div>
       ) : concepts.length > 0 ? (
         <div className="space-y-4">
+          {!isProfitRanked && (
+            <div className="panel-soft border-primary-300/20 bg-primary-400/10 p-3 text-[12px] text-surface-200">
+              Store ideas are using the static keyword snapshot because the profit-ranked backend feed is empty. Scores are niche-fit proxies from demand, gap, margin, competition, and cohesion signals; revenue and price stay blank until marketplace data exists.
+            </div>
+          )}
           {concepts.map((concept, index) => {
             const color = COLORS[index % COLORS.length]
             const isSaved = savedConcepts.has(concept.id)
             const isSaving = saveStore.isPending && saveStore.variables?.id === concept.id
-            const profit = profitScore(concept)
-            const grade = concept.profitGrade || gradeFor(profit)
+            const displayScore = isProfitRanked ? profitScore(concept) : concept.nicheScore
+            const grade = concept.profitGrade || gradeFor(displayScore)
             return (
               <div key={concept.id} className="panel overflow-hidden">
                 <div className="h-1" style={{ background: `linear-gradient(90deg, ${color}, ${color}80)` }} />
@@ -115,7 +121,7 @@ export default function StoreGenerator() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-[16px] font-extrabold text-surface-50">{concept.name}</h3>
-                        {index === 0 && <span className="tag border-accent-gold/30 bg-accent-gold/10 text-accent-gold">top profit fit</span>}
+                        {index === 0 && <span className="tag border-accent-gold/30 bg-accent-gold/10 text-accent-gold">top {scoreLabel}</span>}
                         <span className="tag border-primary-300/25 bg-primary-400/10 text-primary-100">grade {grade}</span>
                       </div>
                       <p className="text-[11px] text-surface-300 mt-1">{concept.focus}</p>
@@ -123,8 +129,8 @@ export default function StoreGenerator() {
                     </div>
                     <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end">
                       <div className="flex items-baseline gap-2">
-                        <div className={`text-3xl font-extrabold tabular-nums ${scoreColor(profit)}`}>{profit}</div>
-                        <div className="text-[11px] font-bold text-surface-300">profit</div>
+                        <div className={`text-3xl font-extrabold tabular-nums ${scoreColor(displayScore)}`}>{displayScore}</div>
+                        <div className="text-[11px] font-bold text-surface-300">{scoreLabel}</div>
                       </div>
                       <div className="sm:text-right">
                         <div className="text-[10px] uppercase font-bold tracking-wider text-surface-400">
@@ -150,25 +156,25 @@ export default function StoreGenerator() {
 
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                     <Signal label="Demand" value={concept.demandScore ?? concept.avgOpportunity} icon="trending-up" />
-                    <Signal label="Margin" value={concept.marginScore ?? concept.estimatedGrossMargin ?? concept.avgOpportunity} icon="dollar-sign" />
+                    <Signal label="Margin" value={concept.marginScore ?? concept.estimatedGrossMargin} icon="dollar-sign" />
                     <Signal label="Competition" value={concept.competitionEase ?? concept.avgGap} icon="target" />
-                    <Signal label="Intent" value={concept.buyerIntent ?? concept.avgOpportunity} icon="users" />
+                    <Signal label="Intent" value={concept.buyerIntent} icon="users" />
                     <Signal label="Cohesion" value={concept.cohesion} icon="layers" />
-                    <Signal label="Confidence" value={concept.confidenceScore ?? concept.avgGap} icon="check-circle" />
+                    <Signal label="Confidence" value={concept.confidenceScore} icon="check-circle" />
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-3">
                     <MarketMetric
                       label="Revenue signal"
-                      value={concept.estimatedMonthlyRevenue ? `${fmtPrice(concept.estimatedMonthlyRevenue)}/mo` : 'not enough data'}
+                      value={formatRevenue(concept)}
                     />
                     <MarketMetric
                       label="Target price"
-                      value={concept.priceRange ? `${fmtPrice(concept.priceRange.min)}-${fmtPrice(concept.priceRange.max)}` : fmtPrice(concept.avgPrice)}
+                      value={formatPriceRange(concept)}
                     />
                     <MarketMetric
                       label="Gross margin"
-                      value={concept.estimatedGrossMargin ? `${concept.estimatedGrossMargin}% estimated` : `${concept.marginScore ?? concept.avgOpportunity}% proxy`}
+                      value={concept.estimatedGrossMargin ? `${concept.estimatedGrossMargin}% estimated` : 'not enough data'}
                     />
                   </div>
 
@@ -196,7 +202,7 @@ export default function StoreGenerator() {
                             </div>
                             <ScorePill label="opp" value={keyword.opportunity} />
                             <ScorePill label="gap" value={keyword.gap} />
-                            <ScorePill label="margin" value={keyword.margin ?? concept.marginScore ?? 0} />
+                            <ScorePill label="margin" value={keyword.margin ?? concept.marginScore} />
                           </div>
                         ))}
                       </div>
@@ -269,13 +275,14 @@ export default function StoreGenerator() {
   )
 }
 
-function Signal({ label, value, icon }: { label: string; value: number; icon: 'trending-up' | 'dollar-sign' | 'target' | 'users' | 'layers' | 'check-circle' }) {
+function Signal({ label, value, icon }: { label: string; value?: number; icon: 'trending-up' | 'dollar-sign' | 'target' | 'users' | 'layers' | 'check-circle' }) {
+  const hasValue = Number.isFinite(value)
   return (
     <div className="rounded-md border border-surface-500/50 bg-surface-900/20 px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <Icon name={icon} size={14} className="text-surface-300" />
-        <div className={`text-[18px] font-extrabold tabular-nums ${scoreColor(value)}`}>
-          {Math.round(value)}<span className="text-[10px] text-surface-400">/100</span>
+        <div className={`text-[18px] font-extrabold tabular-nums ${hasValue ? scoreColor(value as number) : 'text-surface-400'}`}>
+          {hasValue ? Math.round(value as number) : 'n/a'}{hasValue && <span className="text-[10px] text-surface-400">/100</span>}
         </div>
       </div>
       <div className="mt-1 text-[10px] uppercase font-bold tracking-wider text-surface-400">{label}</div>
@@ -292,13 +299,25 @@ function MarketMetric({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ScorePill({ label, value }: { label: string; value: number }) {
+function ScorePill({ label, value }: { label: string; value?: number }) {
+  const hasValue = Number.isFinite(value)
   return (
     <div className="w-14 text-right">
-      <div className={`tabular-nums font-bold ${scoreColor(value)}`}>{Math.round(value)}</div>
+      <div className={`tabular-nums font-bold ${hasValue ? scoreColor(value as number) : 'text-surface-400'}`}>
+        {hasValue ? Math.round(value as number) : 'n/a'}
+      </div>
       <div className="text-[9px] uppercase text-surface-400">{label}</div>
     </div>
   )
+}
+
+function formatRevenue(concept: StoreIdea): string {
+  return concept.estimatedMonthlyRevenue ? `${fmtPrice(concept.estimatedMonthlyRevenue)}/mo` : 'not enough data'
+}
+
+function formatPriceRange(concept: StoreIdea): string {
+  if (concept.priceRange) return `${fmtPrice(concept.priceRange.min)}-${fmtPrice(concept.priceRange.max)}`
+  return concept.avgPrice ? fmtPrice(concept.avgPrice) : 'not enough data'
 }
 
 function toStorePayload(concept: StoreIdea) {
@@ -321,7 +340,8 @@ function toStorePayload(concept: StoreIdea) {
     listing_target: profit >= 78 ? 75 : 50,
     research_snapshot: {
       source: concept.profitScore ? 'profitability_engine' : 'niche_cluster_fallback',
-      profit_score: profit,
+      profit_score: concept.profitScore,
+      keyword_fit_score: concept.nicheScore,
       profit_grade: concept.profitGrade || gradeFor(profit),
       niche_score: concept.nicheScore,
       demand_score: concept.demandScore,
