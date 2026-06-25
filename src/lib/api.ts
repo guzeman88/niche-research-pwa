@@ -9,7 +9,7 @@ import type {
 import type { GapReport } from '../types/gaps'
 import type { StoreIdea } from './storeIdeas'
 
-const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || 'https://niche-research-api-kqlt.onrender.com');
+const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
 const USE_STATIC_DATA = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
 const WAKE_BACKEND = import.meta.env.VITE_WAKE_BACKEND === '1';
 let lastBackendWake = 0;
@@ -110,7 +110,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   // If we got HTML instead of JSON, the backend is unreachable
   if (!res.ok || contentType.includes('text/html')) {
     throw new Error(contentType.includes('text/html')
-      ? 'Backend offline — deploy the API to Render to enable research'
+      ? 'Backend offline - live research actions are unavailable'
       : `${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
   }
   if (contentType.includes('application/json')) {
