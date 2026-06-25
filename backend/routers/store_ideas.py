@@ -8,6 +8,7 @@ router = APIRouter(prefix="/api/store-ideas", tags=["store-ideas"])
 
 def _ensure_db():
     from pipeline import keyword_database as kdb
+    kdb.ensure_seed_snapshot()
     kdb.init_db()
     kdb.load_seeds_from_library()
 

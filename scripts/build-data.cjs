@@ -4,6 +4,7 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const API = process.env.VITE_API_URL || 'https://niche-research-api-kqlt.onrender.com';
 const OUT = path.join(__dirname, '..', 'public', 'data');
@@ -53,11 +54,37 @@ function fetch(url) {
     return JSON.parse(fs.readFileSync(filepath, 'utf8'));
   }
 
+  function generateStoreIdeasSnapshot() {
+    const script = path.join(__dirname, 'generate-store-ideas-snapshot.py');
+    if (!fs.existsSync(script)) return null;
+    for (const executable of ['python', 'python3']) {
+      try {
+        const output = execFileSync(
+          executable,
+          [script, '--limit', '12', '--signal-limit', '1000'],
+          { cwd: path.join(__dirname, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+        const parsed = JSON.parse(output);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (error) {
+        // Try the next Python executable. The final fallback path handles failure.
+      }
+    }
+    return null;
+  }
+
   for (const [filename, endpoint] of endpoints) {
     try {
       let data = await fetch(`${API}${endpoint}`);
       if (filename === 'store-ideas.json' && !Array.isArray(data)) {
         throw new Error(`store ideas snapshot expected an array, got ${typeof data}`);
+      }
+      if (filename === 'store-ideas.json' && Array.isArray(data) && data.length === 0) {
+        const generated = generateStoreIdeasSnapshot();
+        if (generated) {
+          console.warn(`  ${filename}: backend returned 0 ideas; generated ${generated.length} from seed keyword DB`);
+          data = generated;
+        }
       }
       if (filename === 'stats.json' && data && data.total_seeds < MIN_KEYWORD_SNAPSHOT_COUNT) {
         useSeedFallback = true;
@@ -87,7 +114,9 @@ function fetch(url) {
       const kb = (fs.statSync(filepath).size / 1024).toFixed(1);
       console.log(`  ${filename}: ${Array.isArray(data) ? data.length : Object.keys(data).length} entries (${kb} KB)`);
     } catch (e) {
-      const fallback = readFallback(filename) || readExistingSnapshot(filename);
+      const fallback = filename === 'store-ideas.json'
+        ? (generateStoreIdeasSnapshot() || readFallback(filename) || readExistingSnapshot(filename))
+        : (readFallback(filename) || readExistingSnapshot(filename));
       if (fallback) {
         const filepath = path.join(OUT, filename);
         fs.writeFileSync(filepath, JSON.stringify(fallback));

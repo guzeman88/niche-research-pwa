@@ -176,7 +176,15 @@ def generate_profitable_store_ideas(limit: int = 12, signal_limit: int = 800, do
         if idea
     ]
     ideas.sort(key=lambda item: (item["profitScore"], item["nicheScore"]), reverse=True)
-    return ideas[:limit]
+    unique: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for idea in ideas:
+        idea_id = str(idea.get("id") or "")
+        if not idea_id or idea_id in seen_ids:
+            continue
+        seen_ids.add(idea_id)
+        unique.append(idea)
+    return unique[:limit]
 
 
 def _to_signal(row: dict[str, Any]) -> KeywordSignal | None:
@@ -264,7 +272,8 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
     avg_demand = _average([signal.demand for signal in signals])
     avg_margin = _average([signal.margin for signal in signals])
     avg_price = _average([signal.avg_price for signal in signals if signal.avg_price > 0])
-    revenue = sum(signal.revenue for signal in signals if signal.revenue > 0)
+    revenue_signals = [signal.revenue for signal in signals if signal.revenue > 0]
+    revenue = sum(revenue_signals)
     competition_ease = _calculate_competition_ease(signals)
     cohesion = _calculate_cohesion(signals, cluster)
     trend_score = _calculate_trend_score(signals)
@@ -312,8 +321,8 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
                 "demand": round(signal.demand),
                 "margin": round(signal.margin),
                 "product": _format_product(signal.products[0] if signal.products else product_types[0]),
-                "estimatedRevenue": round(signal.revenue),
-                "avgPrice": round(signal.avg_price, 2),
+                "estimatedRevenue": round(signal.revenue) if signal.revenue > 0 else None,
+                "avgPrice": round(signal.avg_price, 2) if signal.avg_price > 0 else None,
                 "competitionEase": round(100 - signal.competition_quality),
             }
             for signal in signals[:8]
@@ -331,10 +340,10 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
         "competitionEase": round(competition_ease),
         "buyerIntent": round(buyer_intent),
         "confidenceScore": round(confidence),
-        "avgPrice": round(avg_price, 2),
+        "avgPrice": round(avg_price, 2) if avg_price > 0 else None,
         "priceRange": {"min": round(price_floor, 2), "max": round(price_ceiling, 2)},
         "estimatedGrossMargin": round(gross_margin),
-        "estimatedMonthlyRevenue": round(revenue),
+        "estimatedMonthlyRevenue": round(revenue) if revenue_signals else None,
         "rationale": _make_rationale(signals, focus, product_types, profit_score, gross_margin),
         "evidence": _make_evidence(signals, cluster, product_types, revenue, competition_ease),
         "listingIdeas": _make_listing_ideas(cluster, product_types),
@@ -544,10 +553,15 @@ def _make_evidence(signals: list[KeywordSignal], cluster: ClusterSeed, products:
     best = signals[0]
     strongest_gap = max(signals, key=lambda signal: signal.gap)
     product_text = ", ".join(_format_product(product) for product in products[:3])
+    revenue_text = (
+        f"Cached market data points to about ${round(revenue):,}/mo in sampled demand across the cluster."
+        if revenue > 0
+        else "Revenue data is not populated yet, so validate buyer demand before scaling."
+    )
     return [
         f"{best.keyword} is the strongest combined keyword at {round(_weighted_keyword_score(best))}/100.",
         f"{strongest_gap.keyword} has the clearest market opening with {round(strongest_gap.gap)} gap score.",
-        f"Cached market data points to about ${round(revenue):,}/mo in sampled demand across the cluster.",
+        revenue_text,
         f"{cluster.secondary.label + ' plus ' if cluster.secondary else ''}{cluster.primary.label} can support {product_text} with {round(competition_ease)}/100 competition ease.",
     ]
 
@@ -558,9 +572,14 @@ def _make_listing_ideas(cluster: ClusterSeed, products: list[str]) -> list[str]:
 
 
 def _make_profit_drivers(margin: float, revenue: float, competition_ease: float, buyer_intent: float, confidence: float) -> list[str]:
+    revenue_driver = (
+        f"${round(revenue):,}/mo sampled revenue signal across supporting keywords."
+        if revenue > 0
+        else "Revenue signal is not populated yet; use price, margin, gap, and demand as pre-validation signals."
+    )
     return [
         f"{round(margin)}% estimated gross margin after product cost and fee reserve.",
-        f"${round(revenue):,}/mo sampled revenue signal across supporting keywords.",
+        revenue_driver,
         f"{round(competition_ease)}/100 competition ease from gap and incumbent quality signals.",
         f"{round(buyer_intent)}/100 buyer intent from gift, custom, event, and price cues.",
         f"{round(confidence)}/100 confidence based on keyword count and available market data.",

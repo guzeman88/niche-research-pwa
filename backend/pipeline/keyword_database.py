@@ -35,6 +35,7 @@ import os as _os
 _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.resolve()))
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
+SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
 SCHEMA_VERSION = 5
 
 
@@ -48,6 +49,43 @@ def _conn() -> sqlite3.Connection:
     con.execute("PRAGMA foreign_keys=ON")
     con.execute("PRAGMA synchronous=NORMAL")
     return con
+
+
+def _db_scan_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    try:
+        con = sqlite3.connect(path)
+        count = con.execute("SELECT COUNT(DISTINCT keyword) FROM scans").fetchone()[0]
+        con.close()
+        return int(count or 0)
+    except Exception:
+        return 0
+
+
+def ensure_seed_snapshot(min_scans: int = 1) -> bool:
+    """
+    Restore the tracked keyword snapshot when the workspace DB is missing or empty.
+
+    Production hosts can start with an empty writable workspace; without this guard
+    profit-ranked endpoints have no scanned keyword intelligence and return [].
+    """
+    if not SEED_DB_PATH.exists():
+        return False
+    if _db_scan_count(DB_PATH) >= min_scans:
+        return False
+
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    for suffix in ("", "-wal", "-shm"):
+        target = Path(f"{DB_PATH}{suffix}")
+        if target.exists():
+            target.unlink()
+    shutil.copy2(SEED_DB_PATH, DB_PATH)
+
+    seed_state = SEED_DB_PATH.parent / "scheduler_state.json"
+    if seed_state.exists():
+        shutil.copy2(seed_state, DB_PATH.parent / "scheduler_state.json")
+    return True
 
 
 # ── Schema migrations ─────────────────────────────────────────────────────────
