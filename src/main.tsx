@@ -4,9 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import ErrorBoundary from './components/ErrorBoundary'
+import { installChunkRecovery } from './chunkRecovery'
 import { registerPwaUpdates } from './pwa'
 import './index.css'
 
+installChunkRecovery()
 registerPwaUpdates()
 
 const queryClient = new QueryClient({
