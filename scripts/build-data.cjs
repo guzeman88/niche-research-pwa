@@ -47,6 +47,12 @@ function fetch(url) {
     return JSON.parse(fs.readFileSync(filepath, 'utf8'));
   }
 
+  function readExistingSnapshot(filename) {
+    const filepath = path.join(OUT, filename);
+    if (!fs.existsSync(filepath)) return null;
+    return JSON.parse(fs.readFileSync(filepath, 'utf8'));
+  }
+
   for (const [filename, endpoint] of endpoints) {
     try {
       let data = await fetch(`${API}${endpoint}`);
@@ -81,7 +87,7 @@ function fetch(url) {
       const kb = (fs.statSync(filepath).size / 1024).toFixed(1);
       console.log(`  ${filename}: ${Array.isArray(data) ? data.length : Object.keys(data).length} entries (${kb} KB)`);
     } catch (e) {
-      const fallback = readFallback(filename);
+      const fallback = readFallback(filename) || readExistingSnapshot(filename);
       if (fallback) {
         const filepath = path.join(OUT, filename);
         fs.writeFileSync(filepath, JSON.stringify(fallback));

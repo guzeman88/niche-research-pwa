@@ -4,14 +4,14 @@ import type {
   NicheReport, ReportListItem,
 } from '../types/research'
 import type {
-  StatsResponse, HealthResponse, KeywordItem, AdapterStatus,
+  StatsResponse, HealthResponse, KeywordItem,
 } from '../types/api'
-import type { SchedulerStatus, SchedulerHistoryItem } from '../types/scheduler'
 import type { GapReport } from '../types/gaps'
 import type { StoreIdea } from './storeIdeas'
 
 const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || 'https://niche-research-api-kqlt.onrender.com');
 const USE_STATIC_DATA = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
+const WAKE_BACKEND = import.meta.env.VITE_WAKE_BACKEND === '1';
 let lastBackendWake = 0;
 
 // Static CDN data paths — instant, no backend needed for reads
@@ -21,6 +21,7 @@ const STATIC_MAP: Record<string, string> = {
   '/api/store-ideas/profitable': '/data/store-ideas.json',
   '/api/gaps': '/data/gaps.json',
   '/api/keywords': '/data/keywords.json',
+  '/api/keywords/domains': '/data/keywords.json',
   '/api/research/reports': '/data/reports.json',
   '/api/keywords/breakouts': '/data/breakouts.json',
 };
@@ -32,7 +33,12 @@ async function fetchStatic(path: string): Promise<any | null> {
   if (!staticPath) return null;
   try {
     const res = await fetch(staticPath);
-    if (res.ok) return res.json();
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (path === '/api/keywords/domains' && Array.isArray(data)) {
+      return Array.from(new Set(data.map((kw) => kw.domain).filter(Boolean))).sort();
+    }
+    return data;
   } catch {
     // Static data is an optional fast path; callers fall back to the API.
   }
@@ -40,12 +46,12 @@ async function fetchStatic(path: string): Promise<any | null> {
 }
 
 function wakeBackend() {
-  if (!BASE_URL) return;
+  if (!BASE_URL || !WAKE_BACKEND) return;
   const now = Date.now();
   if (now - lastBackendWake < 60_000) return;
   lastBackendWake = now;
   fetch(`${BASE_URL}/api/health?_t=${now}`, {
-    headers: { 'Content-Type': 'application/json' },
+    mode: 'no-cors',
   }).catch(() => {});
 }
 
@@ -187,35 +193,6 @@ export function getProfitableStoreIdeas(limit = 12): Promise<StoreIdea[]> {
   return request(`/api/store-ideas/profitable?limit=${limit}`);
 }
 
-// ── Scheduler ───────────────────────────────────────────────────────────
-
-export function getSchedulerStatus(): Promise<SchedulerStatus> {
-  return request('/api/scheduler/status');
-}
-
-export function startScheduler(mode = 'continuous', batchSize = 5): Promise<Record<string, unknown>> {
-  return request('/api/scheduler/start', {
-    method: 'POST',
-    body: JSON.stringify({ mode, batch_size: batchSize }),
-  });
-}
-
-export function stopScheduler(): Promise<Record<string, unknown>> {
-  return request('/api/scheduler/stop', { method: 'POST' });
-}
-
-export function pauseScheduler(): Promise<Record<string, unknown>> {
-  return request('/api/scheduler/pause', { method: 'POST' });
-}
-
-export function resumeScheduler(): Promise<Record<string, unknown>> {
-  return request('/api/scheduler/resume', { method: 'POST' });
-}
-
-export function getSchedulerHistory(limit = 20): Promise<SchedulerHistoryItem[]> {
-  return request(`/api/scheduler/history?limit=${limit}`);
-}
-
 // ── Stats ───────────────────────────────────────────────────────────────
 
 export function getStats(): Promise<StatsResponse> {
@@ -224,20 +201,6 @@ export function getStats(): Promise<StatsResponse> {
 
 export function getHealth(): Promise<HealthResponse> {
   return request('/api/stats/health');
-}
-
-// ── Settings ────────────────────────────────────────────────────────────
-
-export function getSettings(): Promise<{ settings: Record<string, unknown>; guidelines: Record<string, unknown> }> {
-  return request('/api/settings');
-}
-
-export function updateSettings(data: { settings?: Record<string, unknown>; guidelines?: Record<string, unknown> }): Promise<Record<string, unknown>> {
-  return request('/api/settings', { method: 'PUT', body: JSON.stringify(data) });
-}
-
-export function getAdapterStatus(): Promise<AdapterStatus> {
-  return request('/api/settings/adapters');
 }
 
 // ── Stores ─────────────────────────────────────────────────────────────
