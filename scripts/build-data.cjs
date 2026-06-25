@@ -95,7 +95,7 @@ function fetch(url) {
         console.warn(`  ${filename}: using seed snapshot fallback after fetch failure - ${e.message}`);
         console.log(`  ${filename}: ${Array.isArray(fallback) ? fallback.length : Object.keys(fallback).length} entries (${kb} KB)`);
       } else {
-        if (filename === 'store-ideas.json') {
+        if (filename === 'store-ideas.json' || filename === 'reports.json') {
           const filepath = path.join(OUT, filename);
           fs.writeFileSync(filepath, JSON.stringify([]));
           console.warn(`  ${filename}: endpoint unavailable, writing empty snapshot - ${e.message}`);
