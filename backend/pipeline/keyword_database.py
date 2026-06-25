@@ -23,6 +23,7 @@ Public API (backward-compatible):
 
 import csv
 import json
+import math
 import shutil
 import sqlite3
 from datetime import datetime, timedelta
@@ -34,7 +35,7 @@ import os as _os
 _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.resolve()))
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -182,8 +183,21 @@ def _migrate_v4(con: sqlite3.Connection) -> None:
     """)
 
 
+def _migrate_v5(con: sqlite3.Connection) -> None:
+    """Add profit and buyer-intent signals to full gap reports."""
+    for col, typedef in [
+        ("buyer_intent_score", "REAL DEFAULT 0"),
+        ("profit_gap_score", "REAL DEFAULT 0"),
+    ]:
+        try:
+            con.execute(f"ALTER TABLE gap_reports ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass
+
+
 def init_db() -> None:
     """Create or migrate the database. Safe to call on every startup."""
+    rebuild_scores_after_migration = False
     with _conn() as con:
         version = _get_version(con)
         if version < 1:
@@ -198,6 +212,12 @@ def init_db() -> None:
         if version < 4:
             _migrate_v4(con)
             _set_version(con, 4)
+        if version < 5:
+            _migrate_v5(con)
+            _set_version(con, 5)
+            rebuild_scores_after_migration = True
+    if rebuild_scores_after_migration:
+        rebuild_gap_scores()
 
 
 # ── Seed management ───────────────────────────────────────────────────────────
@@ -294,6 +314,179 @@ def get_expansion_depth(keyword: str) -> int:
 
 # ── Scan storage ──────────────────────────────────────────────────────────────
 
+_BUYER_INTENT_TERMS = {
+    "gift": 15,
+    "gifts": 15,
+    "personalized": 15,
+    "custom": 14,
+    "printable": 12,
+    "template": 11,
+    "svg": 10,
+    "bundle": 9,
+    "set": 8,
+    "for": 7,
+    "appreciation": 7,
+}
+
+_PRODUCT_TERMS = {
+    "shirt",
+    "sweatshirt",
+    "hoodie",
+    "mug",
+    "tumbler",
+    "sticker",
+    "stickers",
+    "wall art",
+    "poster",
+    "print",
+    "prints",
+    "tote",
+    "bag",
+    "ornament",
+    "planner",
+    "invitation",
+    "sign",
+    "decor",
+    "keychain",
+}
+
+_PASSION_TERMS = {
+    "mom",
+    "dad",
+    "teacher",
+    "nurse",
+    "bride",
+    "wedding",
+    "birthday",
+    "christmas",
+    "halloween",
+    "valentine",
+    "graduation",
+    "cat",
+    "dog",
+    "book",
+    "reader",
+    "coffee",
+    "wine",
+    "yoga",
+    "hiking",
+    "plant",
+    "zodiac",
+}
+
+_DOMAIN_PRIORITY_BOOST = {
+    "professions": 9,
+    "occasions_holidays": 8,
+    "relationships": 8,
+    "hobbies": 7,
+    "pets": 7,
+    "life_stages": 7,
+    "trending_micro_niches": 6,
+    "compound": 8,
+    "discovered": 5,
+}
+
+
+def _clamp_score(value: float) -> float:
+    return round(max(0.0, min(100.0, value)), 1)
+
+
+def score_keyword_buyer_intent(keyword: str) -> float:
+    """Estimate how close a keyword is to a buyer-ready Etsy search."""
+    kw = " ".join(keyword.lower().split())
+    words = kw.split()
+    if not words:
+        return 0.0
+
+    score = 20.0
+    score += min(25.0, sum(points for term, points in _BUYER_INTENT_TERMS.items() if term in words or term in kw))
+    score += 18.0 if any(term in kw for term in _PRODUCT_TERMS) else 0.0
+    score += min(16.0, sum(4.0 for term in _PASSION_TERMS if term in words or term in kw))
+
+    word_count = len(words)
+    if 2 <= word_count <= 5:
+        score += 18.0
+    elif word_count == 1:
+        score -= 18.0
+    elif word_count <= 7:
+        score += 8.0
+    else:
+        score -= 10.0
+
+    if any(ch.isdigit() for ch in kw):
+        score += 4.0
+    if kw.startswith(("cute ", "funny ", "vintage ", "retro ", "minimalist ", "personalized ")):
+        score += 5.0
+    if kw in {"gift", "custom", "personalized", "shirt", "mug", "sticker", "wall art"}:
+        score -= 25.0
+
+    return _clamp_score(score)
+
+
+def _score_supply_gap(listing_count: int | None) -> float:
+    """Lower supply is better, but zero/unknown supply should not look perfect."""
+    if not listing_count or listing_count <= 0:
+        return 35.0
+    pressure = math.log10(max(1, listing_count)) / math.log10(750_000) * 100
+    return _clamp_score(100.0 - pressure)
+
+
+def _score_listing_efficiency(monthly_rev: float, listing_count: int | None) -> float:
+    """Revenue density proxy: more revenue per listing means a better gap."""
+    if not listing_count or listing_count <= 0 or monthly_rev <= 0:
+        return 0.0
+    revenue_per_listing = monthly_rev / listing_count
+    return _clamp_score(math.log10(max(1.0, revenue_per_listing)) / math.log10(250.0) * 100)
+
+
+def _score_seed_priority(keyword: str, domain: str | None, priority: int | None) -> float:
+    """Rank unscanned seeds by likely gap quality instead of age alone."""
+    base_priority = (priority or 5) * 7.0
+    domain_boost = _DOMAIN_PRIORITY_BOOST.get((domain or "").lower(), 4)
+    return _clamp_score(
+        base_priority
+        + score_keyword_buyer_intent(keyword) * 0.45
+        + domain_boost * 2.0
+    )
+
+
+def _calculate_gap_score(
+    keyword: str,
+    demand: float,
+    trend: float,
+    comp_quality: float,
+    margin: float,
+    monthly_rev: float,
+    listing_count: int | None,
+    full_gap_score: float | None = None,
+) -> tuple[float, float]:
+    """
+    Composite gap score used by fast keyword rankings.
+
+    It favors buyer-ready, revenue-dense, margin-friendly keywords with weak
+    incumbents, and blends in the full gap report when deeper evidence exists.
+    """
+    buyer_intent = score_keyword_buyer_intent(keyword)
+    supply_gap = _score_supply_gap(listing_count)
+    listing_eff = _score_listing_efficiency(monthly_rev or 0, listing_count)
+    quality_gap = 100.0 - (comp_quality or 50.0)
+
+    lightweight = (
+        (demand or 0) * 0.18
+        + (trend or 0) * 0.12
+        + quality_gap * 0.17
+        + (margin or 0) * 0.13
+        + listing_eff * 0.14
+        + buyer_intent * 0.14
+        + supply_gap * 0.12
+    )
+
+    if full_gap_score is not None and full_gap_score > 0:
+        lightweight = lightweight * 0.55 + full_gap_score * 0.45
+
+    return _clamp_score(lightweight), listing_eff
+
+
 def save_scan(keyword: str, report) -> None:
     add_seed(keyword, source="scan_created")
 
@@ -310,7 +503,11 @@ def save_scan(keyword: str, report) -> None:
     comp_quality = r.get("avg_competition_quality")
     ksd = r.get("keyword_search_data", [])
     if ksd:
-        counts = [d.get("listing_count") for d in ksd if d.get("listing_count")]
+        counts = [
+            d.get("listing_count") or d.get("total_listing_count")
+            for d in ksd
+            if d.get("listing_count") or d.get("total_listing_count")
+        ]
         if counts:
             listing_count = int(sum(counts) / len(counts))
 
@@ -321,14 +518,15 @@ def save_scan(keyword: str, report) -> None:
     margin = r.get("margin_score") or 0
     monthly_rev = r.get("estimated_market_monthly_revenue_usd") or 0
 
-    # Listing efficiency: revenue per 1000 listings (proxy for search density)
-    listing_eff = 0.0
-    if listing_count and listing_count > 0:
-        listing_eff = min(100.0, (monthly_rev / listing_count) * 10)
-
-    # Gap score weights underserved high-demand niches
-    gap = (demand * 0.30 + trend * 0.25 + (100 - comp_q) * 0.35 + margin * 0.10)
-    gap = min(100.0, max(0.0, gap))
+    gap, listing_eff = _calculate_gap_score(
+        kw,
+        demand=demand,
+        trend=trend,
+        comp_quality=comp_q,
+        margin=margin,
+        monthly_rev=monthly_rev,
+        listing_count=listing_count,
+    )
 
     with _conn() as con:
         con.execute("""
@@ -352,10 +550,10 @@ def save_scan(keyword: str, report) -> None:
             gap, listing_eff, 0.0, "stable",
         ))
 
-    _update_gap_score(kw, gap)
+    _update_gap_score(kw, gap, listing_efficiency=listing_eff)
 
 
-def _update_gap_score(keyword: str, new_gap: float) -> None:
+def _update_gap_score(keyword: str, new_gap: float, listing_efficiency: float | None = None) -> None:
     """Compute trajectory and update gap_scores table.
 
     Velocity is time-normalized to a 30-day rate so keywords rescanned
@@ -375,8 +573,9 @@ def _update_gap_score(keyword: str, new_gap: float) -> None:
         velocity = delta
         if prev_score is not None and prev_time_str:
             try:
-                days = max(1, (datetime.utcnow() - datetime.fromisoformat(prev_time_str)).days)
-                velocity = delta / days * 30
+                elapsed = datetime.utcnow() - datetime.fromisoformat(prev_time_str)
+                days = elapsed.total_seconds() / 86400
+                velocity = delta if days < 1 else delta / days * 30
             except Exception:
                 pass
 
@@ -402,7 +601,7 @@ def _update_gap_score(keyword: str, new_gap: float) -> None:
               trajectory = excluded.trajectory,
               breakout_flag = excluded.breakout_flag,
               last_computed = excluded.last_computed
-        """, (keyword, new_gap, 0.0, delta, prev_score, trajectory, breakout,
+        """, (keyword, new_gap, listing_efficiency or 0.0, delta, prev_score, trajectory, breakout,
               datetime.utcnow().isoformat()))
 
         # Update trajectory on most recent scan row too
@@ -418,20 +617,29 @@ def rebuild_gap_scores() -> int:
         rows = con.execute("""
             SELECT s.keyword, sc.demand_score, sc.trend_score,
                    sc.competition_quality, sc.margin_score,
-                   sc.monthly_revenue_usd, sc.listing_count
+                   sc.monthly_revenue_usd, sc.listing_count,
+                   gr.composite_gap_score
             FROM seeds s
             JOIN scans sc ON sc.keyword = s.keyword
+            LEFT JOIN gap_reports gr ON gr.id = (
+                SELECT MAX(id) FROM gap_reports gr2 WHERE gr2.keyword = s.keyword
+            )
             WHERE sc.id = (SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword = s.keyword)
         """).fetchall()
 
     count = 0
     for r in rows:
-        demand = r["demand_score"] or 0
-        trend = r["trend_score"] or 0
-        comp_q = r["competition_quality"] or 50
-        margin = r["margin_score"] or 0
-        gap = min(100.0, demand * 0.30 + trend * 0.25 + (100 - comp_q) * 0.35 + margin * 0.10)
-        _update_gap_score(r["keyword"], gap)
+        gap, listing_eff = _calculate_gap_score(
+            r["keyword"],
+            demand=r["demand_score"] or 0,
+            trend=r["trend_score"] or 0,
+            comp_quality=r["competition_quality"] or 50,
+            margin=r["margin_score"] or 0,
+            monthly_rev=r["monthly_revenue_usd"] or 0,
+            listing_count=r["listing_count"],
+            full_gap_score=r["composite_gap_score"],
+        )
+        _update_gap_score(r["keyword"], gap, listing_efficiency=listing_eff)
         count += 1
     return count
 
@@ -440,20 +648,29 @@ def rebuild_gap_scores() -> int:
 
 def get_unscanned(limit: int = 20, domain: Optional[str] = None) -> list[str]:
     with _conn() as con:
+        candidate_limit = max(limit * 12, 100)
         if domain:
             rows = con.execute("""
-                SELECT s.keyword FROM seeds s
+                SELECT s.keyword, s.domain, s.priority, s.added_at FROM seeds s
                 WHERE s.domain=?
                   AND NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
                 ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
-            """, (domain, limit)).fetchall()
+            """, (domain, candidate_limit)).fetchall()
         else:
             rows = con.execute("""
-                SELECT s.keyword FROM seeds s
+                SELECT s.keyword, s.domain, s.priority, s.added_at FROM seeds s
                 WHERE NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
                 ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
-            """, (limit,)).fetchall()
-        return [r["keyword"] for r in rows]
+            """, (candidate_limit,)).fetchall()
+        ranked = sorted(
+            rows,
+            key=lambda r: (
+                _score_seed_priority(r["keyword"], r["domain"], r["priority"]),
+                r["added_at"] or "",
+            ),
+            reverse=True,
+        )
+        return [r["keyword"] for r in ranked[:limit]]
 
 
 def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> list[str]:
@@ -463,13 +680,33 @@ def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> 
             SELECT s.keyword FROM seeds s
             JOIN (SELECT keyword, MAX(scanned_at) AS last_scan FROM scans GROUP BY keyword) latest
               ON latest.keyword=s.keyword
+            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
+            LEFT JOIN scans sc ON sc.keyword=s.keyword
+              AND sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
             WHERE latest.last_scan < ?
         """
         if domain:
-            rows = con.execute(base + " AND s.domain=? ORDER BY latest.last_scan ASC LIMIT ?",
+            rows = con.execute(base + """
+                AND s.domain=?
+                ORDER BY
+                    gs.breakout_flag DESC,
+                    gs.gap_score DESC,
+                    gs.listing_efficiency DESC,
+                    sc.opportunity_score DESC,
+                    latest.last_scan ASC
+                LIMIT ?
+            """,
                                (cutoff, domain, limit)).fetchall()
         else:
-            rows = con.execute(base + " ORDER BY latest.last_scan ASC LIMIT ?",
+            rows = con.execute(base + """
+                ORDER BY
+                    gs.breakout_flag DESC,
+                    gs.gap_score DESC,
+                    gs.listing_efficiency DESC,
+                    sc.opportunity_score DESC,
+                    latest.last_scan ASC
+                LIMIT ?
+            """,
                                (cutoff, limit)).fetchall()
         return [r["keyword"] for r in rows]
 
@@ -506,19 +743,20 @@ def get_all_seeds_with_status(limit: int = 2000) -> list[dict]:
     """Return all seeds with scan status for the UI checklist."""
     with _conn() as con:
         rows = con.execute("""
-            SELECT s.keyword, s.domain, s.priority, s.added_at,
+            SELECT s.keyword, s.domain, s.source, s.priority, s.added_at,
                    sc.scanned_at,
                    sc.opportunity_score,
-                   sc.gap_score
+                   COALESCE(gs.gap_score, sc.gap_score) AS gap_score,
+                   gs.trajectory,
+                   COALESCE(gs.breakout_flag, 0) AS breakout_flag,
+                   gs.listing_efficiency
             FROM seeds s
-            LEFT JOIN (
-                SELECT keyword, MAX(scanned_at) AS scanned_at,
-                       opportunity_score, gap_score
-                FROM scans
-                GROUP BY keyword
-            ) sc ON sc.keyword = s.keyword
+            LEFT JOIN scans sc ON sc.keyword = s.keyword
+              AND sc.id = (SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
+            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
             ORDER BY
                 CASE WHEN sc.scanned_at IS NULL THEN 0 ELSE 1 END,
+                COALESCE(gs.gap_score, sc.gap_score, 0) DESC,
                 sc.scanned_at DESC
             LIMIT ?
         """, (limit,)).fetchall()
@@ -718,7 +956,7 @@ def search_keywords(query: str, limit: int = 100) -> list[dict]:
         rows = con.execute("""
             SELECT s.keyword, s.domain, s.source, s.added_at,
                    sc.opportunity_score, sc.avg_price_usd, sc.scanned_at,
-                   gs.gap_score, gs.trajectory
+                   gs.gap_score, gs.trajectory, gs.breakout_flag
             FROM seeds s
             LEFT JOIN (SELECT keyword, MAX(id) as id FROM scans GROUP BY keyword) latest
               ON latest.keyword=s.keyword
@@ -892,6 +1130,8 @@ def save_gap_report(
     style_gap: float = 0.0,
     price_gap: float = 0.0,
     recency_gap: float = 0.0,
+    buyer_intent: float = 0.0,
+    profit_gap: float = 0.0,
     composite_gap: float = 0.0,
     entry_angle: str = "",
     recommended_price_min: float = 0.0,
@@ -911,15 +1151,17 @@ def save_gap_report(
               (keyword, analyzed_at,
                volume_gap_score, quality_gap_score, tag_gap_score,
                style_gap_score, price_gap_score, recency_gap_score,
+               buyer_intent_score, profit_gap_score,
                composite_gap_score, entry_angle,
                recommended_price_min, recommended_price_max,
                untagged_searches_json, dominant_competitor_tags_json,
                recommended_tags_json, listings_analyzed, avg_listing_age_months)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             kw, now,
             volume_gap, quality_gap, tag_gap,
             style_gap, price_gap, recency_gap,
+            buyer_intent, profit_gap,
             composite_gap, entry_angle,
             recommended_price_min, recommended_price_max,
             json.dumps(untagged_searches or []),
@@ -927,7 +1169,32 @@ def save_gap_report(
             json.dumps(recommended_tags or []),
             listings_analyzed, avg_listing_age_months,
         ))
-        return cur.lastrowid
+        row_id = cur.lastrowid
+
+    with _conn() as con:
+        latest = con.execute("""
+            SELECT demand_score, trend_score, competition_quality, margin_score,
+                   monthly_revenue_usd, listing_count
+            FROM scans
+            WHERE keyword=?
+            ORDER BY scanned_at DESC
+            LIMIT 1
+        """, (kw,)).fetchone()
+
+    if latest:
+        gap, listing_eff = _calculate_gap_score(
+            kw,
+            demand=latest["demand_score"] or 0,
+            trend=latest["trend_score"] or 0,
+            comp_quality=latest["competition_quality"] or 50,
+            margin=latest["margin_score"] or 0,
+            monthly_rev=latest["monthly_revenue_usd"] or 0,
+            listing_count=latest["listing_count"],
+            full_gap_score=composite_gap,
+        )
+        _update_gap_score(kw, gap, listing_efficiency=listing_eff)
+
+    return row_id
 
 
 def get_gap_report(keyword: str) -> Optional[dict]:

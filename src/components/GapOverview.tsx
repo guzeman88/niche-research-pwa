@@ -10,6 +10,8 @@ const GAP_CONFIG = [
   { key: 'price_gap_score' as const, label: 'Price Gap', desc: 'Underserved price range', color: '#b48ead', icon: 'dollar-sign' as const },
   { key: 'style_gap_score' as const, label: 'Style Gap', desc: 'Style monopoly opening', color: '#b48ead', icon: 'grid' as const },
   { key: 'recency_gap_score' as const, label: 'Recency Gap', desc: 'Aging competition', color: '#d08770', icon: 'clock' as const },
+  { key: 'buyer_intent_score' as const, label: 'Buyer Intent', desc: 'Purchase-ready searches', color: '#88c0d0', icon: 'target' as const },
+  { key: 'profit_gap_score' as const, label: 'Profit Gap', desc: 'Margin and revenue density', color: '#a3be8c', icon: 'dollar-sign' as const },
 ]
 
 export default function GapOverview() {
@@ -29,7 +31,7 @@ export default function GapOverview() {
         <Icon name="activity" size={14} className="text-primary-200" />
         <span className="section-label">Gap Analysis Overview</span>
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {averages.map(g => (
           <div key={g.key} className="text-center">
             <Icon name={g.icon} size={16} className="mx-auto mb-1.5" />

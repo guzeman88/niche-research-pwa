@@ -7,6 +7,8 @@ export interface GapReport {
   style_gap_score: number;
   price_gap_score: number;
   recency_gap_score: number;
+  buyer_intent_score?: number;
+  profit_gap_score?: number;
   composite_gap_score: number;
   entry_angle: string;
   recommended_price_min: number;
@@ -27,5 +29,7 @@ export interface GapReportListItem {
   style_gap_score: number;
   price_gap_score: number;
   recency_gap_score: number;
+  buyer_intent_score?: number;
+  profit_gap_score?: number;
   entry_angle: string;
 }
