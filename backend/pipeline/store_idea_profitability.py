@@ -194,6 +194,8 @@ def _to_signal(row: dict[str, Any]) -> KeywordSignal | None:
 
     normalized = _normalize(keyword)
     domain = str(row.get("domain") or "discovered").replace("_", " ")
+    if _looks_like_default_scan(row):
+        return None
     gap = _score(row.get("composite_gap_score") or row.get("gap_score"))
     return KeywordSignal(
         keyword=keyword,
@@ -219,6 +221,32 @@ def _to_signal(row: dict[str, Any]) -> KeywordSignal | None:
         price_max=_number(row.get("recommended_price_max")),
         entry_angle=str(row.get("entry_angle") or row.get("entry_strategy") or ""),
         scanned_at=str(row.get("scanned_at") or ""),
+    )
+
+
+def _looks_like_default_scan(row: dict[str, Any]) -> bool:
+    """Drop underspecified scan rows that only contain the scanner's old defaults."""
+    has_market_evidence = any(
+        _number(row.get(field)) > 0
+        for field in (
+            "avg_price_usd",
+            "monthly_revenue_usd",
+            "listing_count",
+            "competition_quality",
+            "recommended_price_min",
+            "recommended_price_max",
+            "listings_analyzed",
+        )
+    )
+    if has_market_evidence:
+        return False
+
+    return (
+        math.isclose(_number(row.get("opportunity_score")), 65.0, abs_tol=0.01)
+        and math.isclose(_number(row.get("demand_score")), 100.0, abs_tol=0.01)
+        and math.isclose(_number(row.get("margin_score")), 50.0, abs_tol=0.01)
+        and math.isclose(_number(row.get("competition_score")), 50.0, abs_tol=0.01)
+        and math.isclose(_number(row.get("trend_score")), 50.0, abs_tol=0.01)
     )
 
 

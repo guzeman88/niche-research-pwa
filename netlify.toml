@@ -2,9 +2,9 @@
   command = "npm run build"
   publish = "dist"
 
-# After deploying the backend to Render, set VITE_API_URL in Netlify env vars
-# Go to: https://app.netlify.com/sites/singular-youtiao-c95d49/settings/deploys#environment
-# Set: VITE_API_URL = https://niche-research-api-kqlt.onrender.com
+# Optional: set VITE_API_URL in Netlify env vars when a live backend is available.
+# Without it, the PWA serves real bundled keyword snapshots and stores user-created
+# stores locally instead of depending on a suspended external API.
 
 [[redirects]]
   from = "/explore"

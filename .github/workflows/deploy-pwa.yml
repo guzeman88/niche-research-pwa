@@ -9,7 +9,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      VITE_API_URL: https://niche-research-api-kqlt.onrender.com
       MIN_KEYWORD_SNAPSHOT_COUNT: '13000'
       NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
       NETLIFY_SITE_ID: 9c00efca-ced9-4097-b302-172437380b32

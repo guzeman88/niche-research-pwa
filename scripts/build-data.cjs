@@ -4,14 +4,19 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
-const API = process.env.VITE_API_URL || 'https://niche-research-api-kqlt.onrender.com';
+const API = process.env.VITE_API_URL || '';
 const OUT = path.join(__dirname, '..', 'public', 'data');
 const FALLBACK = path.join(__dirname, '..', 'backend', 'seed_data', 'static');
 const MIN_KEYWORD_SNAPSHOT_COUNT = Number(process.env.MIN_KEYWORD_SNAPSHOT_COUNT || 13000);
 
 function fetch(url) {
   return new Promise((resolve, reject) => {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      reject(new Error(`No API URL configured for ${url}`));
+      return;
+    }
     const transport = url.startsWith('https') ? https : http;
     transport.get(url, { timeout: 60000 }, (res) => {
       let data = '';
@@ -24,9 +29,53 @@ function fetch(url) {
   });
 }
 
+function generateLocalStoreIdeas() {
+  const script = `
+import json
+import sys
+from pathlib import Path
+
+root = Path.cwd()
+backend = root / "backend"
+sys.path.insert(0, str(backend))
+
+from pipeline import keyword_database as kdb
+from pipeline.store_idea_profitability import generate_profitable_store_ideas
+
+kdb.ensure_seed_snapshot()
+kdb.init_db()
+kdb.load_seeds_from_library()
+print(json.dumps(generate_profitable_store_ideas(limit=12, signal_limit=1000)))
+`;
+  const candidates = process.platform === 'win32'
+    ? ['python', 'py']
+    : ['python3', 'python'];
+
+  for (const command of candidates) {
+    const result = spawnSync(command, ['-c', script], {
+      cwd: path.join(__dirname, '..'),
+      encoding: 'utf8',
+      env: { ...process.env, BACKEND_DIR: path.join(__dirname, '..', 'backend') },
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    if (result.status === 0) {
+      const output = result.stdout.trim();
+      const data = JSON.parse(output || '[]');
+      if (!Array.isArray(data)) {
+        throw new Error(`local store idea generator returned ${typeof data}`);
+      }
+      return data;
+    }
+  }
+
+  throw new Error('Python is unavailable for local store idea generation');
+}
+
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
-  console.log(`Fetching static data snapshots from ${API}...`);
+  console.log(API
+    ? `Fetching static data snapshots from ${API}...`
+    : 'Building static data snapshots from the bundled real-data seed...');
 
   const endpoints = [
     ['stats.json', '/api/stats'],
@@ -91,13 +140,13 @@ function fetch(url) {
       console.log(`  ${filename}: ${Array.isArray(data) ? data.length : Object.keys(data).length} entries (${kb} KB)`);
     } catch (e) {
       const fallback = filename === 'store-ideas.json'
-        ? null
+        ? generateLocalStoreIdeas()
         : (readFallback(filename) || readExistingSnapshot(filename));
       if (fallback) {
         const filepath = path.join(OUT, filename);
         fs.writeFileSync(filepath, JSON.stringify(fallback));
         const kb = (fs.statSync(filepath).size / 1024).toFixed(1);
-        console.warn(`  ${filename}: using seed snapshot fallback after fetch failure - ${e.message}`);
+        console.warn(`  ${filename}: using bundled real-data snapshot after fetch failure - ${e.message}`);
         console.log(`  ${filename}: ${Array.isArray(fallback) ? fallback.length : Object.keys(fallback).length} entries (${kb} KB)`);
       } else {
         if (filename === 'store-ideas.json' || filename === 'reports.json') {
