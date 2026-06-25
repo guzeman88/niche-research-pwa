@@ -57,6 +57,8 @@ class GapReport:
     style_gap_score: float = 0.0       # style monopoly = opening for alternatives
     price_gap_score: float = 0.0       # underserved price range
     recency_gap_score: float = 0.0     # aging competition
+    buyer_intent_score: float = 0.0    # buyer-ready search phrase
+    profit_gap_score: float = 0.0      # margin + revenue density opening
 
     # ── Composite ─────────────────────────────────────────────────────────────
     composite_gap_score: float = 0.0
@@ -229,6 +231,17 @@ def run(
     price_gap = _score_price_gap(price_min, price_p25, price_p75, price_max, avg_price)
     report.price_gap_score = price_gap
 
+    buyer_intent = kdb.score_keyword_buyer_intent(keyword)
+    profit_gap = _score_profit_gap(
+        avg_price=avg_price,
+        margin_score=niche_report_data.get("margin_score", 0) or 0,
+        monthly_revenue=niche_report_data.get("estimated_market_monthly_revenue_usd", 0) or 0,
+        listing_count=listing_count,
+        demand_score=demand_score,
+    )
+    report.buyer_intent_score = buyer_intent
+    report.profit_gap_score = profit_gap
+
     # Set recommended price range: slightly below the sweet spot p75 to undercut incumbents
     # Or above p75 if quality gap is high (low competition = can charge premium)
     if avg_price > 0:
@@ -242,15 +255,16 @@ def run(
             report.recommended_price_max = round(price_p75 * 0.95, 2)
 
     # ── Composite gap score ───────────────────────────────────────────────────
-    # Weighted average of all 6 signals
-    # Tag gap and volume gap are the most predictive → higher weights
+    # Weighted average of market, search, buyer-intent, and profit signals.
     composite = (
-        volume_gap   * 0.25 +
-        quality_gap  * 0.15 +
-        tag_gap_score * 0.25 +
-        style_gap_score * 0.15 +
-        price_gap    * 0.10 +
-        recency_gap  * 0.10
+        volume_gap   * 0.18 +
+        quality_gap  * 0.14 +
+        tag_gap_score * 0.19 +
+        style_gap_score * 0.10 +
+        price_gap    * 0.09 +
+        recency_gap  * 0.07 +
+        buyer_intent * 0.12 +
+        profit_gap   * 0.11
     )
     report.composite_gap_score = round(min(100.0, max(0.0, composite)), 1)
 
@@ -267,6 +281,8 @@ def run(
             style_gap=report.style_gap_score,
             price_gap=report.price_gap_score,
             recency_gap=report.recency_gap_score,
+            buyer_intent=report.buyer_intent_score,
+            profit_gap=report.profit_gap_score,
             composite_gap=report.composite_gap_score,
             entry_angle=report.entry_angle,
             recommended_price_min=report.recommended_price_min,
@@ -291,7 +307,8 @@ def run(
         f"composite={report.composite_gap_score:.0f}  "
         f"vol={report.volume_gap_score:.0f} qual={report.quality_gap_score:.0f} "
         f"tag={report.tag_gap_score:.0f} style={report.style_gap_score:.0f} "
-        f"price={report.price_gap_score:.0f} recency={report.recency_gap_score:.0f}"
+        f"price={report.price_gap_score:.0f} recency={report.recency_gap_score:.0f} "
+        f"intent={report.buyer_intent_score:.0f} profit={report.profit_gap_score:.0f}"
     )
     return report
 
@@ -337,6 +354,36 @@ def _score_price_gap(
         return 15.0   # very wide spread — price is not a differentiator
 
 
+def _score_profit_gap(
+    avg_price: float,
+    margin_score: float,
+    monthly_revenue: float,
+    listing_count: int,
+    demand_score: float,
+) -> float:
+    """Score whether the gap can plausibly support profitable listings."""
+    price_band = 30.0
+    if 10 <= avg_price <= 45:
+        price_band = 82.0
+    elif 6 <= avg_price < 10 or 45 < avg_price <= 70:
+        price_band = 62.0
+    elif avg_price > 70:
+        price_band = 45.0
+
+    revenue_density = 0.0
+    if monthly_revenue > 0 and listing_count > 0:
+        revenue_per_listing = monthly_revenue / listing_count
+        revenue_density = min(100.0, math.log10(max(1.0, revenue_per_listing)) / math.log10(250.0) * 100)
+
+    score = (
+        (margin_score or 0) * 0.34
+        + price_band * 0.20
+        + revenue_density * 0.28
+        + (demand_score or 0) * 0.18
+    )
+    return round(max(0.0, min(100.0, score)), 1)
+
+
 def _build_entry_angle(report: GapReport, keyword: str, avg_price: float) -> str:
     """Construct a one-paragraph entry angle based on which gaps are strongest."""
     scores = {
@@ -346,6 +393,8 @@ def _build_entry_angle(report: GapReport, keyword: str, avg_price: float) -> str
         "style": report.style_gap_score,
         "price": report.price_gap_score,
         "recency": report.recency_gap_score,
+        "intent": report.buyer_intent_score,
+        "profit": report.profit_gap_score,
     }
     # Find the top 2 signals
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -395,6 +444,18 @@ def _build_entry_angle(report: GapReport, keyword: str, avg_price: float) -> str
                 f"enter at ${report.recommended_price_min:.0f}–${report.recommended_price_max:.0f} "
                 f"to stand out in the price filter."
             )
+
+    if top1 == "intent" or top2 == "intent":
+        parts.append(
+            f"Buyer intent gap: '{keyword}' reads like a purchase-ready Etsy query, "
+            f"so winning the first-page angle matters more than broad traffic."
+        )
+
+    if top1 == "profit" or top2 == "profit":
+        parts.append(
+            f"Profit gap: demand, margin, and revenue density line up well enough "
+            f"to validate a focused collection instead of a single test listing."
+        )
 
     if not parts:
         parts.append(f"Moderate opportunity in '{keyword}' — focus on long-tail variants.")

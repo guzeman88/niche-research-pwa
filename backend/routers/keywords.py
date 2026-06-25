@@ -37,7 +37,7 @@ def list_keywords(
             opportunity_score=r.get("opportunity_score"),
             gap_score=r.get("gap_score"),
             trajectory=r.get("trajectory"),
-            breakout=False,
+            breakout=bool(r.get("breakout_flag")),
         ))
     return results[:limit]
 
@@ -59,7 +59,7 @@ def search_keywords(q: str = Query(..., min_length=2), limit: int = Query(defaul
         opportunity_score=r.get("opportunity_score"),
         gap_score=r.get("gap_score"),
         trajectory=r.get("trajectory"),
-        breakout=False,
+        breakout=bool(r.get("breakout_flag")),
     ) for r in rows]
 
 

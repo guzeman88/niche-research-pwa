@@ -75,6 +75,8 @@ class GapReportItem(BaseModel):
     style_gap_score: float
     price_gap_score: float
     recency_gap_score: float
+    buyer_intent_score: float = 0.0
+    profit_gap_score: float = 0.0
     composite_gap_score: float
     entry_angle: str
     recommended_price_min: float
