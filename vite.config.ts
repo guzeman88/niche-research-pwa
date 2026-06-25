@@ -9,7 +9,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       // Force immediate activation — critical for mobile Safari where users can't hard-refresh
       includeAssets: ['favicon.svg', 'icon-72x72.png', 'icon-96x96.png', 'icon-128x128.png', 'icon-144x144.png', 'icon-152x152.png', 'icon-192x192.png', 'icon-384x384.png', 'icon-512x512.png'],
-      injectRegister: 'inline',
+      injectRegister: 'auto',
       manifest: {
         name: 'Niche Research',
         short_name: 'NicheResearch',
@@ -18,7 +18,7 @@ export default defineConfig({
         background_color: '#202631',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/?v=12',
+        start_url: '/?v=13',
         icons: [
           { src: 'icon-72x72.png', sizes: '72x72', type: 'image/png' },
           { src: 'icon-96x96.png', sizes: '96x96', type: 'image/png' },
@@ -33,12 +33,13 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
-        globIgnores: ['**/data/*.json'],
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
+        globIgnores: ['**/data/*.json', '**/index.html', '**/manifest.webmanifest'],
+        navigateFallback: undefined,
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        cacheId: 'etsy-niches-v12',
+        cacheId: 'etsy-niches-v13',
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [],
       },
