@@ -8,9 +8,131 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      RENDER_SERVICE_URL: https://niche-research-api-kqlt.onrender.com
     steps:
+      - name: Resolve Render service
+        id: render_service
+        if: ${{ env.RENDER_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          if [ -n "$RENDER_SERVICE_ID" ]; then
+            echo "service_id=$RENDER_SERVICE_ID" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          curl -fsS \
+            --url 'https://api.render.com/v1/services?limit=100' \
+            --header 'Accept: application/json' \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --output services.json
+
+          SERVICE_ID="$(node <<'NODE'
+          const fs = require('fs');
+          const target = (process.env.RENDER_SERVICE_URL || '').replace(/\/$/, '');
+          const payload = JSON.parse(fs.readFileSync('services.json', 'utf8'));
+          const rows = Array.isArray(payload) ? payload : (payload.services || payload.results || []);
+          const match = rows
+            .map((row) => row.service || row)
+            .find((service) => {
+              const url = String(service?.serviceDetails?.url || service?.url || '').replace(/\/$/, '');
+              return url === target || service?.slug === 'niche-research-api-kqlt';
+            });
+          if (!match?.id) {
+            console.error(`Unable to find Render service for ${target}. Set RENDER_SERVICE_ID as a repo secret.`);
+            process.exit(1);
+          }
+          process.stdout.write(match.id);
+          NODE
+          )"
+
+          echo "Resolved Render service: ${SERVICE_ID}"
+          echo "service_id=$SERVICE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Resume Render service if suspended
+        if: ${{ env.RENDER_API_KEY != '' && steps.render_service.outputs.service_id != '' }}
+        run: |
+          set -euo pipefail
+          SERVICE_ID="${{ steps.render_service.outputs.service_id }}"
+          curl -fsS \
+            --url "https://api.render.com/v1/services/${SERVICE_ID}" \
+            --header 'Accept: application/json' \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --output service.json
+
+          SUSPENDED="$(node -e "const s=require('./service.json'); process.stdout.write(String(Boolean((s.service||s).suspended)))")"
+          echo "Render suspended: ${SUSPENDED}"
+          if [ "$SUSPENDED" != "true" ]; then
+            exit 0
+          fi
+
+          status="$(curl -sS -o resume.json -w "%{http_code}" \
+            --request POST \
+            --url "https://api.render.com/v1/services/${SERVICE_ID}/resume" \
+            --header 'Accept: application/json' \
+            --header "Authorization: Bearer $RENDER_API_KEY")"
+          echo "Render resume status: ${status}"
+          if [ -s resume.json ]; then
+            sed -e 's/[[:cntrl:]]//g' resume.json | head -c 1200
+            echo
+          fi
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi
+
+      - name: Trigger Render API deploy
+        id: render_api_deploy
+        if: ${{ env.RENDER_API_KEY != '' && steps.render_service.outputs.service_id != '' }}
+        run: |
+          set -euo pipefail
+          SERVICE_ID="${{ steps.render_service.outputs.service_id }}"
+          body="$(mktemp)"
+          status="$(curl -sS -o "$body" -w "%{http_code}" \
+            --request POST \
+            --url "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+            --header 'Accept: application/json' \
+            --header 'Content-Type: application/json' \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --data "{\"clearCache\":\"do_not_clear\",\"commitId\":\"${GITHUB_SHA}\"}")"
+          echo "Render API deploy status: ${status}"
+          cat "$body"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi
+          DEPLOY_ID="$(node -e "const fs=require('fs'); const d=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(d.id || d.deploy?.id || '')" "$body")"
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "Render did not return a deploy id."
+            exit 1
+          fi
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Render API deploy
+        if: ${{ env.RENDER_API_KEY != '' && steps.render_service.outputs.service_id != '' && steps.render_api_deploy.outputs.deploy_id != '' }}
+        run: |
+          set -euo pipefail
+          SERVICE_ID="${{ steps.render_service.outputs.service_id }}"
+          DEPLOY_ID="${{ steps.render_api_deploy.outputs.deploy_id }}"
+          for attempt in $(seq 1 40); do
+            curl -fsS \
+              --url "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${DEPLOY_ID}" \
+              --header 'Accept: application/json' \
+              --header "Authorization: Bearer $RENDER_API_KEY" \
+              --output deploy.json
+            STATUS="$(node -e "const d=require('./deploy.json'); process.stdout.write(d.status || d.deploy?.status || '')")"
+            echo "Render deploy ${DEPLOY_ID} status (${attempt}/40): ${STATUS}"
+            case "$STATUS" in
+              live) exit 0 ;;
+              build_failed|update_failed|canceled|pre_deploy_failed) cat deploy.json; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "Timed out waiting for Render deploy ${DEPLOY_ID}."
+          exit 1
+
       - name: Trigger Render deploy hook
-        if: ${{ env.RENDER_DEPLOY_HOOK_URL != '' }}
+        if: ${{ env.RENDER_API_KEY == '' && env.RENDER_DEPLOY_HOOK_URL != '' }}
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4 5; do
@@ -34,13 +156,13 @@ jobs:
           exit 1
 
       - name: Explain missing deploy hook
-        if: ${{ env.RENDER_DEPLOY_HOOK_URL == '' }}
+        if: ${{ env.RENDER_API_KEY == '' && env.RENDER_DEPLOY_HOOK_URL == '' }}
         run: |
-          echo "Skipped Render deploy because RENDER_DEPLOY_HOOK_URL is not set."
-          echo "Create a Render deploy hook for the backend service and add it as a GitHub repository secret."
+          echo "Skipped Render deploy because neither RENDER_API_KEY nor RENDER_DEPLOY_HOOK_URL is set."
+          echo "Add RENDER_API_KEY so this workflow can resume suspended services and deploy by API."
 
       - name: Wait for backend
-        if: ${{ env.RENDER_DEPLOY_HOOK_URL != '' }}
+        if: ${{ env.RENDER_API_KEY != '' || env.RENDER_DEPLOY_HOOK_URL != '' }}
         run: sleep 45
 
       - name: Verify backend health and scheduler
