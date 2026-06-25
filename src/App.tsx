@@ -1,28 +1,38 @@
+import { Suspense, lazy } from 'react'
+import type { ReactNode } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
-import Dashboard from './pages/Dashboard'
-import Explore from './pages/Explore'
-import ReportDetail from './pages/ReportDetail'
-import Keywords from './pages/Keywords'
-import Scheduler from './pages/Scheduler'
-import Settings from './pages/Settings'
-import Stores from './pages/Stores'
-import StoreGenerator from './pages/StoreGenerator'
-import NotFound from './pages/NotFound'
+
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Keywords = lazy(() => import('./pages/Keywords'))
+const StoreGenerator = lazy(() => import('./pages/StoreGenerator'))
+const Stores = lazy(() => import('./pages/Stores'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+
+function PageFallback() {
+  return (
+    <div className="page">
+      <div className="panel p-4">
+        <div className="h-4 w-28 rounded bg-surface-700/80" />
+        <div className="mt-4 h-20 rounded bg-surface-800/80" />
+      </div>
+    </div>
+  )
+}
+
+function page(element: ReactNode) {
+  return <Suspense fallback={<PageFallback />}>{element}</Suspense>
+}
 
 export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="/explore" element={<Explore />} />
-        <Route path="/reports/:reportId" element={<ReportDetail />} />
-        <Route path="/keywords" element={<Keywords />} />
-        <Route path="/scheduler" element={<Scheduler />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/store-generator" element={<StoreGenerator />} />
-        <Route path="/stores" element={<Stores />} />
-        <Route path="*" element={<NotFound />} />
+        <Route index element={page(<Dashboard />)} />
+        <Route path="/keywords" element={page(<Keywords />)} />
+        <Route path="/store-generator" element={page(<StoreGenerator />)} />
+        <Route path="/stores" element={page(<Stores />)} />
+        <Route path="*" element={page(<NotFound />)} />
       </Route>
     </Routes>
   )
