@@ -47,7 +47,7 @@ export default function StoreGenerator() {
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Store Idea Generator</h2>
           <p className="text-[13px] text-surface-200 mt-0.5">
             {concepts.length > 0
-              ? `${concepts.length} profit-ranked concepts built from keyword intelligence`
+              ? `${concepts.length} profit-ranked concepts with keyword clusters and listing blueprints`
               : 'Find storeable niches that can hold multiple related keywords'}
           </p>
         </div>
@@ -95,6 +95,10 @@ export default function StoreGenerator() {
             const isSaving = saveStore.isPending && saveStore.variables?.id === concept.id
             const displayScore = profitScore(concept)
             const grade = concept.profitGrade || gradeFor(displayScore)
+            const evidenceDepth = concept.evidenceDepth
+            const keywordClusters = concept.keywordClusters || []
+            const listingBlueprints = concept.listingBlueprints || []
+            const recommendation = concept.storeRecommendation
             return (
               <div key={concept.id} className="panel overflow-hidden">
                 <div className="h-1" style={{ background: `linear-gradient(90deg, ${color}, ${color}80)` }} />
@@ -105,6 +109,11 @@ export default function StoreGenerator() {
                         <h3 className="text-[16px] font-extrabold text-surface-50">{concept.name}</h3>
                         {index === 0 && <span className="tag border-accent-gold/30 bg-accent-gold/10 text-accent-gold">top {scoreLabel}</span>}
                         <span className="tag border-primary-300/25 bg-primary-400/10 text-primary-100">grade {grade}</span>
+                        {evidenceDepth && (
+                          <span className="tag border-surface-400/25 bg-surface-500/10 text-surface-200">
+                            evidence {evidenceDepth.level} {evidenceDepth.score}/100
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-surface-300 mt-1">{concept.focus}</p>
                       <p className="text-[13px] text-surface-200 mt-3 max-w-3xl leading-relaxed">{concept.rationale}</p>
@@ -145,7 +154,7 @@ export default function StoreGenerator() {
                     <Signal label="Confidence" value={concept.confidenceScore} icon="check-circle" />
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <MarketMetric
                       label="Revenue signal"
                       value={formatRevenue(concept)}
@@ -158,14 +167,66 @@ export default function StoreGenerator() {
                       label="Gross margin"
                       value={concept.estimatedGrossMargin ? `${concept.estimatedGrossMargin}% estimated` : 'not enough data'}
                     />
+                    <MarketMetric
+                      label="Evidence depth"
+                      value={formatEvidenceDepth(concept)}
+                    />
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="section-label">Product mix</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {concept.productTypes.map((product) => (
-                        <span key={product} className="tag">{product}</span>
-                      ))}
+                  {recommendation && (
+                    <div className="rounded-md border border-primary-300/20 bg-primary-400/5 p-4">
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)]">
+                        <div>
+                          <div className="section-label">Store recommendation</div>
+                          <p className="mt-2 text-[13px] font-semibold leading-relaxed text-surface-100">{recommendation.positioning}</p>
+                          <p className="mt-2 text-[12px] leading-relaxed text-surface-300">{recommendation.profitPriority}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="section-label">Launch sequence</div>
+                          <div className="space-y-1.5 text-[12px] text-surface-200">
+                            {recommendation.launchListingIdeas.slice(0, 4).map((idea, ideaIndex) => (
+                              <div key={idea} className="flex items-center gap-2">
+                                <span className="w-5 text-right text-[10px] font-extrabold tabular-nums text-primary-100">{ideaIndex + 1}</span>
+                                <span className="truncate">{idea}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.55fr)_minmax(0,1.45fr)]">
+                    <div className="space-y-2">
+                      <div className="section-label">Product mix</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {concept.productTypes.map((product) => (
+                          <span key={product} className="tag">{product}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="section-label">Keyword clusters</div>
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {keywordClusters.slice(0, 6).map((cluster) => (
+                          <div key={cluster.id} className="rounded-md border border-surface-500/40 bg-surface-900/15 px-3 py-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-[12px] font-extrabold text-surface-100">{cluster.label}</div>
+                                <div className="mt-0.5 text-[10px] uppercase font-bold tracking-wider text-surface-400">
+                                  {cluster.keywords.length} keywords
+                                </div>
+                              </div>
+                              <div className={`text-[13px] font-extrabold tabular-nums ${scoreColor(cluster.profitabilityScore)}`}>
+                                {cluster.profitabilityScore}
+                              </div>
+                            </div>
+                            <div className="mt-2 truncate text-[11px] text-surface-300">
+                              {cluster.keywords.slice(0, 3).map((keyword) => keyword.keyword).join(' / ')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -188,6 +249,35 @@ export default function StoreGenerator() {
                           </div>
                         ))}
                       </div>
+                      {listingBlueprints.length > 0 && (
+                        <div className="space-y-2 pt-2">
+                          <div className="section-label">Listing blueprints</div>
+                          <div className="space-y-2">
+                            {listingBlueprints.slice(0, 4).map((blueprint) => (
+                              <div key={blueprint.id} className="rounded-md border border-surface-500/40 bg-surface-900/15 px-3 py-2">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-[12px] font-extrabold text-surface-100">{blueprint.title}</div>
+                                    <div className="mt-0.5 text-[11px] text-surface-300">
+                                      primary: <span className="font-bold text-surface-100">{blueprint.primaryKeyword}</span>
+                                    </div>
+                                  </div>
+                                  <div className={`text-[13px] font-extrabold tabular-nums ${scoreColor(blueprint.profitabilityScore)}`}>
+                                    {blueprint.profitabilityScore}
+                                  </div>
+                                </div>
+                                {blueprint.supportingKeywords.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {blueprint.supportingKeywords.slice(0, 4).map((keyword) => (
+                                      <span key={keyword} className="tag text-[10px] py-0.5">{keyword}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-3">
@@ -215,6 +305,7 @@ export default function StoreGenerator() {
                     <div className="space-y-2">
                       <div className="section-label">Validation plan</div>
                       <div className="space-y-1.5 text-[12px] text-surface-300">
+                        {recommendation?.nextValidationStep && <div className="font-semibold text-surface-100">{recommendation.nextValidationStep}</div>}
                         {(concept.validationChecklist || concept.evidence).slice(0, 4).map((item) => <div key={item}>{item}</div>)}
                       </div>
                     </div>
@@ -302,11 +393,20 @@ function formatPriceRange(concept: StoreIdea): string {
   return concept.avgPrice ? fmtPrice(concept.avgPrice) : 'not enough data'
 }
 
+function formatEvidenceDepth(concept: StoreIdea): string {
+  if (!concept.evidenceDepth) return 'not enough data'
+  const missing = concept.evidenceDepth.missing.length
+  return missing > 0
+    ? `${concept.evidenceDepth.level} ${concept.evidenceDepth.score}/100, ${missing} gaps`
+    : `${concept.evidenceDepth.level} ${concept.evidenceDepth.score}/100`
+}
+
 function toStorePayload(concept: StoreIdea) {
   const keywordNames = concept.keywords.map((keyword) => keyword.keyword)
   const secondary = [
     concept.focus,
     ...keywordNames.slice(0, 5),
+    ...(concept.keywordClusters || []).slice(0, 4).map((cluster) => cluster.label),
   ].filter((item, index, list) => item && list.indexOf(item) === index)
   const profit = profitScore(concept)
 
@@ -334,6 +434,11 @@ function toStorePayload(concept: StoreIdea) {
       estimated_monthly_revenue: concept.estimatedMonthlyRevenue,
       price_range: concept.priceRange,
       keywords: concept.keywords,
+      keyword_clusters: concept.keywordClusters || [],
+      listing_blueprints: concept.listingBlueprints || [],
+      store_recommendation: concept.storeRecommendation,
+      evidence_depth: concept.evidenceDepth,
+      fee_model: concept.feeModel,
       profit_drivers: concept.profitDrivers || [],
       evidence: concept.evidence,
       risks: concept.risks,

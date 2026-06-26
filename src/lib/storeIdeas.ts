@@ -49,6 +49,75 @@ export interface StoreIdeaKeyword {
   estimatedRevenue?: number
   avgPrice?: number
   competitionEase?: number
+  priceRange?: { min: number; max: number } | null
+}
+
+export interface StoreIdeaEvidenceDepth {
+  score: number
+  level: 'thin' | 'developing' | 'solid' | 'deep' | string
+  keywordSignals: number
+  scoredKeywords: number
+  pricedKeywords: number
+  revenueSignals: number
+  competitionSignals: number
+  trendSignals: number
+  productTypes: number
+  missing: string[]
+}
+
+export interface StoreIdeaKeywordCluster {
+  id: string
+  label: string
+  clusterType: 'product' | DimensionType | string
+  keywords: StoreIdeaKeyword[]
+  primaryProducts: string[]
+  avgOpportunity: number
+  avgGap: number
+  avgDemand?: number
+  competitionEase?: number
+  buyerIntent?: number
+  profitabilityScore: number
+}
+
+export interface StoreIdeaListingBlueprint {
+  id: string
+  title: string
+  primaryKeyword: string
+  supportingKeywords: string[]
+  sourceClusterId?: string
+  sourceClusterLabel?: string
+  productType: string
+  buyerIntent?: number
+  priceBand?: { min: number; max: number } | null
+  tags: string[]
+  profitabilityScore: number
+  evidenceLevel: string
+  profitRationale: string
+}
+
+export interface StoreIdeaRecommendation {
+  positioning: string
+  targetCustomer: string
+  recommendedCollections: string[]
+  launchListingIdeas: string[]
+  keywordStrategy: {
+    primaryKeywords: string[]
+    expansionKeywords: string[]
+    clusterCount: number
+    listingBlueprintCount: number
+  }
+  profitPriority: string
+  nextValidationStep: string
+}
+
+export interface StoreIdeaFeeModel {
+  currency: string
+  listingFee: number
+  transactionFeeRate: number
+  estimatedPaymentProcessingRate?: number
+  estimatedPaymentProcessingFixed?: number
+  offsiteAdsRateRange?: { min: number; max: number }
+  note: string
 }
 
 export interface StoreIdea {
@@ -62,6 +131,7 @@ export interface StoreIdea {
   avgGap: number
   nicheScore: number
   profitScore?: number
+  rawProfitScore?: number
   profitGrade?: string
   cohesion: number
   trendLift: number
@@ -76,6 +146,11 @@ export interface StoreIdea {
   estimatedMonthlyRevenue?: number
   rationale: string
   evidence: string[]
+  evidenceDepth?: StoreIdeaEvidenceDepth
+  keywordClusters?: StoreIdeaKeywordCluster[]
+  listingBlueprints?: StoreIdeaListingBlueprint[]
+  storeRecommendation?: StoreIdeaRecommendation
+  feeModel?: StoreIdeaFeeModel
   listingIdeas: string[]
   risks: string[]
   profitDrivers?: string[]
