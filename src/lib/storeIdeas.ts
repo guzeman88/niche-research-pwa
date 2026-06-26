@@ -41,11 +41,11 @@ interface ClusterSeed {
 
 export interface StoreIdeaKeyword {
   keyword: string
-  opportunity: number
-  gap: number
+  opportunity?: number | null
+  gap?: number | null
   product: string
-  demand?: number
-  margin?: number
+  demand?: number | null
+  margin?: number | null
   estimatedRevenue?: number
   revenuePerListing?: number
   avgPrice?: number
@@ -87,7 +87,7 @@ export interface StoreIdeaKeywordCluster {
   revenueDensityScore?: number
   avgRevenuePerListing?: number | null
   marketEvidenceScore?: number | null
-  profitabilityScore: number
+  profitabilityScore?: number | null
 }
 
 export interface StoreIdeaListingBlueprint {
@@ -101,7 +101,7 @@ export interface StoreIdeaListingBlueprint {
   buyerIntent?: number
   priceBand?: { min: number; max: number } | null
   tags: string[]
-  profitabilityScore: number
+  profitabilityScore?: number | null
   profitInputs?: Record<string, unknown>
   evidenceLevel: string
   profitRationale: string
@@ -147,9 +147,9 @@ export interface StoreIdeaProfitabilityEvidence {
   estimatedGrossMargin?: number | null
   sampledMonthlyRevenue?: number | null
   revenuePerListing?: number | null
-  revenueDensityScore: number
-  marketTractionScore: number
-  sellerWeaknessScore: number
+  revenueDensityScore?: number | null
+  marketTractionScore?: number | null
+  sellerWeaknessScore?: number | null
   avgListingCount?: number | null
   avgFavorites?: number | null
   signalsWithDeepMarketData: number
@@ -164,16 +164,16 @@ export interface StoreIdea {
   keywords: StoreIdeaKeyword[]
   productTypes: string[]
   avgOpportunity: number
-  avgGap: number
+  avgGap?: number | null
   nicheScore: number
-  profitScore?: number
-  rawProfitScore?: number
-  profitGrade?: string
+  profitScore?: number | null
+  rawProfitScore?: number | null
+  profitGrade?: string | null
   cohesion: number
   trendLift: number
-  demandScore?: number
-  marginScore?: number
-  competitionEase?: number
+  demandScore?: number | null
+  marginScore?: number | null
+  competitionEase?: number | null
   buyerIntent?: number
   confidenceScore?: number
   avgPrice?: number

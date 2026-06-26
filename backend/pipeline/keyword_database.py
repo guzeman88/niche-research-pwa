@@ -1160,6 +1160,7 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 sc.entry_strategy,
                 sc.peak_months,
                 sc.keyword_clusters_json,
+                sc.sources_used,
                 COALESCE(sc.gap_score, gs.gap_score) AS gap_score,
                 sc.listing_efficiency,
                 sc.score_delta,

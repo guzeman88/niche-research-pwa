@@ -26,8 +26,6 @@ export default function StoreGenerator() {
   const isLoading = profitableLoading
   const loadError = profitableError
   const bestConcept = concepts[0]
-  const scoreLabel = 'profit'
-
   const saveStore = useMutation({
     mutationFn: (concept: StoreIdea) => createStore(toStorePayload(concept)),
     onMutate: () => setSaveError(''),
@@ -93,8 +91,10 @@ export default function StoreGenerator() {
             const color = COLORS[index % COLORS.length]
             const isSaved = savedConcepts.has(concept.id)
             const isSaving = saveStore.isPending && saveStore.variables?.id === concept.id
-            const displayScore = profitScore(concept)
-            const grade = concept.profitGrade || gradeFor(displayScore)
+            const displayScore = primaryScore(concept)
+            const hasProfitEvidence = Number.isFinite(concept.profitScore)
+            const scoreLabel = hasProfitEvidence ? 'profit' : 'keyword fit'
+            const grade = concept.profitGrade || (hasProfitEvidence ? gradeFor(displayScore) : null)
             const evidenceDepth = concept.evidenceDepth
             const keywordClusters = concept.keywordClusters || []
             const listingBlueprints = concept.listingBlueprints || []
@@ -109,7 +109,11 @@ export default function StoreGenerator() {
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-[16px] font-extrabold text-surface-50">{concept.name}</h3>
                         {index === 0 && <span className="tag border-accent-gold/30 bg-accent-gold/10 text-accent-gold">top {scoreLabel}</span>}
-                        <span className="tag border-primary-300/25 bg-primary-400/10 text-primary-100">grade {grade}</span>
+                        {grade ? (
+                          <span className="tag border-primary-300/25 bg-primary-400/10 text-primary-100">grade {grade}</span>
+                        ) : (
+                          <span className="tag border-accent-amber/25 bg-accent-amber/10 text-accent-amber">profit data pending</span>
+                        )}
                         {evidenceDepth && (
                           <span className="tag border-surface-400/25 bg-surface-500/10 text-surface-200">
                             evidence {evidenceDepth.level} {evidenceDepth.score}/100
@@ -126,7 +130,7 @@ export default function StoreGenerator() {
                       </div>
                       <div className="sm:text-right">
                         <div className="text-[10px] uppercase font-bold tracking-wider text-surface-400">
-                          niche {concept.nicheScore}/100
+                          keyword fit {concept.nicheScore}/100
                         </div>
                         <button
                           type="button"
@@ -147,10 +151,10 @@ export default function StoreGenerator() {
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                    <Signal label="Demand" value={concept.demandScore ?? concept.avgOpportunity} icon="trending-up" />
+                    <Signal label="Demand" value={concept.demandScore} icon="trending-up" />
                     <Signal label="Margin" value={concept.marginScore ?? concept.estimatedGrossMargin} icon="dollar-sign" />
-                    <Signal label="Competition" value={concept.competitionEase ?? concept.avgGap} icon="target" />
-                    <Signal label="Intent" value={concept.buyerIntent} icon="users" />
+                    <Signal label="Competition" value={concept.competitionEase} icon="target" />
+                    <Signal label="Keyword Intent" value={concept.buyerIntent} icon="users" />
                     <Signal label="Cohesion" value={concept.cohesion} icon="layers" />
                     <Signal label="Confidence" value={concept.confidenceScore} icon="check-circle" />
                   </div>
@@ -236,8 +240,8 @@ export default function StoreGenerator() {
                                   {cluster.keywords.length} keywords
                                 </div>
                               </div>
-                              <div className={`text-[13px] font-extrabold tabular-nums ${scoreColor(cluster.profitabilityScore)}`}>
-                                {cluster.profitabilityScore}
+                              <div className={`text-[13px] font-extrabold tabular-nums ${metricClass(cluster.profitabilityScore)}`}>
+                                {formatScore(cluster.profitabilityScore)}
                               </div>
                             </div>
                             <div className="mt-2 truncate text-[11px] text-surface-300">
@@ -281,8 +285,8 @@ export default function StoreGenerator() {
                                       primary: <span className="font-bold text-surface-100">{blueprint.primaryKeyword}</span>
                                     </div>
                                   </div>
-                                  <div className={`text-[13px] font-extrabold tabular-nums ${scoreColor(blueprint.profitabilityScore)}`}>
-                                    {blueprint.profitabilityScore}
+                                  <div className={`text-[13px] font-extrabold tabular-nums ${metricClass(blueprint.profitabilityScore)}`}>
+                                    {formatScore(blueprint.profitabilityScore)}
                                   </div>
                                 </div>
                                 {blueprint.supportingKeywords.length > 0 && (
@@ -367,7 +371,7 @@ export default function StoreGenerator() {
   )
 }
 
-function Signal({ label, value, icon }: { label: string; value?: number; icon: 'trending-up' | 'dollar-sign' | 'target' | 'users' | 'layers' | 'check-circle' }) {
+function Signal({ label, value, icon }: { label: string; value?: number | null; icon: 'trending-up' | 'dollar-sign' | 'target' | 'users' | 'layers' | 'check-circle' }) {
   const hasValue = Number.isFinite(value)
   return (
     <div className="rounded-md border border-surface-500/50 bg-surface-900/20 px-3 py-2">
@@ -391,7 +395,7 @@ function MarketMetric({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ScorePill({ label, value }: { label: string; value?: number }) {
+function ScorePill({ label, value }: { label: string; value?: number | null }) {
   const hasValue = Number.isFinite(value)
   return (
     <div className="w-14 text-right">
@@ -430,7 +434,8 @@ function toStorePayload(concept: StoreIdea) {
     ...keywordNames.slice(0, 5),
     ...(concept.keywordClusters || []).slice(0, 4).map((cluster) => cluster.label),
   ].filter((item, index, list) => item && list.indexOf(item) === index)
-  const profit = profitScore(concept)
+  const profit = concept.profitScore ?? null
+  const keywordFit = primaryScore(concept)
 
   return {
     name: concept.name,
@@ -440,13 +445,13 @@ function toStorePayload(concept: StoreIdea) {
     product_types: concept.productTypes.map(toProductType),
     brand_voice: voiceFor(concept),
     aesthetic: aestheticFor(concept),
-    pricing_strategy: profit >= 78 || (concept.estimatedGrossMargin || 0) >= 58 ? 'premium' : concept.avgGap >= 60 ? 'competitive' : 'penetration',
-    listing_target: profit >= 78 ? 75 : 50,
+    pricing_strategy: profit && (profit >= 78 || (concept.estimatedGrossMargin || 0) >= 58) ? 'premium' : (concept.avgGap || 0) >= 60 ? 'competitive' : 'penetration',
+    listing_target: profit && profit >= 78 ? 75 : 50,
     research_snapshot: {
       source: 'profitability_engine',
       profit_score: concept.profitScore,
-      keyword_fit_score: concept.nicheScore,
-      profit_grade: concept.profitGrade || gradeFor(profit),
+      keyword_fit_score: keywordFit,
+      profit_grade: concept.profitGrade || null,
       niche_score: concept.nicheScore,
       demand_score: concept.demandScore,
       margin_score: concept.marginScore,
@@ -482,7 +487,7 @@ function audienceFor(concept: StoreIdea): string {
 }
 
 function voiceFor(concept: StoreIdea): string {
-  const strength = profitScore(concept) >= 78 ? 'premium' : 'focused'
+  const strength = (concept.profitScore || 0) >= 78 ? 'premium' : 'focused'
   return [strength, 'data-led', 'commercial', 'giftable'].join(', ')
 }
 
@@ -491,8 +496,16 @@ function aestheticFor(concept: StoreIdea): string {
   return [...focusTerms, 'cohesive', 'etsy-ready'].slice(0, 5).join(', ')
 }
 
-function profitScore(concept: StoreIdea): number {
+function primaryScore(concept: StoreIdea): number {
   return Math.round(concept.profitScore ?? concept.nicheScore)
+}
+
+function formatScore(value?: number | null): string {
+  return Number.isFinite(value) ? String(Math.round(value as number)) : 'n/a'
+}
+
+function metricClass(value?: number | null): string {
+  return Number.isFinite(value) ? scoreColor(value as number) : 'text-surface-400'
 }
 
 function gradeFor(score: number): string {
