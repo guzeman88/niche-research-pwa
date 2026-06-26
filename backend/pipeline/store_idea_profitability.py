@@ -27,6 +27,27 @@ class KeywordSignal:
     avg_price: float
     revenue: float
     listing_count: int
+    listing_efficiency: float
+    revenue_per_listing: float
+    price_p25: float
+    price_median: float
+    price_p75: float
+    avg_favorites: float
+    max_favorites: int
+    pct_high_favorites: float
+    pct_star_sellers: float
+    pct_bestsellers: float
+    market_evidence_score: float
+    profitability_index: float
+    buyer_intent_score: float
+    profit_gap_score: float
+    volume_gap_score: float
+    quality_gap_score: float
+    tag_gap_score: float
+    style_gap_score: float
+    price_gap_score: float
+    recency_gap_score: float
+    listings_analyzed: int
     trajectory: str
     breakout: bool
     products: list[str]
@@ -216,6 +237,27 @@ def _to_signal(row: dict[str, Any]) -> KeywordSignal | None:
         avg_price=_number(row.get("avg_price_usd")),
         revenue=_number(row.get("monthly_revenue_usd")),
         listing_count=int(_number(row.get("listing_count"))),
+        listing_efficiency=_score(row.get("listing_efficiency")),
+        revenue_per_listing=_number(row.get("revenue_per_listing") or row.get("gap_revenue_per_listing")),
+        price_p25=_number(row.get("price_p25_usd")),
+        price_median=_number(row.get("price_median_usd")),
+        price_p75=_number(row.get("price_p75_usd")),
+        avg_favorites=_number(row.get("avg_favorites")),
+        max_favorites=int(_number(row.get("max_favorites"))),
+        pct_high_favorites=_number(row.get("pct_high_favorites")),
+        pct_star_sellers=_number(row.get("pct_star_sellers")),
+        pct_bestsellers=_number(row.get("pct_bestsellers")),
+        market_evidence_score=_score(row.get("market_evidence_score") or row.get("gap_market_evidence_score")),
+        profitability_index=_score(row.get("profitability_index")),
+        buyer_intent_score=_score(row.get("buyer_intent_score")),
+        profit_gap_score=_score(row.get("profit_gap_score")),
+        volume_gap_score=_score(row.get("volume_gap_score")),
+        quality_gap_score=_score(row.get("quality_gap_score")),
+        tag_gap_score=_score(row.get("tag_gap_score")),
+        style_gap_score=_score(row.get("style_gap_score")),
+        price_gap_score=_score(row.get("price_gap_score")),
+        recency_gap_score=_score(row.get("recency_gap_score")),
+        listings_analyzed=int(_number(row.get("listings_analyzed"))),
         trajectory=str(row.get("trajectory") or ""),
         breakout=bool(row.get("breakout_flag")),
         products=_match_products(normalized, domain),
@@ -243,6 +285,10 @@ def _looks_like_default_scan(row: dict[str, Any]) -> bool:
             "recommended_price_min",
             "recommended_price_max",
             "listings_analyzed",
+            "market_evidence_score",
+            "profitability_index",
+            "revenue_per_listing",
+            "avg_favorites",
         )
     )
     if has_market_evidence:
@@ -309,17 +355,32 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
     avg_price = _average([signal.avg_price for signal in signals if signal.avg_price > 0])
     revenue_signals = [signal.revenue for signal in signals if signal.revenue > 0]
     revenue = sum(revenue_signals)
+    avg_revenue_per_listing = _average([signal.revenue_per_listing for signal in signals if signal.revenue_per_listing > 0])
+    avg_listing_efficiency = _average([signal.listing_efficiency for signal in signals if signal.listing_efficiency > 0])
+    avg_market_evidence = _average([signal.market_evidence_score for signal in signals if signal.market_evidence_score > 0])
+    avg_profitability_index = _average([signal.profitability_index for signal in signals if signal.profitability_index > 0])
+    avg_favorites = _average([signal.avg_favorites for signal in signals if signal.avg_favorites > 0])
+    avg_pct_bestsellers = _average([signal.pct_bestsellers for signal in signals if signal.pct_bestsellers > 0])
+    avg_pct_star_sellers = _average([signal.pct_star_sellers for signal in signals if signal.pct_star_sellers > 0])
+    observed_price_band = _observed_price_band(signals)
     competition_ease = _calculate_competition_ease(signals)
     cohesion = _calculate_cohesion(signals, cluster)
     trend_score = _calculate_trend_score(signals)
     buyer_intent = _calculate_buyer_intent(signals)
     confidence = _calculate_confidence(signals)
     evidence_depth = _calculate_evidence_depth(signals, product_types)
-    has_price_basis = avg_price > 0 or any(signal.price_min > 0 and signal.price_max > 0 for signal in signals)
+    has_price_basis = (
+        avg_price > 0
+        or any(signal.price_p25 > 0 and signal.price_p75 > 0 for signal in signals)
+        or any(signal.price_min > 0 and signal.price_max > 0 for signal in signals)
+    )
     price_floor, price_ceiling = _price_range(signals, product_types, avg_price) if has_price_basis else (0.0, 0.0)
     gross_margin = _estimated_gross_margin(product_types, price_floor, price_ceiling) if has_price_basis else 0.0
     margin_signal = gross_margin if has_price_basis else min(avg_margin, 62)
     price_power = _calculate_price_power(price_floor, price_ceiling, avg_price, gross_margin)
+    revenue_density = _calculate_revenue_density(avg_revenue_per_listing, avg_listing_efficiency, revenue, signals)
+    market_traction = _calculate_market_traction(avg_favorites, avg_pct_bestsellers)
+    seller_weakness = _calculate_seller_weakness(avg_pct_star_sellers, avg_pct_bestsellers, competition_ease)
     fulfillment_ease = _average([PRODUCT_ECONOMICS.get(product, PRODUCT_ECONOMICS["digital_download"])["ease"] for product in product_types])
 
     keyword_lift = min(12, len(signals) * 1.8)
@@ -333,17 +394,20 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
         + trend_score * 0.08
     )
     raw_profit_score = _clamp(
-        avg_demand * 0.20
-        + margin_signal * 0.20
-        + competition_ease * 0.17
-        + avg_gap * 0.13
+        margin_signal * 0.22
+        + revenue_density * 0.18
+        + competition_ease * 0.14
+        + avg_gap * 0.12
         + price_power * 0.10
-        + buyer_intent * 0.08
-        + cohesion * 0.05
-        + trend_score * 0.04
+        + avg_demand * 0.09
+        + buyer_intent * 0.07
+        + seller_weakness * 0.03
+        + market_traction * 0.02
         + fulfillment_ease * 0.02
         + evidence_depth["score"] * 0.01
     )
+    if avg_profitability_index > 0:
+        raw_profit_score = _clamp(raw_profit_score * 0.74 + avg_profitability_index * 0.26)
     profit_score = _evidence_adjusted_profit_score(raw_profit_score, evidence_depth, has_price_basis, bool(revenue_signals))
     name = _make_store_name(cluster, product_types)
     keyword_clusters = _make_keyword_clusters(signals, cluster, product_types)
@@ -372,8 +436,12 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
                 "margin": round(signal.margin),
                 "product": _format_product(signal.products[0] if signal.products else product_types[0]),
                 "estimatedRevenue": round(signal.revenue) if signal.revenue > 0 else None,
+                "revenuePerListing": round(signal.revenue_per_listing, 2) if signal.revenue_per_listing > 0 else None,
                 "avgPrice": round(signal.avg_price, 2) if signal.avg_price > 0 else None,
                 "competitionEase": round(100 - signal.competition_quality) if signal.competition_quality > 0 else None,
+                "marketEvidenceScore": round(signal.market_evidence_score) if signal.market_evidence_score > 0 else None,
+                "profitabilityIndex": round(signal.profitability_index) if signal.profitability_index > 0 else None,
+                "avgFavorites": round(signal.avg_favorites, 1) if signal.avg_favorites > 0 else None,
             }
             for signal in signals[:8]
         ],
@@ -395,6 +463,29 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
         "priceRange": {"min": round(price_floor, 2), "max": round(price_ceiling, 2)} if has_price_basis else None,
         "estimatedGrossMargin": round(gross_margin) if has_price_basis else None,
         "estimatedMonthlyRevenue": round(revenue) if revenue_signals else None,
+        "profitabilityEvidence": _make_profitability_evidence(
+            signals,
+            evidence_depth,
+            observed_price_band,
+            gross_margin,
+            revenue,
+            avg_revenue_per_listing,
+            revenue_density,
+            market_traction,
+            seller_weakness,
+        ),
+        "scoreBreakdown": {
+            "margin": round(margin_signal),
+            "revenueDensity": round(revenue_density),
+            "competitionEase": round(competition_ease),
+            "gap": round(avg_gap),
+            "pricePower": round(price_power),
+            "demand": round(avg_demand),
+            "buyerIntent": round(buyer_intent),
+            "marketTraction": round(market_traction),
+            "sellerWeakness": round(seller_weakness),
+            "evidenceDepth": evidence_depth["score"],
+        },
         "rationale": _make_rationale(signals, focus, product_types, profit_score, gross_margin),
         "evidence": _make_evidence(signals, cluster, product_types, revenue, competition_ease),
         "evidenceDepth": evidence_depth,
@@ -573,6 +664,13 @@ def _price_range(signals: list[KeywordSignal], products: list[str], avg_price: f
     if mins and maxes:
         return max(2.99, _average(mins)), max(_average(maxes), _average(mins) + 2)
 
+    p25s = [signal.price_p25 for signal in signals if signal.price_p25 > 0]
+    p75s = [signal.price_p75 for signal in signals if signal.price_p75 > 0]
+    if p25s and p75s:
+        floor = max(2.99, _average(p25s) * 0.92)
+        ceiling = max(_average(p75s) * 1.08, floor + 2)
+        return floor, ceiling
+
     economics = [PRODUCT_ECONOMICS.get(product, PRODUCT_ECONOMICS["digital_download"]) for product in products]
     floor = _average([item["floor"] for item in economics])
     ceiling = _average([item["ceiling"] for item in economics])
@@ -600,28 +698,42 @@ def _estimated_gross_margin(products: list[str], price_floor: float, price_ceili
 
 def _calculate_evidence_depth(signals: list[KeywordSignal], products: list[str]) -> dict[str, Any]:
     keyword_count = len(signals)
-    priced = [signal for signal in signals if signal.avg_price > 0 or (signal.price_min > 0 and signal.price_max > 0)]
+    priced = [
+        signal for signal in signals
+        if signal.avg_price > 0
+        or signal.price_p25 > 0
+        or signal.price_p75 > 0
+        or (signal.price_min > 0 and signal.price_max > 0)
+    ]
     revenue = [signal for signal in signals if signal.revenue > 0]
+    revenue_density = [signal for signal in signals if signal.revenue_per_listing > 0 or signal.listing_efficiency > 0]
     competition = [signal for signal in signals if signal.competition_quality > 0 or signal.listing_count > 0 or signal.gap > 0]
     trend = [signal for signal in signals if signal.trend > 0 or signal.trajectory or signal.breakout]
+    traction = [signal for signal in signals if signal.avg_favorites > 0 or signal.max_favorites > 0 or signal.pct_bestsellers > 0]
     scored = [signal for signal in signals if signal.opportunity > 0 and signal.gap > 0 and signal.demand > 0]
     missing = []
     if len(priced) < max(2, min(4, keyword_count // 2)):
         missing.append("price evidence")
     if not revenue:
         missing.append("monthly revenue evidence")
+    if not revenue_density:
+        missing.append("revenue density evidence")
     if len(competition) < max(2, min(4, keyword_count // 2)):
         missing.append("competition evidence")
+    if not traction:
+        missing.append("buyer traction evidence")
     if len(trend) < 2:
         missing.append("trend evidence")
 
     score = _clamp(
         min(keyword_count, 10) / 10 * 24
-        + min(len(scored), 8) / 8 * 18
-        + min(len(priced), 6) / 6 * 20
-        + min(len(revenue), 5) / 5 * 14
-        + min(len(competition), 8) / 8 * 14
-        + min(len(trend), 6) / 6 * 6
+        + min(len(scored), 8) / 8 * 14
+        + min(len(priced), 6) / 6 * 17
+        + min(len(revenue), 5) / 5 * 12
+        + min(len(revenue_density), 5) / 5 * 10
+        + min(len(competition), 8) / 8 * 11
+        + min(len(traction), 5) / 5 * 8
+        + min(len(trend), 6) / 6 * 4
         + min(len(products), 4) / 4 * 4
     )
     if score >= 78:
@@ -640,10 +752,81 @@ def _calculate_evidence_depth(signals: list[KeywordSignal], products: list[str])
         "scoredKeywords": len(scored),
         "pricedKeywords": len(priced),
         "revenueSignals": len(revenue),
+        "revenueDensitySignals": len(revenue_density),
         "competitionSignals": len(competition),
+        "buyerTractionSignals": len(traction),
         "trendSignals": len(trend),
         "productTypes": len(products),
         "missing": missing,
+    }
+
+
+def _observed_price_band(signals: list[KeywordSignal]) -> dict[str, float] | None:
+    p25 = _average([signal.price_p25 for signal in signals if signal.price_p25 > 0])
+    median = _average([signal.price_median for signal in signals if signal.price_median > 0])
+    p75 = _average([signal.price_p75 for signal in signals if signal.price_p75 > 0])
+    avg_price = _average([signal.avg_price for signal in signals if signal.avg_price > 0])
+    if not any([p25, median, p75, avg_price]):
+        return None
+    return {
+        "p25": round(p25, 2) if p25 > 0 else None,
+        "median": round(median, 2) if median > 0 else None,
+        "p75": round(p75, 2) if p75 > 0 else None,
+        "avg": round(avg_price, 2) if avg_price > 0 else None,
+    }
+
+
+def _calculate_revenue_density(avg_revenue_per_listing: float, avg_listing_efficiency: float, revenue: float, signals: list[KeywordSignal]) -> float:
+    components = []
+    if avg_revenue_per_listing > 0:
+        components.append(_clamp(math.log10(max(1.0, avg_revenue_per_listing)) / math.log10(350.0) * 100))
+    if avg_listing_efficiency > 0:
+        components.append(avg_listing_efficiency)
+    if revenue > 0:
+        components.append(_clamp(math.log10(max(1.0, revenue)) / math.log10(50_000.0) * 100))
+    if not components:
+        return 0.0
+    keyword_depth = min(1.0, len([signal for signal in signals if signal.revenue > 0 or signal.revenue_per_listing > 0]) / 5)
+    return _clamp(_average(components) * 0.86 + keyword_depth * 14)
+
+
+def _calculate_market_traction(avg_favorites: float, pct_bestsellers: float) -> float:
+    favorite_score = _clamp(math.log10(max(1.0, avg_favorites)) / math.log10(5000.0) * 100) if avg_favorites > 0 else 0.0
+    bestseller_score = _clamp(pct_bestsellers * 1.4) if pct_bestsellers > 0 else 0.0
+    return _clamp(favorite_score * 0.68 + bestseller_score * 0.32)
+
+
+def _calculate_seller_weakness(pct_star_sellers: float, pct_bestsellers: float, competition_ease: float) -> float:
+    maturity_pressure = _clamp((pct_star_sellers * 0.58) + (pct_bestsellers * 0.42))
+    return _clamp(competition_ease * 0.62 + (100 - maturity_pressure) * 0.38)
+
+
+def _make_profitability_evidence(
+    signals: list[KeywordSignal],
+    evidence_depth: dict[str, Any],
+    observed_price_band: dict[str, float] | None,
+    gross_margin: float,
+    revenue: float,
+    avg_revenue_per_listing: float,
+    revenue_density: float,
+    market_traction: float,
+    seller_weakness: float,
+) -> dict[str, Any]:
+    listing_counts = [signal.listing_count for signal in signals if signal.listing_count > 0]
+    return {
+        "evidenceScore": evidence_depth["score"],
+        "evidenceLevel": evidence_depth["level"],
+        "observedPriceBand": observed_price_band,
+        "estimatedGrossMargin": round(gross_margin) if gross_margin > 0 else None,
+        "sampledMonthlyRevenue": round(revenue) if revenue > 0 else None,
+        "revenuePerListing": round(avg_revenue_per_listing, 2) if avg_revenue_per_listing > 0 else None,
+        "revenueDensityScore": round(revenue_density),
+        "marketTractionScore": round(market_traction),
+        "sellerWeaknessScore": round(seller_weakness),
+        "avgListingCount": round(_average(listing_counts)) if listing_counts else None,
+        "avgFavorites": round(_average([signal.avg_favorites for signal in signals if signal.avg_favorites > 0]), 1) or None,
+        "signalsWithDeepMarketData": len([signal for signal in signals if signal.market_evidence_score >= 70]),
+        "missing": evidence_depth.get("missing", []),
     }
 
 
@@ -709,6 +892,22 @@ def _make_keyword_clusters(
             continue
         seen_labels.add(label_key)
         primary_products = _rank_products(group_signals) or products
+        avg_revenue_per_listing = _average([signal.revenue_per_listing for signal in group_signals if signal.revenue_per_listing > 0])
+        revenue_density = _calculate_revenue_density(
+            avg_revenue_per_listing,
+            _average([signal.listing_efficiency for signal in group_signals if signal.listing_efficiency > 0]),
+            sum(signal.revenue for signal in group_signals if signal.revenue > 0),
+            group_signals,
+        )
+        market_evidence = _average([signal.market_evidence_score for signal in group_signals if signal.market_evidence_score > 0])
+        avg_weighted_keyword = _average([_weighted_keyword_score(signal) for signal in group_signals])
+        avg_profitability_index = _average([signal.profitability_index for signal in group_signals if signal.profitability_index > 0]) or avg_weighted_keyword
+        profitability_score = _clamp(
+            avg_profitability_index * 0.46
+            + avg_weighted_keyword * 0.28
+            + revenue_density * 0.16
+            + market_evidence * 0.10
+        )
         result.append({
             "id": group["id"],
             "label": group["label"],
@@ -720,7 +919,10 @@ def _make_keyword_clusters(
             "avgDemand": round(_average([signal.demand for signal in group_signals])),
             "competitionEase": round(_calculate_competition_ease(group_signals)),
             "buyerIntent": round(_calculate_buyer_intent(group_signals)),
-            "profitabilityScore": round(_average([_weighted_keyword_score(signal) for signal in group_signals])),
+            "revenueDensityScore": round(revenue_density),
+            "avgRevenuePerListing": round(avg_revenue_per_listing, 2) if avg_revenue_per_listing > 0 else None,
+            "marketEvidenceScore": round(market_evidence) if market_evidence > 0 else None,
+            "profitabilityScore": round(profitability_score),
         })
         if len(result) >= 6:
             break
@@ -768,11 +970,12 @@ def _make_listing_blueprints(
             if str(item.get("keyword") or "") and str(item.get("keyword") or "") != primary_keyword
         ][:4]
         score = _clamp(
-            _number(primary.get("opportunity")) * 0.30
-            + _number(primary.get("gap")) * 0.24
-            + _number(primary.get("demand")) * 0.18
+            (_number(primary.get("profitabilityIndex")) or _number(keyword_cluster.get("profitabilityScore"))) * 0.30
+            + _number(primary.get("gap")) * 0.18
+            + _number(primary.get("demand")) * 0.14
             + _number(primary.get("margin")) * 0.12
-            + _number(keyword_cluster.get("buyerIntent")) * 0.10
+            + _number(keyword_cluster.get("revenueDensityScore")) * 0.12
+            + _number(keyword_cluster.get("buyerIntent")) * 0.08
             + _number(keyword_cluster.get("competitionEase")) * 0.06
         )
         title = _listing_title(primary_keyword, product)
@@ -788,6 +991,18 @@ def _make_listing_blueprints(
             "priceBand": {"min": round(price_floor, 2), "max": round(price_ceiling, 2)} if price_floor > 0 and price_ceiling > 0 else None,
             "tags": _make_tags_from_keywords([primary_keyword, *supporting]),
             "profitabilityScore": round(score),
+            "profitInputs": {
+                "opportunity": primary.get("opportunity"),
+                "gap": primary.get("gap"),
+                "demand": primary.get("demand"),
+                "margin": primary.get("margin"),
+                "avgPrice": primary.get("avgPrice"),
+                "priceBand": {"min": round(price_floor, 2), "max": round(price_ceiling, 2)} if price_floor > 0 and price_ceiling > 0 else None,
+                "estimatedRevenue": primary.get("estimatedRevenue"),
+                "revenuePerListing": primary.get("revenuePerListing"),
+                "marketEvidenceScore": primary.get("marketEvidenceScore"),
+                "profitabilityIndex": primary.get("profitabilityIndex"),
+            },
             "evidenceLevel": _blueprint_evidence_level(primary, cluster_lookup.get(str(keyword_cluster.get("id")))),
             "profitRationale": _blueprint_profit_rationale(primary_keyword, product, primary, keyword_cluster),
         })
@@ -814,6 +1029,17 @@ def _make_store_recommendation(
         "targetCustomer": _target_customer(cluster, first_product),
         "recommendedCollections": collection_names,
         "launchListingIdeas": listing_titles,
+        "listingGenerationInputs": [
+            {
+                "title": item.get("title"),
+                "primaryKeyword": item.get("primaryKeyword"),
+                "supportingKeywords": item.get("supportingKeywords", []),
+                "productType": item.get("productType"),
+                "tags": item.get("tags", []),
+                "profitInputs": item.get("profitInputs", {}),
+            }
+            for item in listing_blueprints[:8]
+        ],
         "keywordStrategy": {
             "primaryKeywords": top_keywords[:3],
             "expansionKeywords": top_keywords[3:],
@@ -821,6 +1047,8 @@ def _make_store_recommendation(
             "listingBlueprintCount": len(listing_blueprints),
         },
         "profitPriority": _profit_priority(profit_score, evidence_depth),
+        "profitOptimizationPlan": _profit_optimization_plan(evidence_depth, keyword_clusters, listing_blueprints),
+        "validationPriorities": _validation_priorities(evidence_depth, keyword_clusters),
         "nextValidationStep": _next_validation_step(evidence_depth, top_keywords),
     }
 
@@ -834,8 +1062,14 @@ def _keyword_payload(signal: KeywordSignal, default_product: str) -> dict[str, A
         "margin": round(signal.margin),
         "product": _format_product(signal.products[0] if signal.products else default_product),
         "estimatedRevenue": round(signal.revenue) if signal.revenue > 0 else None,
+        "revenuePerListing": round(signal.revenue_per_listing, 2) if signal.revenue_per_listing > 0 else None,
         "avgPrice": round(signal.avg_price, 2) if signal.avg_price > 0 else None,
         "competitionEase": round(100 - signal.competition_quality) if signal.competition_quality > 0 else None,
+        "marketEvidenceScore": round(signal.market_evidence_score) if signal.market_evidence_score > 0 else None,
+        "profitabilityIndex": round(signal.profitability_index) if signal.profitability_index > 0 else None,
+        "avgFavorites": round(signal.avg_favorites, 1) if signal.avg_favorites > 0 else None,
+        "buyerIntent": round(signal.buyer_intent_score) if signal.buyer_intent_score > 0 else None,
+        "profitGap": round(signal.profit_gap_score) if signal.profit_gap_score > 0 else None,
         "priceRange": (
             {"min": round(signal.price_min, 2), "max": round(signal.price_max, 2)}
             if signal.price_min > 0 and signal.price_max > 0
@@ -983,6 +1217,56 @@ def _profit_priority(profit_score: float, evidence_depth: dict[str, Any]) -> str
     return "Use this as an exploration niche until stronger margin, revenue, and competition evidence is available."
 
 
+def _profit_optimization_plan(
+    evidence_depth: dict[str, Any],
+    keyword_clusters: list[dict[str, Any]],
+    listing_blueprints: list[dict[str, Any]],
+) -> list[str]:
+    plan = []
+    missing = set(evidence_depth.get("missing") or [])
+    if "price evidence" in missing:
+        plan.append("Collect page-one price distributions before assigning premium or penetration pricing.")
+    if "monthly revenue evidence" in missing or "revenue density evidence" in missing:
+        plan.append("Estimate revenue per listing for the top cluster before scaling beyond the first collection.")
+    if "buyer traction evidence" in missing:
+        plan.append("Capture favorites, bestseller, and review velocity signals to confirm buyer pull.")
+    if keyword_clusters:
+        plan.append(f"Prioritize the '{keyword_clusters[0].get('label')}' cluster for the first listings.")
+    if listing_blueprints:
+        plan.append(f"Start listing generation with '{listing_blueprints[0].get('primaryKeyword')}' as the primary keyword anchor.")
+    return plan or ["Evidence is strong enough to prototype the first collection and measure conversion."]
+
+
+def _validation_priorities(evidence_depth: dict[str, Any], keyword_clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    missing = evidence_depth.get("missing") or []
+    top_cluster = keyword_clusters[0] if keyword_clusters else {}
+    keywords = [
+        item.get("keyword")
+        for item in (top_cluster.get("keywords") or [])[:3]
+        if item.get("keyword")
+    ]
+    priorities = []
+    for item in missing[:5]:
+        if item == "price evidence":
+            action = "Scrape or record p25/median/p75 prices for the top keywords."
+        elif item == "monthly revenue evidence":
+            action = "Estimate monthly revenue from reviews, sales velocity, and price."
+        elif item == "revenue density evidence":
+            action = "Calculate revenue per listing so broad markets do not outrank dense niches."
+        elif item == "buyer traction evidence":
+            action = "Capture favorites, bestseller flags, and review velocity from page-one listings."
+        elif item == "competition evidence":
+            action = "Score page-one title, tag, photo, star-seller, and bestseller strength."
+        else:
+            action = f"Collect {item}."
+        priorities.append({
+            "evidenceGap": item,
+            "action": action,
+            "keywords": keywords,
+        })
+    return priorities
+
+
 def _next_validation_step(evidence_depth: dict[str, Any], keywords: list[str]) -> str:
     keyword_text = ", ".join(keywords[:3]) or "the top keywords"
     missing = evidence_depth.get("missing") or []
@@ -990,6 +1274,10 @@ def _next_validation_step(evidence_depth: dict[str, Any], keywords: list[str]) -
         return f"Capture page-one prices for {keyword_text} and rerun the gap scanner."
     if "monthly revenue evidence" in missing:
         return f"Estimate monthly sales/revenue for page-one listings around {keyword_text}."
+    if "revenue density evidence" in missing:
+        return f"Calculate revenue per listing for {keyword_text} so scale decisions favor dense niches."
+    if "buyer traction evidence" in missing:
+        return f"Capture favorites, bestseller flags, and review velocity for {keyword_text}."
     if "competition evidence" in missing:
         return f"Score incumbent listing quality for {keyword_text} before building listings."
     return f"Prototype the first listings around {keyword_text} and track conversion signals."
@@ -1025,8 +1313,10 @@ def _make_risks(signals: list[KeywordSignal], avg_gap: float, cohesion: float, p
         risks.append("Theme is loose; keep the first collection tightly edited.")
     if len(products) < 2:
         risks.append("Product mix is narrow; test one adjacent product type before scaling.")
-    if margin < 38:
+    if margin > 0 and margin < 38:
         risks.append("Estimated margin is tight; use digital or higher-price products first.")
+    elif margin <= 0:
+        risks.append("Margin evidence is missing; validate price and product cost before scaling.")
     if confidence < 55:
         risks.append("Confidence is limited because some revenue, price, or listing data is missing.")
     return risks or ["No major profitability warning from the current keyword set."]

@@ -36,7 +36,7 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -233,6 +233,48 @@ def _migrate_v5(con: sqlite3.Connection) -> None:
             pass
 
 
+def _migrate_v6(con: sqlite3.Connection) -> None:
+    """Add deeper profitability and market-evidence fields."""
+    scan_cols = [
+        ("price_min_usd", "REAL DEFAULT 0"),
+        ("price_p25_usd", "REAL DEFAULT 0"),
+        ("price_median_usd", "REAL DEFAULT 0"),
+        ("price_p75_usd", "REAL DEFAULT 0"),
+        ("price_max_usd", "REAL DEFAULT 0"),
+        ("avg_favorites", "REAL DEFAULT 0"),
+        ("max_favorites", "INTEGER DEFAULT 0"),
+        ("pct_high_favorites", "REAL DEFAULT 0"),
+        ("pct_star_sellers", "REAL DEFAULT 0"),
+        ("pct_bestsellers", "REAL DEFAULT 0"),
+        ("revenue_per_listing", "REAL DEFAULT 0"),
+        ("market_evidence_score", "REAL DEFAULT 0"),
+        ("profitability_index", "REAL DEFAULT 0"),
+    ]
+    gap_cols = [
+        ("price_p25_usd", "REAL DEFAULT 0"),
+        ("price_median_usd", "REAL DEFAULT 0"),
+        ("price_p75_usd", "REAL DEFAULT 0"),
+        ("avg_favorites", "REAL DEFAULT 0"),
+        ("pct_high_favorites", "REAL DEFAULT 0"),
+        ("pct_star_sellers", "REAL DEFAULT 0"),
+        ("pct_bestsellers", "REAL DEFAULT 0"),
+        ("revenue_per_listing", "REAL DEFAULT 0"),
+        ("market_evidence_score", "REAL DEFAULT 0"),
+    ]
+    for col, typedef in scan_cols:
+        try:
+            con.execute(f"ALTER TABLE scans ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass
+    for col, typedef in gap_cols:
+        try:
+            con.execute(f"ALTER TABLE gap_reports ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass
+    con.execute("CREATE INDEX IF NOT EXISTS idx_scans_profitability ON scans(profitability_index DESC)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_scans_market_evidence ON scans(market_evidence_score DESC)")
+
+
 def init_db() -> None:
     """Create or migrate the database. Safe to call on every startup."""
     rebuild_scores_after_migration = False
@@ -253,6 +295,10 @@ def init_db() -> None:
         if version < 5:
             _migrate_v5(con)
             _set_version(con, 5)
+            rebuild_scores_after_migration = True
+        if version < 6:
+            _migrate_v6(con)
+            _set_version(con, 6)
             rebuild_scores_after_migration = True
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
@@ -525,6 +571,124 @@ def _calculate_gap_score(
     return _clamp_score(lightweight), listing_eff
 
 
+def _avg(values: list[float]) -> float:
+    usable = [float(v) for v in values if isinstance(v, (int, float)) and math.isfinite(float(v)) and float(v) > 0]
+    return sum(usable) / len(usable) if usable else 0.0
+
+
+def _price_viability_score(avg_price: float) -> float:
+    if avg_price <= 0:
+        return 0.0
+    if 12 <= avg_price <= 45:
+        return 92.0
+    if 8 <= avg_price < 12:
+        return 72.0
+    if 45 < avg_price <= 70:
+        return 68.0
+    if 4 <= avg_price < 8:
+        return 48.0
+    if avg_price > 70:
+        return 52.0
+    return 25.0
+
+
+def _score_market_evidence(metrics: dict) -> float:
+    ksd_count = metrics.get("keyword_market_rows", 0) or 0
+    sampled = metrics.get("sampled_listings", 0) or 0
+    return _clamp_score(
+        min(ksd_count, 4) / 4 * 12
+        + min(sampled, 60) / 60 * 22
+        + (16 if metrics.get("avg_price_usd", 0) > 0 else 0)
+        + (16 if metrics.get("monthly_revenue_usd", 0) > 0 else 0)
+        + (10 if metrics.get("listing_count", 0) > 0 else 0)
+        + (10 if metrics.get("competition_quality", 0) > 0 else 0)
+        + (8 if metrics.get("avg_favorites", 0) > 0 else 0)
+        + (6 if metrics.get("price_p25_usd", 0) > 0 and metrics.get("price_p75_usd", 0) > 0 else 0)
+    )
+
+
+def _score_profitability_index(
+    keyword: str,
+    demand: float,
+    margin: float,
+    comp_quality: float,
+    monthly_rev: float,
+    listing_count: int | None,
+    avg_price: float,
+    revenue_per_listing: float,
+    avg_favorites: float,
+    market_evidence_score: float,
+) -> float:
+    buyer_intent = score_keyword_buyer_intent(keyword)
+    competition_ease = 100.0 - comp_quality if comp_quality > 0 else _score_supply_gap(listing_count)
+    revenue_density = _score_listing_efficiency(monthly_rev, listing_count)
+    if revenue_per_listing > 0:
+        revenue_density = max(revenue_density, _clamp_score(math.log10(max(1.0, revenue_per_listing)) / math.log10(350.0) * 100))
+    favorite_signal = _clamp_score(math.log10(max(1.0, avg_favorites)) / math.log10(5000.0) * 100) if avg_favorites > 0 else 0.0
+    price_viability = _price_viability_score(avg_price)
+    raw = (
+        (demand or 0) * 0.18
+        + (margin or 0) * 0.20
+        + competition_ease * 0.14
+        + revenue_density * 0.18
+        + price_viability * 0.12
+        + buyer_intent * 0.10
+        + favorite_signal * 0.04
+        + market_evidence_score * 0.04
+    )
+    if market_evidence_score < 35:
+        raw = min(raw, 68.0)
+    elif market_evidence_score < 55:
+        raw = min(raw, 78.0)
+    return _clamp_score(raw)
+
+
+def _extract_market_metrics(keyword: str, report_data: dict) -> dict:
+    ksd = report_data.get("keyword_search_data", []) or []
+    if not isinstance(ksd, list):
+        ksd = []
+    normalized = keyword.strip().lower()
+    matching = [item for item in ksd if str(item.get("keyword", "")).strip().lower() == normalized]
+    rows = matching or ksd
+    counts = [
+        int(item.get("listing_count") or item.get("total_listing_count") or 0)
+        for item in rows
+        if item.get("listing_count") or item.get("total_listing_count")
+    ]
+    listing_count = int(sum(counts) / len(counts)) if counts else 0
+    monthly_revenue = _avg([float(item.get("estimated_market_monthly_revenue_usd") or 0) for item in rows])
+    if not monthly_revenue:
+        monthly_revenue = float(report_data.get("estimated_market_monthly_revenue_usd") or 0)
+    avg_price = _avg([float(item.get("avg_price_usd") or 0) for item in rows]) or float(report_data.get("avg_price_usd") or 0)
+    revenue_per_listing = monthly_revenue / listing_count if monthly_revenue > 0 and listing_count > 0 else 0.0
+    sampled_listings = sum(
+        int(item.get("sampled_listing_count") or len(item.get("top_listing_titles") or []))
+        for item in rows
+        if isinstance(item, dict)
+    )
+    metrics = {
+        "keyword_market_rows": len(rows),
+        "sampled_listings": sampled_listings,
+        "listing_count": listing_count,
+        "avg_price_usd": avg_price,
+        "price_min_usd": _avg([float(item.get("price_min") or 0) for item in rows]),
+        "price_p25_usd": _avg([float(item.get("price_p25") or 0) for item in rows]),
+        "price_median_usd": _avg([float(item.get("price_median") or 0) for item in rows]),
+        "price_p75_usd": _avg([float(item.get("price_p75") or 0) for item in rows]),
+        "price_max_usd": _avg([float(item.get("price_max") or 0) for item in rows]),
+        "avg_favorites": _avg([float(item.get("avg_favorites") or 0) for item in rows]),
+        "max_favorites": int(max([int(item.get("max_favorites") or 0) for item in rows] or [0])),
+        "pct_high_favorites": _avg([float(item.get("pct_high_favorites") or 0) for item in rows]),
+        "pct_star_sellers": _avg([float(item.get("pct_star_sellers") or 0) for item in rows]),
+        "pct_bestsellers": _avg([float(item.get("pct_bestsellers") or 0) for item in rows]),
+        "competition_quality": _avg([float(item.get("competition_quality_score") or 0) for item in rows]) or float(report_data.get("avg_competition_quality") or 0),
+        "monthly_revenue_usd": monthly_revenue,
+        "revenue_per_listing": revenue_per_listing,
+    }
+    metrics["market_evidence_score"] = _score_market_evidence(metrics)
+    return metrics
+
+
 def save_scan(keyword: str, report) -> None:
     add_seed(keyword, source="scan_created")
 
@@ -537,24 +701,28 @@ def save_scan(keyword: str, report) -> None:
     now = datetime.utcnow().isoformat()
     kw = keyword.strip().lower()
 
-    listing_count = None
-    comp_quality = r.get("avg_competition_quality")
-    ksd = r.get("keyword_search_data", [])
-    if ksd:
-        counts = [
-            d.get("listing_count") or d.get("total_listing_count")
-            for d in ksd
-            if d.get("listing_count") or d.get("total_listing_count")
-        ]
-        if counts:
-            listing_count = int(sum(counts) / len(counts))
-
     opp = r.get("opportunity_score") or 0
     demand = r.get("demand_score") or 0
     trend = r.get("trend_velocity_score") or 0
-    comp_q = comp_quality if comp_quality and comp_quality > 0 else 0
     margin = r.get("margin_score") or 0
-    monthly_rev = r.get("estimated_market_monthly_revenue_usd") or 0
+    metrics = _extract_market_metrics(kw, r)
+    listing_count = metrics["listing_count"] or None
+    comp_quality = metrics["competition_quality"]
+    comp_q = comp_quality if comp_quality and comp_quality > 0 else 0
+    monthly_rev = metrics["monthly_revenue_usd"] or 0
+    market_evidence = metrics["market_evidence_score"]
+    profitability_index = _score_profitability_index(
+        kw,
+        demand=demand,
+        margin=margin,
+        comp_quality=comp_q,
+        monthly_rev=monthly_rev,
+        listing_count=listing_count,
+        avg_price=metrics["avg_price_usd"],
+        revenue_per_listing=metrics["revenue_per_listing"],
+        avg_favorites=metrics["avg_favorites"],
+        market_evidence_score=market_evidence,
+    )
 
     gap, listing_eff = _calculate_gap_score(
         kw,
@@ -573,12 +741,16 @@ def save_scan(keyword: str, report) -> None:
                margin_score, trend_score, avg_price_usd, monthly_revenue_usd,
                competition_quality, listing_count, sources_used, report_path,
                peak_months, keyword_clusters_json, entry_strategy,
-               gap_score, listing_efficiency, score_delta, trajectory)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               gap_score, listing_efficiency, score_delta, trajectory,
+               price_min_usd, price_p25_usd, price_median_usd, price_p75_usd,
+               price_max_usd, avg_favorites, max_favorites, pct_high_favorites,
+               pct_star_sellers, pct_bestsellers, revenue_per_listing,
+               market_evidence_score, profitability_index)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             kw, now, opp, demand,
             r.get("competition_score"), margin,
-            trend, r.get("avg_price_usd"),
+            trend, metrics["avg_price_usd"],
             monthly_rev, comp_quality, listing_count,
             json.dumps(r.get("sources_used", [])),
             r.get("report_path"),
@@ -586,6 +758,19 @@ def save_scan(keyword: str, report) -> None:
             json.dumps(r.get("keyword_clusters", [])),
             r.get("entry_strategy"),
             gap, listing_eff, 0.0, "stable",
+            metrics["price_min_usd"],
+            metrics["price_p25_usd"],
+            metrics["price_median_usd"],
+            metrics["price_p75_usd"],
+            metrics["price_max_usd"],
+            metrics["avg_favorites"],
+            metrics["max_favorites"],
+            metrics["pct_high_favorites"],
+            metrics["pct_star_sellers"],
+            metrics["pct_bestsellers"],
+            metrics["revenue_per_listing"],
+            market_evidence,
+            profitability_index,
         ))
 
     _update_gap_score(kw, gap, listing_efficiency=listing_eff)
@@ -760,8 +945,39 @@ def get_breakouts(limit: int = 20) -> list[str]:
         return [r[0] for r in rows]
 
 
+def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[str]:
+    """High-potential keywords whose market evidence is still too thin."""
+    cutoff = (datetime.utcnow() - timedelta(hours=min_age_hours)).isoformat()
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT s.keyword
+            FROM seeds s
+            JOIN scans sc ON sc.keyword=s.keyword
+            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
+            WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
+              AND sc.scanned_at < ?
+              AND (
+                COALESCE(sc.market_evidence_score, 0) < 55
+                OR COALESCE(sc.avg_price_usd, 0) <= 0
+                OR COALESCE(sc.monthly_revenue_usd, 0) <= 0
+              )
+              AND (
+                COALESCE(sc.profitability_index, 0) >= 55
+                OR COALESCE(gs.gap_score, sc.gap_score, 0) >= 58
+                OR COALESCE(sc.opportunity_score, 0) >= 68
+              )
+            ORDER BY
+              COALESCE(sc.profitability_index, 0) DESC,
+              COALESCE(gs.gap_score, sc.gap_score, 0) DESC,
+              COALESCE(sc.opportunity_score, 0) DESC,
+              sc.scanned_at ASC
+            LIMIT ?
+        """, (cutoff, limit)).fetchall()
+        return [r[0] for r in rows]
+
+
 def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
-    """Smart batch: breakouts first, then unscanned (by priority), then stale."""
+    """Smart batch: breakouts, profit evidence gaps, unscanned, then stale."""
     result: list[str] = []
     seen: set[str] = set()
 
@@ -772,6 +988,7 @@ def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
                 seen.add(kw)
 
     _add(get_breakouts(limit=count))
+    _add(get_profit_evidence_gaps(limit=count))
     _add(get_unscanned(limit=count))
     _add(get_stale(days=stale_days, limit=count))
     return result[:count]
@@ -866,6 +1083,19 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 sc.monthly_revenue_usd,
                 sc.competition_quality,
                 sc.listing_count,
+                sc.price_min_usd,
+                sc.price_p25_usd,
+                sc.price_median_usd,
+                sc.price_p75_usd,
+                sc.price_max_usd,
+                sc.avg_favorites,
+                sc.max_favorites,
+                sc.pct_high_favorites,
+                sc.pct_star_sellers,
+                sc.pct_bestsellers,
+                sc.revenue_per_listing,
+                sc.market_evidence_score,
+                sc.profitability_index,
                 sc.scanned_at,
                 sc.entry_strategy,
                 sc.peak_months,
@@ -882,11 +1112,15 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 gr.style_gap_score,
                 gr.price_gap_score,
                 gr.recency_gap_score,
+                gr.buyer_intent_score,
+                gr.profit_gap_score,
                 gr.entry_angle,
                 gr.recommended_price_min,
                 gr.recommended_price_max,
                 gr.listings_analyzed,
-                gr.avg_listing_age_months
+                gr.avg_listing_age_months,
+                gr.revenue_per_listing AS gap_revenue_per_listing,
+                gr.market_evidence_score AS gap_market_evidence_score
             FROM seeds s
             JOIN scans sc ON sc.keyword=s.keyword
             LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
@@ -901,10 +1135,12 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 base + """
                 AND s.domain=?
                 ORDER BY
-                    ((COALESCE(sc.opportunity_score, 0) * 0.38)
-                    + (COALESCE(sc.margin_score, 0) * 0.22)
-                    + (COALESCE(sc.gap_score, gr.composite_gap_score, 0) * 0.22)
-                    + (COALESCE(sc.demand_score, 0) * 0.18)) DESC
+                    ((COALESCE(sc.profitability_index, 0) * 0.34)
+                    + (COALESCE(sc.margin_score, 0) * 0.18)
+                    + (COALESCE(sc.gap_score, gr.composite_gap_score, 0) * 0.18)
+                    + (COALESCE(sc.demand_score, 0) * 0.14)
+                    + (COALESCE(sc.market_evidence_score, gr.market_evidence_score, 0) * 0.10)
+                    + (COALESCE(sc.revenue_per_listing, gr.revenue_per_listing, 0) * 0.06)) DESC
                 LIMIT ?
                 """,
                 (domain, limit),
@@ -913,10 +1149,12 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
             rows = con.execute(
                 base + """
                 ORDER BY
-                    ((COALESCE(sc.opportunity_score, 0) * 0.38)
-                    + (COALESCE(sc.margin_score, 0) * 0.22)
-                    + (COALESCE(sc.gap_score, gr.composite_gap_score, 0) * 0.22)
-                    + (COALESCE(sc.demand_score, 0) * 0.18)) DESC
+                    ((COALESCE(sc.profitability_index, 0) * 0.34)
+                    + (COALESCE(sc.margin_score, 0) * 0.18)
+                    + (COALESCE(sc.gap_score, gr.composite_gap_score, 0) * 0.18)
+                    + (COALESCE(sc.demand_score, 0) * 0.14)
+                    + (COALESCE(sc.market_evidence_score, gr.market_evidence_score, 0) * 0.10)
+                    + (COALESCE(sc.revenue_per_listing, gr.revenue_per_listing, 0) * 0.06)) DESC
                 LIMIT ?
                 """,
                 (limit,),
@@ -1179,6 +1417,15 @@ def save_gap_report(
     recommended_tags: Optional[list] = None,
     listings_analyzed: int = 0,
     avg_listing_age_months: float = 0.0,
+    price_p25_usd: float = 0.0,
+    price_median_usd: float = 0.0,
+    price_p75_usd: float = 0.0,
+    avg_favorites: float = 0.0,
+    pct_high_favorites: float = 0.0,
+    pct_star_sellers: float = 0.0,
+    pct_bestsellers: float = 0.0,
+    revenue_per_listing: float = 0.0,
+    market_evidence_score: float = 0.0,
 ) -> int:
     """Insert a gap report row. Returns the new row ID."""
     now = datetime.utcnow().isoformat()
@@ -1193,8 +1440,11 @@ def save_gap_report(
                composite_gap_score, entry_angle,
                recommended_price_min, recommended_price_max,
                untagged_searches_json, dominant_competitor_tags_json,
-               recommended_tags_json, listings_analyzed, avg_listing_age_months)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               recommended_tags_json, listings_analyzed, avg_listing_age_months,
+               price_p25_usd, price_median_usd, price_p75_usd,
+               avg_favorites, pct_high_favorites, pct_star_sellers, pct_bestsellers,
+               revenue_per_listing, market_evidence_score)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             kw, now,
             volume_gap, quality_gap, tag_gap,
@@ -1206,6 +1456,15 @@ def save_gap_report(
             json.dumps(dominant_competitor_tags or []),
             json.dumps(recommended_tags or []),
             listings_analyzed, avg_listing_age_months,
+            price_p25_usd,
+            price_median_usd,
+            price_p75_usd,
+            avg_favorites,
+            pct_high_favorites,
+            pct_star_sellers,
+            pct_bestsellers,
+            revenue_per_listing,
+            market_evidence_score,
         ))
         row_id = cur.lastrowid
 

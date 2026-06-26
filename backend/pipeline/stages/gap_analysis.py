@@ -74,6 +74,15 @@ class GapReport:
     recommended_tags: list[str] = field(default_factory=list)
     listings_analyzed: int = 0
     avg_listing_age_months: float = 0.0
+    price_p25_usd: float = 0.0
+    price_median_usd: float = 0.0
+    price_p75_usd: float = 0.0
+    avg_favorites: float = 0.0
+    pct_high_favorites: float = 0.0
+    pct_star_sellers: float = 0.0
+    pct_bestsellers: float = 0.0
+    revenue_per_listing: float = 0.0
+    market_evidence_score: float = 0.0
 
     def save(self, store_slug: str) -> Path:
         out_dir = WORKSPACE / store_slug / "_gap_reports"
@@ -204,6 +213,10 @@ def run(
     trend_score = niche_report_data.get("trend_velocity_score") or 0.0
     demand_score = niche_report_data.get("demand_score") or 0.0
     avg_favorites = ksd.get("avg_favorites", 0) or 0
+    report.avg_favorites = round(float(avg_favorites or 0), 1)
+    report.pct_high_favorites = round(float(ksd.get("pct_high_favorites", 0) or 0), 1)
+    report.pct_star_sellers = round(float(ksd.get("pct_star_sellers", 0) or 0), 1)
+    report.pct_bestsellers = round(float(ksd.get("pct_bestsellers", 0) or 0), 1)
 
     # Volume gap = demand signal / log(supply)
     # High demand (trend, favorites) + lower listing count = high volume gap
@@ -225,6 +238,9 @@ def run(
     price_p75 = ksd.get("price_p75", 0) or 0
     price_max = ksd.get("price_max", 0) or 0
     avg_price = ksd.get("avg_price_usd", 0) or 0
+    report.price_p25_usd = round(float(price_p25 or 0), 2)
+    report.price_median_usd = round(float(ksd.get("price_median", 0) or 0), 2)
+    report.price_p75_usd = round(float(price_p75 or 0), 2)
 
     # Price gap strategy: find range with least competition
     # If price_p25 is close to price_p75, the market is tightly clustered — easy to enter above or below
@@ -239,8 +255,20 @@ def run(
         listing_count=listing_count,
         demand_score=demand_score,
     )
+    monthly_revenue = niche_report_data.get("estimated_market_monthly_revenue_usd", 0) or 0
+    report.revenue_per_listing = round(monthly_revenue / listing_count, 4) if monthly_revenue > 0 and listing_count > 0 else 0.0
     report.buyer_intent_score = buyer_intent
     report.profit_gap_score = profit_gap
+    report.market_evidence_score = _score_market_evidence(
+        listings_analyzed=report.listings_analyzed,
+        listing_count=listing_count,
+        avg_price=avg_price,
+        monthly_revenue=monthly_revenue,
+        competition_quality=competition_quality,
+        avg_favorites=report.avg_favorites,
+        price_p25=price_p25,
+        price_p75=price_p75,
+    )
 
     # Set recommended price range: slightly below the sweet spot p75 to undercut incumbents
     # Or above p75 if quality gap is high (low competition = can charge premium)
@@ -292,6 +320,15 @@ def run(
             recommended_tags=recommended_tags,
             listings_analyzed=report.listings_analyzed,
             avg_listing_age_months=report.avg_listing_age_months,
+            price_p25_usd=report.price_p25_usd,
+            price_median_usd=report.price_median_usd,
+            price_p75_usd=report.price_p75_usd,
+            avg_favorites=report.avg_favorites,
+            pct_high_favorites=report.pct_high_favorites,
+            pct_star_sellers=report.pct_star_sellers,
+            pct_bestsellers=report.pct_bestsellers,
+            revenue_per_listing=report.revenue_per_listing,
+            market_evidence_score=report.market_evidence_score,
         )
     except Exception as exc:
         _log(f"[gap_analysis] DB save failed: {exc}")
@@ -380,6 +417,28 @@ def _score_profit_gap(
         + price_band * 0.20
         + revenue_density * 0.28
         + (demand_score or 0) * 0.18
+    )
+    return round(max(0.0, min(100.0, score)), 1)
+
+
+def _score_market_evidence(
+    listings_analyzed: int,
+    listing_count: int,
+    avg_price: float,
+    monthly_revenue: float,
+    competition_quality: float,
+    avg_favorites: float,
+    price_p25: float,
+    price_p75: float,
+) -> float:
+    score = (
+        min(listings_analyzed, MAX_LISTING_PAGES) / MAX_LISTING_PAGES * 22
+        + (14 if listing_count > 0 else 0)
+        + (18 if avg_price > 0 else 0)
+        + (16 if monthly_revenue > 0 else 0)
+        + (12 if competition_quality > 0 else 0)
+        + (10 if avg_favorites > 0 else 0)
+        + (8 if price_p25 > 0 and price_p75 > 0 else 0)
     )
     return round(max(0.0, min(100.0, score)), 1)
 

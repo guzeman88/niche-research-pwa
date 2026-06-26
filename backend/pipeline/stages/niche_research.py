@@ -56,6 +56,7 @@ class KeywordSearchData:
     pct_bestsellers: float
     competition_quality_score: float  # 0-100
     estimated_market_monthly_revenue_usd: float
+    sampled_listing_count: int = 0
     top_listing_titles: list[str] = field(default_factory=list)
     avg_favorites: float = 0.0          # avg favorites across sampled listings
     max_favorites: int = 0              # peak single-listing favorites
@@ -266,6 +267,7 @@ def _run_scraper(
                 pct_bestsellers=sr.pct_bestsellers,
                 competition_quality_score=sr.competition_quality_score,
                 estimated_market_monthly_revenue_usd=sr.estimated_total_monthly_revenue_usd,
+                sampled_listing_count=len(sr.listings),
                 top_listing_titles=[l.title for l in sr.listings[:5] if l.title],
                 avg_favorites=sr.avg_favorites,
                 max_favorites=sr.max_favorites,
