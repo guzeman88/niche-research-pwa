@@ -4,6 +4,7 @@ Hits the public Etsy autocomplete endpoint to gather keyword suggestions
 and estimates competition/demand from listing count queries.
 """
 
+import os
 import time
 import httpx
 from adapters.base.research import BaseResearchAdapter, NicheSignal
@@ -53,7 +54,8 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
         results: list[NicheSignal] = []
         for kw in suggestions[:10]:
             count = self._get_listing_count(kw)
-            results.append(self._build_signal(kw, count))
+            if count > 0:
+                results.append(self._build_signal(kw, count))
             time.sleep(self._delay)
         return results
 
@@ -86,6 +88,9 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
 
     def _get_listing_count(self, keyword: str) -> int:
         """Returns approximate listing count from Etsy search page."""
+        html_enabled = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
+        if not html_enabled:
+            return 0
         if is_etsy_html_blocked():
             return 0
         try:

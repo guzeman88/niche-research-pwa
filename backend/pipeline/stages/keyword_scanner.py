@@ -10,6 +10,7 @@ the keyword database over time without any manual keyword selection.
 """
 
 import json
+import os
 import re
 import time
 from calendar import month_name
@@ -278,6 +279,10 @@ def get_etsy_trending_seeds(log_fn=None) -> list[dict]:
     Returns list of dicts: {keyword, domain, source, priority}
     """
     _log = log_fn or print
+    html_enabled = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
+    if not html_enabled:
+        _log("[seed_discovery] Etsy trending pages skipped: HTML scraping disabled; set ETSY_HTML_SCRAPER_ENABLED=1 to opt in")
+        return []
     try:
         from adapters.research.etsy_search_scraper import get_etsy_html_block_reason, is_etsy_html_blocked, mark_etsy_html_blocked
     except Exception:

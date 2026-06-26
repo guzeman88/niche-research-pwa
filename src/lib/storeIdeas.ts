@@ -143,6 +143,7 @@ export interface StoreIdeaProfitabilityEvidence {
   evidenceScore: number
   evidenceLevel: string
   observedPriceBand?: { p25?: number | null; median?: number | null; p75?: number | null; avg?: number | null } | null
+  priceBasis?: 'observed' | 'modeled' | string
   estimatedGrossMargin?: number | null
   sampledMonthlyRevenue?: number | null
   revenuePerListing?: number | null
@@ -177,6 +178,7 @@ export interface StoreIdea {
   confidenceScore?: number
   avgPrice?: number
   priceRange?: { min: number; max: number }
+  priceBasis?: 'observed' | 'modeled' | string
   estimatedGrossMargin?: number
   estimatedMonthlyRevenue?: number
   profitabilityEvidence?: StoreIdeaProfitabilityEvidence

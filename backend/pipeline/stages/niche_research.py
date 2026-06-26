@@ -239,12 +239,20 @@ def _run_scraper(
     keywords: list[str],
     log_fn: Callable,
 ) -> list[KeywordSearchData]:
+    api_results = _run_etsy_open_api_search(keywords, log_fn)
+    if api_results:
+        return api_results
+
     from adapters.research.etsy_search_scraper import (
         EtsyHtmlBlockedError,
         EtsySearchScraper,
         get_etsy_html_block_reason,
         is_etsy_html_blocked,
     )
+    html_enabled = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
+    if not html_enabled:
+        log_fn("[niche_research] Etsy listing evidence unavailable: set Etsy Open API credentials, or opt into blocked-prone HTML scraping with ETSY_HTML_SCRAPER_ENABLED=1")
+        return []
     if is_etsy_html_blocked():
         log_fn(f"[niche_research] Etsy HTML scraper skipped: {get_etsy_html_block_reason()}")
         return []
@@ -298,6 +306,67 @@ def _run_scraper(
             if isinstance(exc, EtsyHtmlBlockedError) or is_etsy_html_blocked():
                 break
     scraper.close()
+    return results
+
+
+def _run_etsy_open_api_search(
+    keywords: list[str],
+    log_fn: Callable,
+) -> list[KeywordSearchData]:
+    try:
+        from adapters.research.etsy_open_api import EtsyOpenAPIClient, is_etsy_open_api_configured
+    except Exception as exc:
+        log_fn(f"[niche_research] Etsy Open API unavailable: {exc}")
+        return []
+
+    if not is_etsy_open_api_configured():
+        log_fn("[niche_research] Etsy Open API skipped: missing ETSY_X_API_KEY or ETSY_API_KEYSTRING + ETSY_SHARED_SECRET")
+        return []
+
+    client = EtsyOpenAPIClient()
+    results: list[KeywordSearchData] = []
+    targets = keywords[:4]
+    log_fn(f"[niche_research] Fetching Etsy Open API listing evidence for: {targets}")
+    try:
+        for kw in targets:
+            try:
+                sr = client.search_listings(kw, limit=60)
+            except Exception as exc:
+                log_fn(f"[niche_research] Etsy Open API error for '{kw}': {exc}")
+                continue
+            if not sr.listings:
+                log_fn(f"[niche_research] Etsy Open API returned no listings for '{kw}'")
+                continue
+            pd = sr.price_distribution
+            ksd = KeywordSearchData(
+                keyword=kw,
+                total_listing_count=sr.total_listing_count,
+                avg_price_usd=pd.mean,
+                price_min=pd.min,
+                price_p25=pd.p25,
+                price_median=pd.median,
+                price_p75=pd.p75,
+                price_max=pd.max,
+                price_sweet_spot=pd.sweet_spot,
+                avg_review_count=sr.avg_review_count,
+                pct_star_sellers=sr.pct_star_sellers,
+                pct_bestsellers=sr.pct_bestsellers,
+                competition_quality_score=sr.competition_quality_score,
+                estimated_market_monthly_revenue_usd=sr.estimated_total_monthly_revenue_usd,
+                sampled_listing_count=len(sr.listings),
+                top_listing_titles=[l.title for l in sr.listings[:5] if l.title],
+                avg_favorites=sr.avg_favorites,
+                max_favorites=sr.max_favorites,
+                pct_high_favorites=sr.pct_high_favorites,
+            )
+            results.append(ksd)
+            log_fn(
+                f"[niche_research] '{kw}': Etsy API {sr.total_listing_count:,} listings  "
+                f"{len(sr.listings)} sampled  avg ${pd.mean:.2f}  sweet spot {pd.sweet_spot}  "
+                f"avg favs {sr.avg_favorites:.0f}  comp quality {sr.competition_quality_score:.0f}/100"
+            )
+    finally:
+        client.close()
     return results
 
 
@@ -366,6 +435,7 @@ def _build_adapters(
     log_fn: Callable,
 ) -> list:
     from adapters.research.etsy_autocomplete import EtsyAutocompleteAdapter
+    from adapters.research.etsy_open_api import EtsyOpenAPIAdapter
     from adapters.research.google_trends import GoogleTrendsAdapter
     from adapters.research.reddit_etsy import RedditEtsyAdapter
     from adapters.research.erank import ERankAdapter
@@ -373,6 +443,7 @@ def _build_adapters(
     from adapters.research.pinterest_trends import PinterestTrendsAdapter
 
     factories = {
+        "etsy_open_api": EtsyOpenAPIAdapter,
         "etsy_autocomplete": EtsyAutocompleteAdapter,
         "google_trends": GoogleTrendsAdapter,
         "reddit_etsy": RedditEtsyAdapter,
