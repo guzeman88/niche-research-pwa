@@ -300,8 +300,45 @@ def init_db() -> None:
             _migrate_v6(con)
             _set_version(con, 6)
             rebuild_scores_after_migration = True
+        if version < 7:
+            _migrate_v7(con)
+            _set_version(con, 7)
+        if version < 8:
+            _migrate_v8(con)
+            _set_version(con, 8)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
+
+
+def _migrate_v7(con: sqlite3.Connection) -> None:
+    """Remove capped placeholder profit scores from scans without market evidence."""
+    con.execute("""
+        UPDATE scans
+        SET opportunity_score=NULL,
+            demand_score=NULL,
+            margin_score=NULL,
+            trend_score=NULL,
+            gap_score=NULL,
+            listing_efficiency=NULL,
+            profitability_index=NULL
+        WHERE COALESCE(market_evidence_score, 0) < 20
+          AND COALESCE(avg_price_usd, 0) <= 0
+          AND COALESCE(monthly_revenue_usd, 0) <= 0
+          AND COALESCE(listing_count, 0) <= 0
+    """)
+
+
+def _migrate_v8(con: sqlite3.Connection) -> None:
+    """Remove remaining capped demand/trend scores from thin market scans."""
+    con.execute("""
+        UPDATE scans
+        SET demand_score=NULL,
+            trend_score=NULL
+        WHERE COALESCE(market_evidence_score, 0) < 20
+          AND COALESCE(avg_price_usd, 0) <= 0
+          AND COALESCE(monthly_revenue_usd, 0) <= 0
+          AND COALESCE(listing_count, 0) <= 0
+    """)
 
 
 # ── Seed management ───────────────────────────────────────────────────────────
@@ -689,24 +726,19 @@ def _extract_market_metrics(keyword: str, report_data: dict) -> dict:
     return metrics
 
 
-def _cap_thin_evidence_scores(
+def _suppress_thin_market_scores(
     opportunity: float,
     demand: float,
     margin: float,
     trend: float,
     metrics: dict,
-) -> tuple[float, float, float, float]:
-    """Prevent source-light scans from looking like real profit evidence."""
+) -> tuple[float | None, float | None, float | None, float | None]:
+    """Avoid saving placeholder-looking profit scores when market evidence is absent."""
     evidence = metrics.get("market_evidence_score", 0) or 0
     if evidence >= 20:
-        return opportunity, demand, margin, trend
+        return float(opportunity or 0), float(demand or 0), float(margin or 0), float(trend or 0)
 
-    capped_demand = min(float(demand or 0), 45.0)
-    capped_margin = float(margin or 0) if metrics.get("avg_price_usd", 0) > 0 else 0.0
-    capped_margin = min(capped_margin, 35.0)
-    capped_trend = min(float(trend or 0), 50.0)
-    capped_opportunity = min(float(opportunity or 0), 45.0)
-    return capped_opportunity, capped_demand, capped_margin, capped_trend
+    return None, None, None, None
 
 
 def save_scan(keyword: str, report) -> None:
@@ -726,34 +758,39 @@ def save_scan(keyword: str, report) -> None:
     trend = r.get("trend_velocity_score") or 0
     margin = r.get("margin_score") or 0
     metrics = _extract_market_metrics(kw, r)
-    opp, demand, margin, trend = _cap_thin_evidence_scores(opp, demand, margin, trend, metrics)
+    opp, demand, margin, trend = _suppress_thin_market_scores(opp, demand, margin, trend, metrics)
     listing_count = metrics["listing_count"] or None
     comp_quality = metrics["competition_quality"]
     comp_q = comp_quality if comp_quality and comp_quality > 0 else 0
     monthly_rev = metrics["monthly_revenue_usd"] or 0
     market_evidence = metrics["market_evidence_score"]
-    profitability_index = _score_profitability_index(
-        kw,
-        demand=demand,
-        margin=margin,
-        comp_quality=comp_q,
-        monthly_rev=monthly_rev,
-        listing_count=listing_count,
-        avg_price=metrics["avg_price_usd"],
-        revenue_per_listing=metrics["revenue_per_listing"],
-        avg_favorites=metrics["avg_favorites"],
-        market_evidence_score=market_evidence,
-    )
+    if market_evidence >= 20:
+        profitability_index = _score_profitability_index(
+            kw,
+            demand=demand,
+            margin=margin or 0,
+            comp_quality=comp_q,
+            monthly_rev=monthly_rev,
+            listing_count=listing_count,
+            avg_price=metrics["avg_price_usd"],
+            revenue_per_listing=metrics["revenue_per_listing"],
+            avg_favorites=metrics["avg_favorites"],
+            market_evidence_score=market_evidence,
+        )
 
-    gap, listing_eff = _calculate_gap_score(
-        kw,
-        demand=demand,
-        trend=trend,
-        comp_quality=comp_q,
-        margin=margin,
-        monthly_rev=monthly_rev,
-        listing_count=listing_count,
-    )
+        gap, listing_eff = _calculate_gap_score(
+            kw,
+            demand=demand,
+            trend=trend,
+            comp_quality=comp_q,
+            margin=margin or 0,
+            monthly_rev=monthly_rev,
+            listing_count=listing_count,
+        )
+    else:
+        profitability_index = None
+        gap = None
+        listing_eff = None
 
     with _conn() as con:
         con.execute("""
@@ -794,7 +831,8 @@ def save_scan(keyword: str, report) -> None:
             profitability_index,
         ))
 
-    _update_gap_score(kw, gap, listing_efficiency=listing_eff)
+    if gap is not None:
+        _update_gap_score(kw, gap, listing_efficiency=listing_eff)
 
 
 def _update_gap_score(keyword: str, new_gap: float, listing_efficiency: float | None = None) -> None:

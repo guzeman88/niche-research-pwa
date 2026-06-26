@@ -255,7 +255,7 @@ class AutonomousScheduler:
         has_market_data = _report_has_market_data(report)
         if not has_market_data:
             self._log(
-                f"[scheduler]   Thin market evidence for '{keyword}' - saving capped scores and queuing for evidence refresh"
+                f"[scheduler]   Thin market evidence for '{keyword}' - saving no-data scores and queuing for evidence refresh"
             )
         kdb.save_scan(keyword, report)
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -296,7 +297,7 @@ def _get_seasonality(
     if not keywords:
         return [], []
     import random, time as _time
-    max_retries = 3
+    max_retries = max(1, int(os.environ.get("SEASONALITY_MAX_RETRIES", "1") or "1"))
     for attempt in range(max_retries):
         try:
             from pytrends.request import TrendReq

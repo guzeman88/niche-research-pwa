@@ -275,25 +275,25 @@ def _to_signal(row: dict[str, Any]) -> KeywordSignal | None:
 
 def _looks_like_default_scan(row: dict[str, Any]) -> bool:
     """Drop underspecified scan rows that only contain the scanner's old defaults."""
+    market_evidence = _number(row.get("market_evidence_score") or row.get("gap_market_evidence_score"))
+    if market_evidence < 20:
+        return True
+
     has_market_evidence = any(
         _number(row.get(field)) > 0
         for field in (
             "avg_price_usd",
             "monthly_revenue_usd",
             "listing_count",
-            "competition_quality",
             "recommended_price_min",
             "recommended_price_max",
             "listings_analyzed",
-            "market_evidence_score",
             "revenue_per_listing",
             "avg_favorites",
         )
     )
     if has_market_evidence:
         return False
-    if _number(row.get("market_evidence_score")) < 20:
-        return True
 
     return (
         math.isclose(_number(row.get("opportunity_score")), 65.0, abs_tol=0.01)

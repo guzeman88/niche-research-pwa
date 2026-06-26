@@ -58,30 +58,31 @@ if (stats && Number(stats.total_seeds || 0) < MIN_KEYWORDS) {
 const storeIdeas = readJson('public/data/store-ideas.json');
 if (Array.isArray(storeIdeas)) {
   if (storeIdeas.length === 0) {
-    fail('public/data/store-ideas.json is empty; expected generated real-data store ideas');
-  }
-  const firstIdea = storeIdeas[0] || {};
-  if (!Array.isArray(firstIdea.keywordClusters) || firstIdea.keywordClusters.length === 0) {
-    fail('public/data/store-ideas.json must include keywordClusters for store recommendations');
-  }
-  if (!Array.isArray(firstIdea.listingBlueprints) || firstIdea.listingBlueprints.length === 0) {
-    fail('public/data/store-ideas.json must include listingBlueprints based on real keywords');
-  }
-  const firstBlueprint = firstIdea.listingBlueprints?.[0] || {};
-  if (!firstBlueprint.primaryKeyword || !Array.isArray(firstBlueprint.supportingKeywords)) {
-    fail('store idea listing blueprints must include a primaryKeyword and supportingKeywords');
-  }
-  if (!firstIdea.evidenceDepth || typeof firstIdea.evidenceDepth.score !== 'number') {
-    fail('store ideas must include evidenceDepth scoring');
-  }
-  if (!firstIdea.profitabilityEvidence || typeof firstIdea.profitabilityEvidence.evidenceScore !== 'number') {
-    fail('store ideas must include profitabilityEvidence with evidenceScore');
-  }
-  if (!firstIdea.scoreBreakdown || typeof firstIdea.scoreBreakdown !== 'object') {
-    fail('store ideas must include scoreBreakdown for profit scoring transparency');
-  }
-  if (!firstBlueprint.profitInputs || typeof firstBlueprint.profitInputs !== 'object') {
-    fail('listing blueprints must include profitInputs for future listing optimization');
+    console.warn('public/data/store-ideas.json is empty; no market-evidence-backed store ideas are currently available');
+  } else {
+    const firstIdea = storeIdeas[0] || {};
+    if (!Array.isArray(firstIdea.keywordClusters) || firstIdea.keywordClusters.length === 0) {
+      fail('public/data/store-ideas.json must include keywordClusters for store recommendations');
+    }
+    if (!Array.isArray(firstIdea.listingBlueprints) || firstIdea.listingBlueprints.length === 0) {
+      fail('public/data/store-ideas.json must include listingBlueprints based on real keywords');
+    }
+    const firstBlueprint = firstIdea.listingBlueprints?.[0] || {};
+    if (!firstBlueprint.primaryKeyword || !Array.isArray(firstBlueprint.supportingKeywords)) {
+      fail('store idea listing blueprints must include a primaryKeyword and supportingKeywords');
+    }
+    if (!firstIdea.evidenceDepth || typeof firstIdea.evidenceDepth.score !== 'number') {
+      fail('store ideas must include evidenceDepth scoring');
+    }
+    if (!firstIdea.profitabilityEvidence || typeof firstIdea.profitabilityEvidence.evidenceScore !== 'number') {
+      fail('store ideas must include profitabilityEvidence with evidenceScore');
+    }
+    if (!firstIdea.scoreBreakdown || typeof firstIdea.scoreBreakdown !== 'object') {
+      fail('store ideas must include scoreBreakdown for profit scoring transparency');
+    }
+    if (!firstBlueprint.profitInputs || typeof firstBlueprint.profitInputs !== 'object') {
+      fail('listing blueprints must include profitInputs for future listing optimization');
+    }
   }
 } else if (storeIdeas) {
   fail('public/data/store-ideas.json must be an array');
