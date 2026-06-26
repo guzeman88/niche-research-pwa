@@ -9,6 +9,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
+      VITE_API_URL: ${{ vars.VITE_API_URL }}
+      VITE_BACKUP_API_URLS: ${{ vars.VITE_BACKUP_API_URLS }}
+      VITE_WAKE_BACKEND: ${{ vars.VITE_WAKE_BACKEND }}
       MIN_KEYWORD_SNAPSHOT_COUNT: '13000'
       NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
       NETLIFY_SITE_ID: 9c00efca-ced9-4097-b302-172437380b32

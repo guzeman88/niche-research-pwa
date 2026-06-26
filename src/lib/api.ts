@@ -9,10 +9,24 @@ import type {
 import type { GapReport } from '../types/gaps'
 import type { StoreIdea } from './storeIdeas'
 
-const BASE_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
+const PRIMARY_API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
+const BACKUP_API_URLS = import.meta.env.DEV
+  ? []
+  : parseApiUrls(import.meta.env.VITE_BACKUP_API_URLS || import.meta.env.VITE_BACKUP_API_URL || '');
+const API_URLS = [PRIMARY_API_URL, ...BACKUP_API_URLS]
+  .map((url) => url.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+const BASE_URL = API_URLS[0] || '';
 const USE_STATIC_DATA = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
 const WAKE_BACKEND = import.meta.env.VITE_WAKE_BACKEND === '1';
 let lastBackendWake = 0;
+
+function parseApiUrls(value: string): string[] {
+  return value
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean);
+}
 
 // Static CDN data paths — instant, no backend needed for reads
 const STATIC_MAP: Record<string, string> = {
@@ -46,22 +60,48 @@ async function fetchStatic(path: string): Promise<any | null> {
 }
 
 function wakeBackend() {
-  if (!BASE_URL || !WAKE_BACKEND) return;
+  if (!API_URLS.length || !WAKE_BACKEND) return;
   const now = Date.now();
   if (now - lastBackendWake < 60_000) return;
   lastBackendWake = now;
-  fetch(`${BASE_URL}/api/health?_t=${now}`, {
-    mode: 'no-cors',
-  }).catch(() => {});
+  for (const baseUrl of API_URLS) {
+    fetch(`${baseUrl}/api/stats/health?_t=${now}`, { mode: 'no-cors' }).catch(() => {});
+  }
+}
+
+function apiCandidates(): string[] {
+  if (API_URLS.length > 0) return API_URLS;
+  return import.meta.env.DEV ? [''] : [];
+}
+
+async function fetchApi(path: string, options?: RequestInit, timeoutMs = 3000): Promise<Response | null> {
+  const isGet = !options?.method || options.method === 'GET';
+  const sep = path.includes('?') ? '&' : '?';
+  for (const baseUrl of apiCandidates()) {
+    const url = `${baseUrl}${path}${isGet ? `${sep}_t=${Date.now()}` : ''}`;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.ok) return res;
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('text/html')) return res;
+    } catch {
+      // Try the next configured API before falling back to static data.
+    }
+  }
+  return null;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const isGet = !options?.method || options.method === 'GET';
 
-  // Try live backend API first — returns fresh data on pull-to-refresh
-  const sep = path.includes('?') ? '&' : '?';
-  const url = `${BASE_URL}${path}${isGet ? `${sep}_t=${Date.now()}` : ''}`;
-
+  // Static snapshots keep first paint instant; API candidates handle live actions.
   if (isGet) {
     const staticData = await fetchStatic(path.split('?')[0]);
     if (staticData) {
@@ -69,19 +109,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       return staticData as T;
     }
 
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...options?.headers },
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      if (res.ok) {
-        const ct = res.headers.get('content-type') || '';
-        if (ct.includes('application/json')) return res.json() as Promise<T>;
-      }
-    } catch {
+    const res = await fetchApi(path, options);
+    if (res?.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) return res.json() as Promise<T>;
+    }
+    if (!res) {
       // Backend unreachable — fall back to static CDN
       if (!import.meta.env.DEV) {
         const staticData = await fetchStatic(path.split('?')[0]);
@@ -95,16 +128,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const staticData = await fetchStatic(path.split('?')[0]);
     if (staticData) return staticData as T;
   }
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json', ...options?.headers },
-      ...options,
-    });
-  } catch (err) {
-    const error = new Error(`Network error: backend unreachable at ${url}`) as Error & { cause?: unknown };
-    error.cause = err;
-    throw error;
+  const res = await fetchApi(path, options, 8000);
+  if (!res) {
+    throw new Error(`Network error: backend unreachable for ${path}`);
   }
   const contentType = res.headers.get('content-type') || '';
   // If we got HTML instead of JSON, the backend is unreachable
