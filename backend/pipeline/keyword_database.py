@@ -1160,7 +1160,7 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 sc.entry_strategy,
                 sc.peak_months,
                 sc.keyword_clusters_json,
-                sc.gap_score,
+                COALESCE(sc.gap_score, gs.gap_score) AS gap_score,
                 sc.listing_efficiency,
                 sc.score_delta,
                 sc.trajectory,
@@ -1182,13 +1182,18 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 gr.revenue_per_listing AS gap_revenue_per_listing,
                 gr.market_evidence_score AS gap_market_evidence_score
             FROM seeds s
-            JOIN scans sc ON sc.keyword=s.keyword
+            LEFT JOIN scans sc ON sc.keyword=s.keyword
             LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
             LEFT JOIN gap_reports gr ON gr.id = (
                 SELECT MAX(id) FROM gap_reports gr2 WHERE gr2.keyword=s.keyword
             )
-            WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
-              AND (sc.opportunity_score IS NOT NULL OR sc.gap_score IS NOT NULL)
+            WHERE (sc.id IS NULL OR sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword))
+              AND (
+                sc.opportunity_score IS NOT NULL
+                OR sc.gap_score IS NOT NULL
+                OR gs.gap_score IS NOT NULL
+                OR gr.composite_gap_score IS NOT NULL
+              )
         """
         if domain:
             rows = con.execute(
@@ -1197,7 +1202,7 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 ORDER BY
                     ((COALESCE(sc.profitability_index, 0) * 0.34)
                     + (COALESCE(sc.margin_score, 0) * 0.18)
-                    + (COALESCE(sc.gap_score, gr.composite_gap_score, 0) * 0.18)
+                    + (COALESCE(sc.gap_score, gr.composite_gap_score, gs.gap_score, 0) * 0.18)
                     + (COALESCE(sc.demand_score, 0) * 0.14)
                     + (COALESCE(sc.market_evidence_score, gr.market_evidence_score, 0) * 0.10)
                     + (COALESCE(sc.revenue_per_listing, gr.revenue_per_listing, 0) * 0.06)) DESC
@@ -1211,7 +1216,7 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 ORDER BY
                     ((COALESCE(sc.profitability_index, 0) * 0.34)
                     + (COALESCE(sc.margin_score, 0) * 0.18)
-                    + (COALESCE(sc.gap_score, gr.composite_gap_score, 0) * 0.18)
+                    + (COALESCE(sc.gap_score, gr.composite_gap_score, gs.gap_score, 0) * 0.18)
                     + (COALESCE(sc.demand_score, 0) * 0.14)
                     + (COALESCE(sc.market_evidence_score, gr.market_evidence_score, 0) * 0.10)
                     + (COALESCE(sc.revenue_per_listing, gr.revenue_per_listing, 0) * 0.06)) DESC

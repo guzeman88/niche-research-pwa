@@ -275,6 +275,8 @@ def _to_signal(row: dict[str, Any]) -> KeywordSignal | None:
 
 def _looks_like_default_scan(row: dict[str, Any]) -> bool:
     """Drop underspecified scan rows that only contain the scanner's old defaults."""
+    if _number(row.get("composite_gap_score") or row.get("gap_score")) > 0:
+        return False
     market_evidence = _number(row.get("market_evidence_score") or row.get("gap_market_evidence_score"))
     if market_evidence < 20:
         return True
@@ -370,14 +372,15 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
     buyer_intent = _calculate_buyer_intent(signals)
     confidence = _calculate_confidence(signals)
     evidence_depth = _calculate_evidence_depth(signals, product_types)
-    has_price_basis = (
+    confidence = min(confidence, _number(evidence_depth.get("score")))
+    has_observed_price_basis = (
         avg_price > 0
         or any(signal.price_p25 > 0 and signal.price_p75 > 0 for signal in signals)
         or any(signal.price_min > 0 and signal.price_max > 0 for signal in signals)
     )
-    price_floor, price_ceiling = _price_range(signals, product_types, avg_price) if has_price_basis else (0.0, 0.0)
-    gross_margin = _estimated_gross_margin(product_types, price_floor, price_ceiling) if has_price_basis else 0.0
-    margin_signal = gross_margin if has_price_basis else min(avg_margin, 62)
+    price_floor, price_ceiling = _price_range(signals, product_types, avg_price) if has_observed_price_basis else (0.0, 0.0)
+    gross_margin = _estimated_gross_margin(product_types, price_floor, price_ceiling) if has_observed_price_basis else 0.0
+    margin_signal = gross_margin if has_observed_price_basis else min(avg_margin, 45)
     price_power = _calculate_price_power(price_floor, price_ceiling, avg_price, gross_margin)
     revenue_density = _calculate_revenue_density(avg_revenue_per_listing, avg_listing_efficiency, revenue, signals)
     market_traction = _calculate_market_traction(avg_favorites, avg_pct_bestsellers)
@@ -409,7 +412,7 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
     )
     if avg_profitability_index > 0:
         raw_profit_score = _clamp(raw_profit_score * 0.74 + avg_profitability_index * 0.26)
-    profit_score = _evidence_adjusted_profit_score(raw_profit_score, evidence_depth, has_price_basis, bool(revenue_signals))
+    profit_score = _evidence_adjusted_profit_score(raw_profit_score, evidence_depth, has_observed_price_basis, bool(revenue_signals))
     name = _make_store_name(cluster, product_types)
     keyword_clusters = _make_keyword_clusters(signals, cluster, product_types)
     listing_blueprints = _make_listing_blueprints(signals, cluster, product_types, keyword_clusters, price_floor, price_ceiling)
@@ -456,13 +459,14 @@ def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
         "cohesion": round(cohesion),
         "trendLift": round(min(10, trend_score / 10)),
         "demandScore": round(avg_demand),
-        "marginScore": round(gross_margin) if has_price_basis else None,
+        "marginScore": round(gross_margin) if gross_margin > 0 else None,
         "competitionEase": round(competition_ease),
         "buyerIntent": round(buyer_intent),
         "confidenceScore": round(confidence),
         "avgPrice": round(avg_price, 2) if avg_price > 0 else None,
-        "priceRange": {"min": round(price_floor, 2), "max": round(price_ceiling, 2)} if has_price_basis else None,
-        "estimatedGrossMargin": round(gross_margin) if has_price_basis else None,
+        "priceRange": {"min": round(price_floor, 2), "max": round(price_ceiling, 2)} if price_floor > 0 and price_ceiling > 0 else None,
+        "priceBasis": "observed" if has_observed_price_basis else None,
+        "estimatedGrossMargin": round(gross_margin) if gross_margin > 0 else None,
         "estimatedMonthlyRevenue": round(revenue) if revenue_signals else None,
         "profitabilityEvidence": _make_profitability_evidence(
             signals,
@@ -519,7 +523,7 @@ def _choose_primary(signal: KeywordSignal) -> tuple[str, TaxonomyItem] | None:
 
 def _choose_secondary(signal: KeywordSignal, primary_id: str) -> tuple[str, TaxonomyItem] | None:
     for type_name, matches in (
-        ("intent", [item for item in signal.intent if item.id != "giftable"]),
+        ("intent", signal.intent),
         ("style", signal.style),
         ("theme", signal.theme),
         ("occasion", signal.occasion),
@@ -540,8 +544,16 @@ def _match_products(keyword: str, domain: str) -> list[str]:
     products = [item.id for item in PRODUCT_TERMS if any(_contains_term(haystack, term) for term in item.terms)]
     if products:
         return list(dict.fromkeys(products))
-    if re.search(r"decor|home|aesthetic|art|poster|print", domain):
-        return ["wall_art", "digital_download"]
+    if re.search(r"decor|home|aesthetic|art|poster|print", haystack):
+        return ["wall_art", "digital_download", "sticker"]
+    if re.search(r"astrology|zodiac|moon sign|birth chart|celestial", haystack):
+        return ["wall_art", "digital_download", "sticker", "mug"]
+    if re.search(r"nurse|teacher|profession|career|job|biologist|electrician|dancer|musician", haystack):
+        return ["mug", "apparel", "sticker", "digital_download"]
+    if re.search(r"gift|gifts|anniversary|husband|girlfriend|boyfriend|friend|aunt|mom|dad", haystack):
+        return ["mug", "wall_art", "digital_download", "apparel"]
+    if re.search(r"funny|sarcastic|meme|snarky", haystack):
+        return ["apparel", "mug", "sticker"]
     return ["digital_download"]
 
 
@@ -712,6 +724,7 @@ def _calculate_evidence_depth(signals: list[KeywordSignal], products: list[str])
     trend = [signal for signal in signals if signal.trend > 0 or signal.trajectory or signal.breakout]
     traction = [signal for signal in signals if signal.avg_favorites > 0 or signal.max_favorites > 0 or signal.pct_bestsellers > 0]
     scored = [signal for signal in signals if signal.opportunity > 0 and signal.gap > 0 and signal.demand > 0]
+    gap_scored = [signal for signal in signals if signal.gap > 0]
     missing = []
     if len(priced) < max(2, min(4, keyword_count // 2)):
         missing.append("price evidence")
@@ -728,7 +741,8 @@ def _calculate_evidence_depth(signals: list[KeywordSignal], products: list[str])
 
     score = _clamp(
         min(keyword_count, 10) / 10 * 24
-        + min(len(scored), 8) / 8 * 14
+        + min(len(scored), 8) / 8 * 9
+        + min(len(gap_scored), 8) / 8 * 5
         + min(len(priced), 6) / 6 * 17
         + min(len(revenue), 5) / 5 * 12
         + min(len(revenue_density), 5) / 5 * 10
@@ -751,6 +765,7 @@ def _calculate_evidence_depth(signals: list[KeywordSignal], products: list[str])
         "level": level,
         "keywordSignals": keyword_count,
         "scoredKeywords": len(scored),
+        "gapScoredKeywords": len(gap_scored),
         "pricedKeywords": len(priced),
         "revenueSignals": len(revenue),
         "revenueDensitySignals": len(revenue_density),
@@ -818,6 +833,7 @@ def _make_profitability_evidence(
         "evidenceScore": evidence_depth["score"],
         "evidenceLevel": evidence_depth["level"],
         "observedPriceBand": observed_price_band,
+        "priceBasis": "observed" if observed_price_band else "not_available",
         "estimatedGrossMargin": round(gross_margin) if gross_margin > 0 else None,
         "sampledMonthlyRevenue": round(revenue) if revenue > 0 else None,
         "revenuePerListing": round(avg_revenue_per_listing, 2) if avg_revenue_per_listing > 0 else None,
@@ -834,12 +850,14 @@ def _make_profitability_evidence(
 def _evidence_adjusted_profit_score(score: float, evidence_depth: dict[str, Any], has_price_basis: bool, has_revenue: bool) -> float:
     evidence_score = _number(evidence_depth.get("score"))
     cap = 100.0
-    if not has_price_basis:
-        cap = min(cap, 76.0)
-    if not has_revenue:
-        cap = min(cap, 82.0)
+    if not has_price_basis and not has_revenue:
+        cap = min(cap, 64.0)
+    elif not has_price_basis:
+        cap = min(cap, 72.0)
+    elif not has_revenue:
+        cap = min(cap, 78.0)
     if evidence_score < 45:
-        cap = min(cap, 68.0)
+        cap = min(cap, 62.0)
     elif evidence_score < 62:
         cap = min(cap, 78.0)
     return _clamp(min(score, cap) * 0.92 + evidence_score * 0.08)
@@ -1357,10 +1375,12 @@ def _make_store_name(cluster: ClusterSeed, products: list[str]) -> str:
     primary = cluster.primary.label
     secondary = cluster.secondary.label if cluster.secondary else ""
     product_hint = "Print Studio"
-    if "apparel" in products:
-        product_hint = "Goods Co."
+    if cluster.secondary and cluster.secondary.id == "giftable":
+        product_hint = "Gift Studio"
     elif "mug" in products:
         product_hint = "Gift Studio"
+    elif "apparel" in products:
+        product_hint = "Goods Co."
     elif "sticker" in products:
         product_hint = "Sticker Shop"
     elif "digital_download" in products or "planner" in products or "svg" in products:
@@ -1381,13 +1401,16 @@ def _unique_by_keyword(signals: list[KeywordSignal]) -> list[KeywordSignal]:
 
 
 def _weighted_keyword_score(signal: KeywordSignal) -> float:
+    competition_component = (100 - signal.competition_quality) if signal.competition_quality > 0 else 0.0
+    fallback_gap_component = signal.gap * 0.22 if signal.opportunity <= 0 and signal.demand <= 0 else 0.0
     return (
         signal.opportunity * 0.34
         + signal.demand * 0.18
         + signal.gap * 0.18
         + signal.margin * 0.14
-        + (100 - signal.competition_quality) * 0.10
+        + competition_component * 0.10
         + signal.trend * 0.06
+        + fallback_gap_component
         + (6 if signal.breakout else 0)
     )
 

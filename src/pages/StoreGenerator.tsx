@@ -408,7 +408,10 @@ function formatRevenue(concept: StoreIdea): string {
 }
 
 function formatPriceRange(concept: StoreIdea): string {
-  if (concept.priceRange) return `${fmtPrice(concept.priceRange.min)}-${fmtPrice(concept.priceRange.max)}`
+  if (concept.priceRange) {
+    const suffix = concept.priceBasis === 'modeled' ? ' modeled' : ''
+    return `${fmtPrice(concept.priceRange.min)}-${fmtPrice(concept.priceRange.max)}${suffix}`
+  }
   return concept.avgPrice ? fmtPrice(concept.avgPrice) : 'not enough data'
 }
 

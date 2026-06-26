@@ -93,8 +93,8 @@ def mark_etsy_html_blocked(reason: str, cooldown_seconds: float | None = None) -
 
 
 def _html_scraper_enabled() -> bool:
-    value = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "1").strip().lower()
-    return value not in {"0", "false", "no"}
+    value = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "0").strip().lower()
+    return value in {"1", "true", "yes"}
 
 
 def _looks_like_challenge(status_code: int, text: str) -> bool:

@@ -17,6 +17,7 @@ This data powers 4 of the 6 gap detection signals:
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -80,6 +81,15 @@ class EtsyListingScraper:
 
     def fetch_listing(self, listing_id: str) -> ListingDetail:
         """Fetch a single listing page and extract all available signals."""
+        api_detail = self._fetch_listing_from_api(listing_id)
+        if api_detail is not None:
+            return api_detail
+        if not _html_scraper_enabled():
+            return ListingDetail(
+                listing_id=listing_id,
+                url=_LISTING_URL.format(listing_id=listing_id),
+                error="Etsy listing HTML fetch disabled; configure Etsy Open API for listing evidence",
+            )
         detail = ListingDetail(
             listing_id=listing_id,
             url=_LISTING_URL.format(listing_id=listing_id),
@@ -110,6 +120,11 @@ class EtsyListingScraper:
 
     def fetch_shop(self, shop_name: str) -> ShopDetail:
         """Fetch shop page to get total sales + listing count."""
+        if not _html_scraper_enabled():
+            return ShopDetail(
+                shop_name=shop_name,
+                error="Etsy shop HTML fetch disabled; configure Etsy Open API or enable ETSY_HTML_SCRAPER_ENABLED=1",
+            )
         detail = ShopDetail(shop_name=shop_name)
         try:
             resp = self._client.get(_SHOP_URL.format(shop_name=shop_name))
@@ -123,6 +138,25 @@ class EtsyListingScraper:
 
     def close(self) -> None:
         self._client.close()
+
+    @staticmethod
+    def _fetch_listing_from_api(listing_id: str) -> ListingDetail | None:
+        try:
+            from adapters.research.etsy_open_api import EtsyOpenAPIClient, is_etsy_open_api_configured
+            if not is_etsy_open_api_configured():
+                return None
+            client = EtsyOpenAPIClient()
+            try:
+                return client.fetch_listing(listing_id)
+            finally:
+                client.close()
+        except Exception:
+            return None
+
+
+def _html_scraper_enabled() -> bool:
+    value = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "0").strip().lower()
+    return value in {"1", "true", "yes"}
 
 
 # ── Listing page parsers ──────────────────────────────────────────────────────
