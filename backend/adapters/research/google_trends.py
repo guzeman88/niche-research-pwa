@@ -41,7 +41,7 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
         for chunk in _chunks(keywords, 5):
             for attempt in range(_MAX_RETRIES):
                 try:
-                    pt = TrendReq(hl="en-US", tz=360, timeout=(10, 30), retries=2, backoff_factor=0.5)
+                    pt = TrendReq(hl="en-US", tz=360, timeout=(10, 30))
                     pt.build_payload(chunk, cat=0, timeframe=self._timeframe, geo=self._geo)
                     df = pt.interest_over_time()
                     if df.empty:

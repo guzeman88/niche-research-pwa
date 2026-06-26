@@ -689,6 +689,26 @@ def _extract_market_metrics(keyword: str, report_data: dict) -> dict:
     return metrics
 
 
+def _cap_thin_evidence_scores(
+    opportunity: float,
+    demand: float,
+    margin: float,
+    trend: float,
+    metrics: dict,
+) -> tuple[float, float, float, float]:
+    """Prevent source-light scans from looking like real profit evidence."""
+    evidence = metrics.get("market_evidence_score", 0) or 0
+    if evidence >= 20:
+        return opportunity, demand, margin, trend
+
+    capped_demand = min(float(demand or 0), 45.0)
+    capped_margin = float(margin or 0) if metrics.get("avg_price_usd", 0) > 0 else 0.0
+    capped_margin = min(capped_margin, 35.0)
+    capped_trend = min(float(trend or 0), 50.0)
+    capped_opportunity = min(float(opportunity or 0), 45.0)
+    return capped_opportunity, capped_demand, capped_margin, capped_trend
+
+
 def save_scan(keyword: str, report) -> None:
     add_seed(keyword, source="scan_created")
 
@@ -706,6 +726,7 @@ def save_scan(keyword: str, report) -> None:
     trend = r.get("trend_velocity_score") or 0
     margin = r.get("margin_score") or 0
     metrics = _extract_market_metrics(kw, r)
+    opp, demand, margin, trend = _cap_thin_evidence_scores(opp, demand, margin, trend, metrics)
     listing_count = metrics["listing_count"] or None
     comp_quality = metrics["competition_quality"]
     comp_q = comp_quality if comp_quality and comp_quality > 0 else 0
@@ -965,6 +986,7 @@ def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[s
                 COALESCE(sc.profitability_index, 0) >= 55
                 OR COALESCE(gs.gap_score, sc.gap_score, 0) >= 58
                 OR COALESCE(sc.opportunity_score, 0) >= 68
+                OR COALESCE(sc.market_evidence_score, 0) < 20
               )
             ORDER BY
               COALESCE(sc.profitability_index, 0) DESC,

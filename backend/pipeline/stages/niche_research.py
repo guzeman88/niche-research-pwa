@@ -300,7 +300,7 @@ def _get_seasonality(
     for attempt in range(max_retries):
         try:
             from pytrends.request import TrendReq
-            pt = TrendReq(hl="en-US", tz=360, timeout=(10, 35), retries=2, backoff_factor=0.5)
+            pt = TrendReq(hl="en-US", tz=360, timeout=(10, 35))
             pt.build_payload(keywords[:1], timeframe="today 5-y", geo="US")
             df = pt.interest_over_time()
             if df.empty:
@@ -522,6 +522,9 @@ Return ONLY this JSON (no explanation, no markdown):
 Fill in real values. Return ONLY valid JSON."""
 
         llm = get_llm_with_fallback()
+        if not llm.health_check():
+            log_fn("[niche_research] LLM synthesis skipped: no configured healthy LLM")
+            return _fallback_synthesis()
         resp = llm.complete(prompt, json_mode=True)
         content = resp.content.strip()
 
@@ -544,11 +547,19 @@ Fill in real values. Return ONLY valid JSON."""
         return data
     except Exception as exc:
         log_fn(f"[niche_research] LLM synthesis failed: {exc}")
-        return {
-            "keyword_clusters": [], "underserved_angles": [], "winning_styles": [],
-            "recommended_product_types": ["digital_download", "wall_art"],
-            "competitor_gaps": [], "pricing_insights": "", "entry_strategy": "",
-        }
+        return _fallback_synthesis()
+
+
+def _fallback_synthesis() -> dict:
+    return {
+        "keyword_clusters": [],
+        "underserved_angles": [],
+        "winning_styles": [],
+        "recommended_product_types": ["digital_download", "wall_art"],
+        "competitor_gaps": [],
+        "pricing_insights": "",
+        "entry_strategy": "",
+    }
 
 
 # ── Utility ───────────────────────────────────────────────────────────────────
