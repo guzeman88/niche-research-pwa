@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createStore, getProfitableStoreIdeas } from '../lib/api'
-import Icon from '../components/Icon'
+import Icon, { type IconName } from '../components/Icon'
 import { fmtPrice, scoreColor } from '../lib/utils'
 import type { StoreIdea } from '../lib/storeIdeas'
 
@@ -23,7 +23,7 @@ export default function StoreGenerator() {
   })
 
   const concepts = useMemo(() => profitableIdeas || [], [profitableIdeas])
-  const isProfitRanked = Boolean(profitableIdeas?.length)
+  const hasAnyProfitEvidence = concepts.some((concept) => Number.isFinite(concept.profitScore))
   const isLoading = profitableLoading
   const loadError = profitableError
   const bestConcept = concepts[0]
@@ -46,12 +46,12 @@ export default function StoreGenerator() {
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Store Idea Generator</h2>
           <p className="text-[13px] text-surface-200 mt-0.5">
             {concepts.length > 0
-              ? `${concepts.length} profit-ranked concepts with keyword clusters and listing blueprints`
+              ? `${concepts.length} source-backed store concepts with keyword clusters and listing blueprints`
               : 'Find storeable niches that can hold multiple related keywords'}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <span className="chip">{isProfitRanked ? 'profit model' : 'no data'}</span>
+          <span className="chip">{hasAnyProfitEvidence ? 'profit evidence' : concepts.length ? 'source-backed model' : 'no data'}</span>
           {savedConcepts.size > 0 && (
             <span className="text-[11px] font-semibold text-accent-green">{savedConcepts.size} saved to My Stores</span>
           )}
@@ -94,8 +94,10 @@ export default function StoreGenerator() {
             const isSaving = saveStore.isPending && saveStore.variables?.id === concept.id
             const displayScore = primaryScore(concept)
             const hasProfitEvidence = Number.isFinite(concept.profitScore)
-            const scoreLabel = hasProfitEvidence ? 'profit' : 'keyword fit'
-            const grade = concept.profitGrade || (hasProfitEvidence ? gradeFor(displayScore) : null)
+            const scoreLabel = hasProfitEvidence ? 'profit' : 'store fit'
+            const grade = hasProfitEvidence
+              ? concept.profitGrade || gradeFor(displayScore)
+              : concept.qualityGrade || gradeFor(displayScore)
             const evidenceDepth = concept.evidenceDepth
             const keywordClusters = concept.keywordClusters || []
             const listingBlueprints = concept.listingBlueprints || []
@@ -112,10 +114,12 @@ export default function StoreGenerator() {
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="min-w-0 max-w-full break-words text-[15px] font-extrabold leading-snug text-surface-50 sm:text-[16px]">{concept.name}</h3>
                         {index === 0 && <span className="tag border-accent-gold/30 bg-accent-gold/10 text-accent-gold">top {scoreLabel}</span>}
-                        {grade ? (
-                          <span className="tag border-primary-300/25 bg-primary-400/10 text-primary-100">grade {grade}</span>
+                        {hasProfitEvidence || displayScore >= 62 ? (
+                          <span className="tag border-primary-300/25 bg-primary-400/10 text-primary-100">
+                            {hasProfitEvidence ? `grade ${grade}` : `quality ${grade}`}
+                          </span>
                         ) : (
-                          <span className="tag border-accent-amber/25 bg-accent-amber/10 text-accent-amber">profit data pending</span>
+                          <span className="tag border-accent-amber/25 bg-accent-amber/10 text-accent-amber">needs validation</span>
                         )}
                         {evidenceDepth && (
                           <span className="tag border-surface-400/25 bg-surface-500/10 text-surface-200">
@@ -133,7 +137,7 @@ export default function StoreGenerator() {
                       </div>
                       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:text-right lg:flex-col lg:items-end">
                         <div className="text-[10px] uppercase font-bold tracking-wider text-surface-400">
-                          keyword fit {concept.nicheScore}/100
+                          store quality {Math.round(concept.storeQualityScore ?? concept.nicheScore)}/100
                         </div>
                         <button
                           type="button"
@@ -164,12 +168,12 @@ export default function StoreGenerator() {
                   </div>
 
                   <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
-                    <Signal label="Demand" value={concept.demandScore} icon="trending-up" />
-                    <Signal label="Margin" value={concept.marginScore ?? concept.estimatedGrossMargin} icon="dollar-sign" />
-                    <Signal label="Competition" value={concept.competitionEase} icon="target" />
+                    <Signal label="Store Fit" value={concept.storeQualityScore ?? concept.nicheScore} icon="award" />
+                    <Signal label="Specificity" value={concept.specificityScore ?? concept.scoreBreakdown?.specificity} icon="target" />
+                    <Signal label="Source" value={concept.sourceDiversityScore ?? concept.scoreBreakdown?.sourceDiversity ?? concept.scoreBreakdown?.keywordSourceStrength} icon="database" />
+                    <Signal label="Product Fit" value={concept.productMixScore ?? concept.scoreBreakdown?.productMix} icon="package" />
                     <Signal label="Keyword Intent" value={concept.buyerIntent} icon="users" />
-                    <Signal label="Cohesion" value={concept.cohesion} icon="layers" />
-                    <Signal label="Confidence" value={concept.confidenceScore} icon="check-circle" />
+                    <Signal label="Evidence" value={concept.evidenceDepth?.score ?? concept.confidenceScore} icon="check-circle" />
                   </div>
 
                   <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,0.65fr)_minmax(0,1.35fr)]">
@@ -226,10 +230,10 @@ export default function StoreGenerator() {
                             <div className="min-w-0">
                               <div className="section-label">Store recommendation</div>
                               <p className="mt-2 break-words text-[13px] font-semibold leading-relaxed text-surface-100">{recommendation.positioning}</p>
-                              <p className="mt-2 break-words text-[12px] leading-relaxed text-surface-300">{recommendation.profitPriority}</p>
-                              {recommendation.profitOptimizationPlan?.length ? (
+                              <p className="mt-2 break-words text-[12px] leading-relaxed text-surface-300">{recommendation.qualityPriority || recommendation.profitPriority}</p>
+                              {(recommendation.qualityOptimizationPlan || recommendation.profitOptimizationPlan)?.length ? (
                                 <div className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-surface-300">
-                                  {recommendation.profitOptimizationPlan.slice(0, 3).map((item) => (
+                                  {(recommendation.qualityOptimizationPlan || recommendation.profitOptimizationPlan || []).slice(0, 3).map((item) => (
                                     <div key={item} className="flex min-w-0 gap-2">
                                       <Icon name="target" size={12} className="mt-0.5 flex-shrink-0 text-primary-100" />
                                       <span className="min-w-0 break-words">{item}</span>
@@ -265,8 +269,8 @@ export default function StoreGenerator() {
                                     {cluster.keywords.length} keywords
                                   </div>
                                 </div>
-                                <div className={`flex-shrink-0 text-[13px] font-extrabold tabular-nums ${metricClass(cluster.profitabilityScore)}`}>
-                                  {formatScore(cluster.profitabilityScore)}
+                                <div className={`flex-shrink-0 text-[13px] font-extrabold tabular-nums ${metricClass(cluster.profitabilityScore ?? cluster.clusterQualityScore)}`}>
+                                  {formatScore(cluster.profitabilityScore ?? cluster.clusterQualityScore)}
                                 </div>
                               </div>
                               <div className="mt-2 break-words text-[11px] text-surface-300">
@@ -309,8 +313,8 @@ export default function StoreGenerator() {
                                           primary: <span className="font-bold text-surface-100">{blueprint.primaryKeyword}</span>
                                         </div>
                                       </div>
-                                      <div className={`flex-shrink-0 text-[13px] font-extrabold tabular-nums ${metricClass(blueprint.profitabilityScore)}`}>
-                                        {formatScore(blueprint.profitabilityScore)}
+                                      <div className={`flex-shrink-0 text-[13px] font-extrabold tabular-nums ${metricClass(blueprint.profitabilityScore ?? blueprint.listingQualityScore)}`}>
+                                        {formatScore(blueprint.profitabilityScore ?? blueprint.listingQualityScore)}
                                       </div>
                                     </div>
                                     {blueprint.supportingKeywords.length > 0 && (
@@ -328,7 +332,7 @@ export default function StoreGenerator() {
                         </div>
 
                         <div className="min-w-0 space-y-3">
-                          <div className="section-label">Profit drivers</div>
+                          <div className="section-label">Store quality drivers</div>
                           <ul className="space-y-2 text-[12px] leading-relaxed text-surface-200">
                             {(concept.profitDrivers || concept.evidence).map((item) => (
                               <li key={item} className="flex min-w-0 gap-2">
@@ -375,7 +379,7 @@ export default function StoreGenerator() {
           <Icon name="layers" size={48} className="text-surface-400 mx-auto mb-4" />
           <h3 className="text-[15px] font-bold text-surface-200 mb-2">No store idea data yet</h3>
           <p className="text-[13px] text-surface-400 max-w-md mx-auto">
-            No profit-ranked store ideas are available from the current keyword data.
+            No source-backed store ideas are available from the current keyword data.
           </p>
         </div>
       )}
@@ -397,7 +401,7 @@ export default function StoreGenerator() {
   )
 }
 
-function Signal({ label, value, icon }: { label: string; value?: number | null; icon: 'trending-up' | 'dollar-sign' | 'target' | 'users' | 'layers' | 'check-circle' }) {
+function Signal({ label, value, icon }: { label: string; value?: number | null; icon: IconName }) {
   const hasValue = Number.isFinite(value)
   return (
     <div className="min-w-0 rounded-md border border-surface-500/50 bg-surface-900/20 px-3 py-2">
@@ -461,7 +465,7 @@ function toStorePayload(concept: StoreIdea) {
     ...(concept.keywordClusters || []).slice(0, 4).map((cluster) => cluster.label),
   ].filter((item, index, list) => item && list.indexOf(item) === index)
   const profit = concept.profitScore ?? null
-  const keywordFit = primaryScore(concept)
+  const keywordFit = concept.storeQualityScore ?? primaryScore(concept)
 
   return {
     name: concept.name,
@@ -474,11 +478,19 @@ function toStorePayload(concept: StoreIdea) {
     pricing_strategy: profit && (profit >= 78 || (concept.estimatedGrossMargin || 0) >= 58) ? 'premium' : (concept.avgGap || 0) >= 60 ? 'competitive' : 'penetration',
     listing_target: profit && profit >= 78 ? 75 : 50,
     research_snapshot: {
-      source: 'profitability_engine',
+      source: 'source_backed_store_quality_engine',
       profit_score: concept.profitScore,
+      recommendation_score: concept.recommendationScore,
+      store_quality_score: concept.storeQualityScore,
+      commercial_potential_score: concept.commercialPotentialScore,
       keyword_fit_score: keywordFit,
       profit_grade: concept.profitGrade || null,
+      quality_grade: concept.qualityGrade || null,
       niche_score: concept.nicheScore,
+      specificity_score: concept.specificityScore,
+      source_diversity_score: concept.sourceDiversityScore,
+      product_mix_score: concept.productMixScore,
+      keyword_depth_score: concept.keywordDepthScore,
       demand_score: concept.demandScore,
       margin_score: concept.marginScore,
       competition_ease: concept.competitionEase,
@@ -513,7 +525,7 @@ function audienceFor(concept: StoreIdea): string {
 }
 
 function voiceFor(concept: StoreIdea): string {
-  const strength = (concept.profitScore || 0) >= 78 ? 'premium' : 'focused'
+  const strength = (concept.profitScore || concept.storeQualityScore || 0) >= 72 ? 'premium' : 'focused'
   return [strength, 'data-led', 'commercial', 'giftable'].join(', ')
 }
 
@@ -523,7 +535,7 @@ function aestheticFor(concept: StoreIdea): string {
 }
 
 function primaryScore(concept: StoreIdea): number {
-  return Math.round(concept.profitScore ?? concept.nicheScore)
+  return Math.round(concept.profitScore ?? concept.recommendationScore ?? concept.storeQualityScore ?? concept.commercialPotentialScore ?? concept.nicheScore)
 }
 
 function formatScore(value?: number | null): string {

@@ -55,6 +55,8 @@ export interface StoreIdeaKeyword {
   avgFavorites?: number
   buyerIntent?: number
   profitGap?: number
+  sourceStrength?: number | null
+  specificityScore?: number | null
   priceRange?: { min: number; max: number } | null
 }
 
@@ -84,6 +86,11 @@ export interface StoreIdeaKeywordCluster {
   avgDemand?: number
   competitionEase?: number
   buyerIntent?: number
+  clusterQualityScore?: number | null
+  specificityScore?: number | null
+  sourceDiversityScore?: number | null
+  productMixScore?: number | null
+  keywordDepthScore?: number | null
   revenueDensityScore?: number
   avgRevenuePerListing?: number | null
   marketEvidenceScore?: number | null
@@ -102,7 +109,9 @@ export interface StoreIdeaListingBlueprint {
   priceBand?: { min: number; max: number } | null
   tags: string[]
   profitabilityScore?: number | null
+  listingQualityScore?: number | null
   profitInputs?: Record<string, unknown>
+  qualityInputs?: Record<string, unknown>
   evidenceLevel: string
   profitRationale: string
 }
@@ -119,6 +128,11 @@ export interface StoreIdeaRecommendation {
     clusterCount: number
     listingBlueprintCount: number
   }
+  storeQualityScore?: number
+  qualityGrade?: string
+  qualityInputs?: Record<string, unknown>
+  qualityPriority?: string
+  qualityOptimizationPlan?: string[]
   profitPriority: string
   profitOptimizationPlan?: string[]
   validationPriorities?: Array<{
@@ -166,6 +180,14 @@ export interface StoreIdea {
   avgOpportunity: number
   avgGap?: number | null
   nicheScore: number
+  storeQualityScore?: number
+  recommendationScore?: number
+  commercialPotentialScore?: number
+  qualityGrade?: string | null
+  specificityScore?: number
+  sourceDiversityScore?: number
+  productMixScore?: number
+  keywordDepthScore?: number
   profitScore?: number | null
   rawProfitScore?: number | null
   profitGrade?: string | null

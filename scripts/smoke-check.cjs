@@ -80,8 +80,26 @@ if (Array.isArray(storeIdeas)) {
     if (!firstIdea.scoreBreakdown || typeof firstIdea.scoreBreakdown !== 'object') {
       fail('store ideas must include scoreBreakdown for profit scoring transparency');
     }
+    if (typeof firstIdea.storeQualityScore !== 'number' || typeof firstIdea.recommendationScore !== 'number') {
+      fail('store ideas must include source-backed storeQualityScore and recommendationScore');
+    }
+    for (const idea of storeIdeas) {
+      const evidence = idea.profitabilityEvidence || {};
+      const hasProfitEvidence = Boolean(
+        evidence.observedPriceBand
+        || evidence.sampledMonthlyRevenue
+        || evidence.revenuePerListing
+        || evidence.marketTractionScore
+      );
+      if (idea.profitScore != null && !hasProfitEvidence) {
+        fail(`store idea ${idea.name || idea.id || 'unknown'} has profitScore without profit evidence`);
+      }
+    }
     if (!firstBlueprint.profitInputs || typeof firstBlueprint.profitInputs !== 'object') {
       fail('listing blueprints must include profitInputs for future listing optimization');
+    }
+    if (typeof firstBlueprint.listingQualityScore !== 'number' || !firstBlueprint.qualityInputs) {
+      fail('listing blueprints must include listingQualityScore and qualityInputs');
     }
   }
 } else if (storeIdeas) {

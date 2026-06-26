@@ -104,7 +104,9 @@ print(json.dumps(generate_profitable_store_ideas(limit=12, signal_limit=1000)))
 
   for (const [filename, endpoint] of endpoints) {
     try {
-      let data = await fetch(`${API}${endpoint}`);
+      let data = filename === 'store-ideas.json'
+        ? generateLocalStoreIdeas()
+        : await fetch(`${API}${endpoint}`);
       if (filename === 'store-ideas.json' && !Array.isArray(data)) {
         throw new Error(`store ideas snapshot expected an array, got ${typeof data}`);
       }
