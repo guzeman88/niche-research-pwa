@@ -3,6 +3,9 @@
   publish = "dist"
 
 # Optional: set VITE_API_URL in Netlify env vars when a live backend is available.
+# Use the Cloudflare Tunnel hostname for VITE_API_URL, for example:
+# VITE_API_URL = https://api.your-domain.example
+# Optional backups can be comma-separated in VITE_BACKUP_API_URLS.
 # Without it, the PWA serves real bundled keyword snapshots and stores user-created
 # stores locally instead of depending on a suspended external API.
 
