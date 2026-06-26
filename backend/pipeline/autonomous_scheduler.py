@@ -344,11 +344,16 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
         # Quick listing ID fetch: run a single-page search to get the top 15 IDs
         if not listing_ids:
             try:
-                from adapters.research.etsy_search_scraper import EtsySearchScraper
-                scraper = EtsySearchScraper()
-                sr = scraper.search(keyword, max_listings=15, page=1)
-                listing_ids = [l.listing_id for l in sr.listings if l.listing_id]
-                scraper._client.close()
+                from adapters.research.etsy_search_scraper import EtsySearchScraper, get_etsy_html_block_reason, is_etsy_html_blocked
+                if is_etsy_html_blocked():
+                    self._log(f"[scheduler]   Listing ID fetch skipped: {get_etsy_html_block_reason()}")
+                else:
+                    scraper = EtsySearchScraper()
+                    try:
+                        sr = scraper.search(keyword, max_listings=15, page=1)
+                        listing_ids = [l.listing_id for l in sr.listings if l.listing_id]
+                    finally:
+                        scraper.close()
             except Exception as e:
                 self._log(f"[scheduler]   Listing ID fetch failed: {e}")
 

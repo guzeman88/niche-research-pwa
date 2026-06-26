@@ -7,6 +7,7 @@ and estimates competition/demand from listing count queries.
 import time
 import httpx
 from adapters.base.research import BaseResearchAdapter, NicheSignal
+from adapters.research.etsy_search_scraper import is_etsy_html_blocked, mark_etsy_html_blocked
 
 
 # Etsy changed their autocomplete endpoint — using the current suggestions API
@@ -47,6 +48,8 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
 
     def search(self, keyword: str, category: str = "") -> list[NicheSignal]:
         suggestions = self._get_suggestions(keyword)
+        if not suggestions:
+            return []
         results: list[NicheSignal] = []
         for kw in suggestions[:10]:
             count = self._get_listing_count(kw)
@@ -75,13 +78,16 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
                 if results and isinstance(results[0], dict):
                     return [r.get("query", r.get("term", "")) for r in results if r.get("query") or r.get("term")]
                 return [r for r in results if isinstance(r, str)]
+            if resp.status_code in (404, 410):
+                return []
         except Exception:
             pass
-        # fallback: keyword itself as sole candidate
-        return [keyword]
+        return []
 
     def _get_listing_count(self, keyword: str) -> int:
         """Returns approximate listing count from Etsy search page."""
+        if is_etsy_html_blocked():
+            return 0
         try:
             resp = self._client.get(
                 _SEARCH_URL,
@@ -97,6 +103,8 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
                 m = re.search(r'([\d,]+)\s+results', text)
                 if m:
                     return int(m.group(1).replace(",", ""))
+            if resp.status_code in (403, 429):
+                mark_etsy_html_blocked(f"Etsy listing-count search returned HTTP {resp.status_code}")
         except Exception:
             pass
         return 0
