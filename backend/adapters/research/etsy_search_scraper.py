@@ -273,7 +273,32 @@ class EtsySearchScraper:
                     raise
             except Exception as exc:
                 raise
-        raise last_exc
+
+        try:
+            return _fetch_with_browser_impersonation(keyword, page)
+        except Exception as exc:
+            if last_exc:
+                raise RuntimeError(f"{last_exc}; browser fallback also failed: {exc}") from exc
+            raise exc
+
+
+def _fetch_with_browser_impersonation(keyword: str, page: int) -> str:
+    """Fallback for Etsy 403s when plain httpx gets fingerprint-blocked."""
+    try:
+        from curl_cffi import requests
+    except Exception as exc:
+        raise RuntimeError("curl-cffi is not installed for Etsy browser fallback") from exc
+
+    resp = requests.get(
+        _SEARCH_URL,
+        params={"q": keyword, "explicit": "1", "page": page},
+        headers=_random_headers(),
+        impersonate="chrome124",
+        timeout=30,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Browser fallback failed with HTTP {resp.status_code} for {resp.url}")
+    return resp.text
 
 
 # ── HTML parsers ──────────────────────────────────────────────────────────────

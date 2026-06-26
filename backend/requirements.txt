@@ -16,6 +16,7 @@ anthropic>=0.34.0            # Claude
 pytrends>=4.9.2              # Google Trends
 praw>=7.7.0                  # Reddit
 rapidfuzz>=3.0.0             # Fuzzy dedup
+curl-cffi>=0.7.0             # Browser-grade Etsy fetch fallback
 
 # ─── Utilities ──────────────────────────────────────────────────────────────
 Pillow>=10.0.0               # Image processing (needed by some adapters)

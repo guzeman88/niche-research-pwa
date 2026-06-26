@@ -252,14 +252,21 @@ class AutonomousScheduler:
             log_fn=self._log,
             skip_scraper=self._skip_scraper,
         )
+        has_market_data = _report_has_market_data(report)
+        if not has_market_data:
+            self._log(
+                f"[scheduler]   Thin market evidence for '{keyword}' - saving capped scores and queuing for evidence refresh"
+            )
         kdb.save_scan(keyword, report)
 
         # Gap analysis — runs after every scan to score the 6 gap types
-        if not self._skip_scraper:
+        if not self._skip_scraper and has_market_data:
             try:
                 self._analyze_gaps(keyword, report)
             except Exception as e:
                 self._log(f"[scheduler]   Gap analysis failed for '{keyword}': {e}")
+        elif not has_market_data:
+            self._log(f"[scheduler]   Skipping gap analysis for '{keyword}' until listing evidence is available")
 
         # Expansion — only if we're not too deep
         depth = kdb.get_expansion_depth(keyword)
@@ -275,8 +282,11 @@ class AutonomousScheduler:
             gs = GoogleSuggestAdapter()
             sigs = gs.search(keyword)
             gs_kws = [s.keyword for s in sigs if s.keyword != keyword.lower()]
+            expansion_limit = 10 if has_market_data else 3
+            if not has_market_data and kdb.score_keyword_buyer_intent(keyword) < 45:
+                gs_kws = []
             if gs_kws:
-                added = kdb.record_expansion(keyword, gs_kws[:10], "google_suggest", depth + 1)
+                added = kdb.record_expansion(keyword, gs_kws[:expansion_limit], "google_suggest", depth + 1)
                 new_seeds_total += added
                 if added:
                     self._log(f"[scheduler]   +{added} seeds from Google Suggest")
@@ -413,3 +423,19 @@ def get_scheduler(**kwargs) -> AutonomousScheduler:
     if _instance is None:
         _instance = AutonomousScheduler(**kwargs)
     return _instance
+
+
+def _report_has_market_data(report) -> bool:
+    if hasattr(report, "__dataclass_fields__"):
+        import dataclasses
+        data = dataclasses.asdict(report)
+    else:
+        data = dict(report)
+    for row in data.get("keyword_search_data", []) or []:
+        if (
+            (row.get("sampled_listing_count") or 0) > 0
+            or (row.get("avg_price_usd") or 0) > 0
+            or (row.get("total_listing_count") or 0) > 0
+        ):
+            return True
+    return False

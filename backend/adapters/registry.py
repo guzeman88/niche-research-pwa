@@ -74,15 +74,13 @@ def get_llm_with_fallback(primary: str = "ollama", fallback: str | None = "gemin
     adapter = get_llm_adapter(primary, **kwargs)
     primary_healthy = adapter.health_check()
 
-    if not primary_healthy:
-        print(f"  [llm] primary '{primary}' unavailable or model not pulled", flush=True)
-
     fb_wrapped: _CostLoggingAdapter | None = None
     if fallback:
         fb = get_llm_adapter(fallback)
         if fb.health_check():
             fb_wrapped = _CostLoggingAdapter(fb, fallback=None)
             if not primary_healthy:
+                print(f"  [llm] primary '{primary}' unavailable or model not pulled", flush=True)
                 print(f"  [llm] using fallback '{fallback}'", flush=True)
                 return fb_wrapped
 

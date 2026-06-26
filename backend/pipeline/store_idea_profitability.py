@@ -286,13 +286,14 @@ def _looks_like_default_scan(row: dict[str, Any]) -> bool:
             "recommended_price_max",
             "listings_analyzed",
             "market_evidence_score",
-            "profitability_index",
             "revenue_per_listing",
             "avg_favorites",
         )
     )
     if has_market_evidence:
         return False
+    if _number(row.get("market_evidence_score")) < 20:
+        return True
 
     return (
         math.isclose(_number(row.get("opportunity_score")), 65.0, abs_tol=0.01)
