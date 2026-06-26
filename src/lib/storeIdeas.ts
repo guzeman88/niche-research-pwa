@@ -47,8 +47,14 @@ export interface StoreIdeaKeyword {
   demand?: number
   margin?: number
   estimatedRevenue?: number
+  revenuePerListing?: number
   avgPrice?: number
   competitionEase?: number
+  marketEvidenceScore?: number
+  profitabilityIndex?: number
+  avgFavorites?: number
+  buyerIntent?: number
+  profitGap?: number
   priceRange?: { min: number; max: number } | null
 }
 
@@ -59,7 +65,9 @@ export interface StoreIdeaEvidenceDepth {
   scoredKeywords: number
   pricedKeywords: number
   revenueSignals: number
+  revenueDensitySignals?: number
   competitionSignals: number
+  buyerTractionSignals?: number
   trendSignals: number
   productTypes: number
   missing: string[]
@@ -76,6 +84,9 @@ export interface StoreIdeaKeywordCluster {
   avgDemand?: number
   competitionEase?: number
   buyerIntent?: number
+  revenueDensityScore?: number
+  avgRevenuePerListing?: number | null
+  marketEvidenceScore?: number | null
   profitabilityScore: number
 }
 
@@ -91,6 +102,7 @@ export interface StoreIdeaListingBlueprint {
   priceBand?: { min: number; max: number } | null
   tags: string[]
   profitabilityScore: number
+  profitInputs?: Record<string, unknown>
   evidenceLevel: string
   profitRationale: string
 }
@@ -100,6 +112,7 @@ export interface StoreIdeaRecommendation {
   targetCustomer: string
   recommendedCollections: string[]
   launchListingIdeas: string[]
+  listingGenerationInputs?: Array<Record<string, unknown>>
   keywordStrategy: {
     primaryKeywords: string[]
     expansionKeywords: string[]
@@ -107,6 +120,12 @@ export interface StoreIdeaRecommendation {
     listingBlueprintCount: number
   }
   profitPriority: string
+  profitOptimizationPlan?: string[]
+  validationPriorities?: Array<{
+    evidenceGap: string
+    action: string
+    keywords: string[]
+  }>
   nextValidationStep: string
 }
 
@@ -118,6 +137,22 @@ export interface StoreIdeaFeeModel {
   estimatedPaymentProcessingFixed?: number
   offsiteAdsRateRange?: { min: number; max: number }
   note: string
+}
+
+export interface StoreIdeaProfitabilityEvidence {
+  evidenceScore: number
+  evidenceLevel: string
+  observedPriceBand?: { p25?: number | null; median?: number | null; p75?: number | null; avg?: number | null } | null
+  estimatedGrossMargin?: number | null
+  sampledMonthlyRevenue?: number | null
+  revenuePerListing?: number | null
+  revenueDensityScore: number
+  marketTractionScore: number
+  sellerWeaknessScore: number
+  avgListingCount?: number | null
+  avgFavorites?: number | null
+  signalsWithDeepMarketData: number
+  missing: string[]
 }
 
 export interface StoreIdea {
@@ -144,6 +179,8 @@ export interface StoreIdea {
   priceRange?: { min: number; max: number }
   estimatedGrossMargin?: number
   estimatedMonthlyRevenue?: number
+  profitabilityEvidence?: StoreIdeaProfitabilityEvidence
+  scoreBreakdown?: Record<string, number>
   rationale: string
   evidence: string[]
   evidenceDepth?: StoreIdeaEvidenceDepth

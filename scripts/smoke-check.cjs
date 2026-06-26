@@ -74,6 +74,15 @@ if (Array.isArray(storeIdeas)) {
   if (!firstIdea.evidenceDepth || typeof firstIdea.evidenceDepth.score !== 'number') {
     fail('store ideas must include evidenceDepth scoring');
   }
+  if (!firstIdea.profitabilityEvidence || typeof firstIdea.profitabilityEvidence.evidenceScore !== 'number') {
+    fail('store ideas must include profitabilityEvidence with evidenceScore');
+  }
+  if (!firstIdea.scoreBreakdown || typeof firstIdea.scoreBreakdown !== 'object') {
+    fail('store ideas must include scoreBreakdown for profit scoring transparency');
+  }
+  if (!firstBlueprint.profitInputs || typeof firstBlueprint.profitInputs !== 'object') {
+    fail('listing blueprints must include profitInputs for future listing optimization');
+  }
 } else if (storeIdeas) {
   fail('public/data/store-ideas.json must be an array');
 }

@@ -99,6 +99,7 @@ export default function StoreGenerator() {
             const keywordClusters = concept.keywordClusters || []
             const listingBlueprints = concept.listingBlueprints || []
             const recommendation = concept.storeRecommendation
+            const profitabilityEvidence = concept.profitabilityEvidence
             return (
               <div key={concept.id} className="panel overflow-hidden">
                 <div className="h-1" style={{ background: `linear-gradient(90deg, ${color}, ${color}80)` }} />
@@ -154,7 +155,7 @@ export default function StoreGenerator() {
                     <Signal label="Confidence" value={concept.confidenceScore} icon="check-circle" />
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                     <MarketMetric
                       label="Revenue signal"
                       value={formatRevenue(concept)}
@@ -171,6 +172,14 @@ export default function StoreGenerator() {
                       label="Evidence depth"
                       value={formatEvidenceDepth(concept)}
                     />
+                    <MarketMetric
+                      label="Revenue/listing"
+                      value={profitabilityEvidence?.revenuePerListing ? fmtPrice(profitabilityEvidence.revenuePerListing) : 'not enough data'}
+                    />
+                    <MarketMetric
+                      label="Profit evidence"
+                      value={profitabilityEvidence ? `${profitabilityEvidence.evidenceLevel} ${profitabilityEvidence.evidenceScore}/100` : 'not enough data'}
+                    />
                   </div>
 
                   {recommendation && (
@@ -180,6 +189,16 @@ export default function StoreGenerator() {
                           <div className="section-label">Store recommendation</div>
                           <p className="mt-2 text-[13px] font-semibold leading-relaxed text-surface-100">{recommendation.positioning}</p>
                           <p className="mt-2 text-[12px] leading-relaxed text-surface-300">{recommendation.profitPriority}</p>
+                          {recommendation.profitOptimizationPlan?.length ? (
+                            <div className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-surface-300">
+                              {recommendation.profitOptimizationPlan.slice(0, 3).map((item) => (
+                                <div key={item} className="flex gap-2">
+                                  <Icon name="target" size={12} className="mt-0.5 flex-shrink-0 text-primary-100" />
+                                  <span>{item}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="space-y-2">
                           <div className="section-label">Launch sequence</div>
@@ -432,6 +451,8 @@ function toStorePayload(concept: StoreIdea) {
       confidence_score: concept.confidenceScore,
       estimated_gross_margin: concept.estimatedGrossMargin,
       estimated_monthly_revenue: concept.estimatedMonthlyRevenue,
+      profitability_evidence: concept.profitabilityEvidence,
+      score_breakdown: concept.scoreBreakdown,
       price_range: concept.priceRange,
       keywords: concept.keywords,
       keyword_clusters: concept.keywordClusters || [],
