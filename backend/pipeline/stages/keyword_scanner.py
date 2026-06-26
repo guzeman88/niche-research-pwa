@@ -278,6 +278,17 @@ def get_etsy_trending_seeds(log_fn=None) -> list[dict]:
     Returns list of dicts: {keyword, domain, source, priority}
     """
     _log = log_fn or print
+    try:
+        from adapters.research.etsy_search_scraper import get_etsy_html_block_reason, is_etsy_html_blocked, mark_etsy_html_blocked
+    except Exception:
+        get_etsy_html_block_reason = lambda: ""
+        is_etsy_html_blocked = lambda: False
+        mark_etsy_html_blocked = lambda reason: None
+
+    if is_etsy_html_blocked():
+        _log(f"[seed_discovery] Etsy trending skipped: {get_etsy_html_block_reason()}")
+        return []
+
     collected: dict[str, dict] = {}
 
     urls = [_ETSY_TRENDING_URL] + _ETSY_CATEGORY_URLS
@@ -285,6 +296,10 @@ def get_etsy_trending_seeds(log_fn=None) -> list[dict]:
         try:
             resp = httpx.get(url, headers=_HEADERS, timeout=15, follow_redirects=True)
             if resp.status_code != 200:
+                if resp.status_code in (403, 429):
+                    mark_etsy_html_blocked(f"Etsy trending page returned HTTP {resp.status_code} for {url}")
+                    _log(f"[seed_discovery] Etsy trending skipped: {get_etsy_html_block_reason()}")
+                    break
                 continue
             labels = _extract_trend_labels(resp.text)
             for kw in labels:

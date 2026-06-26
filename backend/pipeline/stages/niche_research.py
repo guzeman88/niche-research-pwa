@@ -239,7 +239,16 @@ def _run_scraper(
     keywords: list[str],
     log_fn: Callable,
 ) -> list[KeywordSearchData]:
-    from adapters.research.etsy_search_scraper import EtsySearchScraper
+    from adapters.research.etsy_search_scraper import (
+        EtsyHtmlBlockedError,
+        EtsySearchScraper,
+        get_etsy_html_block_reason,
+        is_etsy_html_blocked,
+    )
+    if is_etsy_html_blocked():
+        log_fn(f"[niche_research] Etsy HTML scraper skipped: {get_etsy_html_block_reason()}")
+        return []
+
     scraper = EtsySearchScraper()
     results: list[KeywordSearchData] = []
     # Scrape each seed keyword + top expanded keywords (max 8 total to stay polite)
@@ -250,7 +259,9 @@ def _run_scraper(
         try:
             sr = scraper.search_paged(kw, max_pages=3, max_listings=60)
             if sr.error:
-                log_fn(f"[niche_research] scraper '{kw}': {sr.error}")
+                log_fn(f"[niche_research] Etsy HTML scraper unavailable for '{kw}': {sr.error}")
+                if is_etsy_html_blocked():
+                    break
                 continue
             pd = sr.price_distribution
             ksd = KeywordSearchData(
@@ -284,6 +295,9 @@ def _run_scraper(
             )
         except Exception as exc:
             log_fn(f"[niche_research] scraper error '{kw}': {exc}")
+            if isinstance(exc, EtsyHtmlBlockedError) or is_etsy_html_blocked():
+                break
+    scraper.close()
     return results
 
 

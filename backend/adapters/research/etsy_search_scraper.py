@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import statistics
 import time
@@ -63,7 +64,50 @@ def _random_headers() -> dict:
 
 _SEARCH_URL = "https://www.etsy.com/search"
 _REQUEST_DELAY = 2.5   # seconds between requests — polite crawling
-_MAX_RETRIES  = 3      # retry on 403/429 with backoff
+_MAX_RETRIES = max(1, int(os.environ.get("ETSY_HTML_MAX_RETRIES", "1") or "1"))
+_FALLBACK_TIMEOUT = float(os.environ.get("ETSY_HTML_FALLBACK_TIMEOUT_SECONDS", "8") or "8")
+_BLOCK_COOLDOWN_SECONDS = float(os.environ.get("ETSY_HTML_BLOCK_COOLDOWN_SECONDS", "1800") or "1800")
+_BLOCKED_UNTIL = 0.0
+_BLOCK_REASON = ""
+
+
+class EtsyHtmlBlockedError(RuntimeError):
+    """Raised when Etsy blocks no-key HTML scraping from this network."""
+
+
+def is_etsy_html_blocked() -> bool:
+    return time.monotonic() < _BLOCKED_UNTIL
+
+
+def get_etsy_html_block_reason() -> str:
+    if not is_etsy_html_blocked():
+        return ""
+    remaining = max(0, int(_BLOCKED_UNTIL - time.monotonic()))
+    return f"{_BLOCK_REASON} (cooldown {remaining}s)"
+
+
+def mark_etsy_html_blocked(reason: str, cooldown_seconds: float | None = None) -> None:
+    global _BLOCKED_UNTIL, _BLOCK_REASON
+    _BLOCK_REASON = reason
+    _BLOCKED_UNTIL = time.monotonic() + (cooldown_seconds or _BLOCK_COOLDOWN_SECONDS)
+
+
+def _html_scraper_enabled() -> bool:
+    value = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "1").strip().lower()
+    return value not in {"0", "false", "no"}
+
+
+def _looks_like_challenge(status_code: int, text: str) -> bool:
+    if status_code not in (403, 429):
+        return False
+    lowered = text[:1000].lower()
+    return (
+        "please enable js" in lowered
+        or "please enable javascript" in lowered
+        or "captcha" in lowered
+        or "challenge" in lowered
+        or status_code == 429
+    )
 
 
 @dataclass
@@ -190,7 +234,8 @@ class EtsySearchScraper:
             result.compute_aggregates()
         except Exception as exc:
             result.error = str(exc)
-        time.sleep(self._delay)
+        if not is_etsy_html_blocked():
+            time.sleep(self._delay)
         return result
 
     def search_paged(
@@ -233,7 +278,8 @@ class EtsySearchScraper:
                 break
         result.listings = all_listings[:max_listings]
         result.compute_aggregates()
-        time.sleep(self._delay)
+        if not is_etsy_html_blocked():
+            time.sleep(self._delay)
         return result
 
     def bulk_search(
@@ -247,6 +293,11 @@ class EtsySearchScraper:
         return results
 
     def _fetch(self, keyword: str, page: int) -> str:
+        if not _html_scraper_enabled():
+            raise EtsyHtmlBlockedError("Etsy HTML scraper disabled by ETSY_HTML_SCRAPER_ENABLED=0")
+        if is_etsy_html_blocked():
+            raise EtsyHtmlBlockedError(get_etsy_html_block_reason())
+
         params = {"q": keyword, "explicit": "1", "page": page}
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
@@ -260,10 +311,9 @@ class EtsySearchScraper:
                     headers=_random_headers(),
                 )
                 if resp.status_code in (403, 429):
-                    last_exc = httpx.HTTPStatusError(
-                        f"Client error '{resp.status_code}' for url '{resp.url}'",
-                        request=resp.request, response=resp,
-                    )
+                    last_exc = RuntimeError(f"Etsy HTML returned HTTP {resp.status_code} challenge")
+                    if _looks_like_challenge(resp.status_code, resp.text):
+                        break
                     continue
                 resp.raise_for_status()
                 return resp.text
@@ -277,9 +327,14 @@ class EtsySearchScraper:
         try:
             return _fetch_with_browser_impersonation(keyword, page)
         except Exception as exc:
+            reason = f"Etsy HTML search blocked from this network ({last_exc}; {exc})"
+            mark_etsy_html_blocked(reason)
             if last_exc:
-                raise RuntimeError(f"{last_exc}; browser fallback also failed: {exc}") from exc
+                raise EtsyHtmlBlockedError(reason) from exc
             raise exc
+
+    def close(self) -> None:
+        self._client.close()
 
 
 def _fetch_with_browser_impersonation(keyword: str, page: int) -> str:
@@ -294,10 +349,10 @@ def _fetch_with_browser_impersonation(keyword: str, page: int) -> str:
         params={"q": keyword, "explicit": "1", "page": page},
         headers=_random_headers(),
         impersonate="chrome124",
-        timeout=30,
+        timeout=_FALLBACK_TIMEOUT,
     )
     if resp.status_code >= 400:
-        raise RuntimeError(f"Browser fallback failed with HTTP {resp.status_code} for {resp.url}")
+        raise RuntimeError(f"browser fallback HTTP {resp.status_code}")
     return resp.text
 
 
