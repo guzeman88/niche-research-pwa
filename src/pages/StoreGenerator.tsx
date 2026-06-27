@@ -13,6 +13,7 @@ export default function StoreGenerator() {
   const [savedConcepts, setSavedConcepts] = useState<Set<string>>(() => new Set())
   const [saveError, setSaveError] = useState<string>('')
   const [expandedConceptId, setExpandedConceptId] = useState<string | null>(null)
+  const [expandedKeywordIds, setExpandedKeywordIds] = useState<Set<string>>(() => new Set())
 
   const {
     data: profitableIdeas,
@@ -28,6 +29,14 @@ export default function StoreGenerator() {
   const loadError = profitableError
   const bestConcept = concepts[0]
   const refresh = () => queryClient.invalidateQueries({ refetchType: 'active' })
+  const toggleKeywordList = (conceptId: string) => {
+    setExpandedKeywordIds((current) => {
+      const next = new Set(current)
+      if (next.has(conceptId)) next.delete(conceptId)
+      else next.add(conceptId)
+      return next
+    })
+  }
   const saveStore = useMutation({
     mutationFn: (concept: StoreIdea) => createStore(toStorePayload(concept)),
     onMutate: () => setSaveError(''),
@@ -98,7 +107,9 @@ export default function StoreGenerator() {
             const listingBlueprints = concept.listingBlueprints || []
             const recommendation = concept.storeRecommendation
             const isExpanded = expandedConceptId === concept.id
+            const areKeywordsExpanded = expandedKeywordIds.has(concept.id)
             const detailsId = `store-idea-details-${concept.id}`
+            const keywordListId = `store-idea-keywords-${concept.id}`
             return (
               <div key={concept.id} className={`panel overflow-hidden ${isExpanded ? 'ring-1 ring-primary-300/30' : ''}`}>
                 <div className="h-1" style={{ background: `linear-gradient(90deg, ${color}, ${color}80)` }} />
@@ -140,7 +151,14 @@ export default function StoreGenerator() {
                     </div>
                   </div>
 
-                  <RankedKeywordList keywords={rankedKeywords} totalCount={rankedKeywords.length} />
+                  <RankedKeywordList
+                    keywords={rankedKeywords}
+                    totalCount={rankedKeywords.length}
+                    isExpanded={areKeywordsExpanded}
+                    listId={keywordListId}
+                    conceptName={concept.name}
+                    onToggle={() => toggleKeywordList(concept.id)}
+                  />
 
                   {isExpanded && (
                     <div id={detailsId} className="min-w-0 space-y-4 border-t border-surface-500/40 pt-4">
@@ -300,35 +318,69 @@ interface RankedKeyword extends StoreIdeaKeyword {
   strength: number | null
 }
 
-function RankedKeywordList({ keywords, totalCount }: { keywords: RankedKeyword[]; totalCount: number }) {
+function RankedKeywordList({
+  keywords,
+  totalCount,
+  isExpanded,
+  listId,
+  conceptName,
+  onToggle,
+}: {
+  keywords: RankedKeyword[]
+  totalCount: number
+  isExpanded: boolean
+  listId: string
+  conceptName: string
+  onToggle: () => void
+}) {
+  const canToggle = totalCount > 0
+  const visibleKeywords = isExpanded ? keywords : []
   return (
     <div className="min-w-0 space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <div className="section-label">Keywords by strength</div>
-        <div className="text-[10px] font-bold uppercase tracking-wider text-surface-400">
-          {keywords.length} of {totalCount}
-        </div>
-      </div>
-      <div className="overflow-hidden rounded-md border border-surface-500/40 bg-surface-950/20">
-        {keywords.map((keyword, index) => (
-          <div
-            key={`${keyword.keyword}-${index}`}
-            className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_3.25rem] items-center gap-3 border-b border-surface-500/30 px-3 py-2 last:border-b-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_4rem_4rem_4rem]"
-          >
-            <div className="text-right text-[11px] font-extrabold tabular-nums text-surface-400">{index + 1}</div>
-            <div className="min-w-0">
-              <div className="break-words text-[12px] font-extrabold text-surface-100">{keyword.keyword}</div>
-              <div className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-surface-400">
-                <span className="break-words">{keyword.product}</span>
-                {keyword.estimatedRevenue ? <span>{fmtPrice(keyword.estimatedRevenue)}/mo</span> : null}
-              </div>
-            </div>
-            <MetricValue label="strength" value={keyword.strength} />
-            <MetricValue label="opp" value={keyword.opportunity} hideOnMobile />
-            <MetricValue label="gap" value={keyword.gap} hideOnMobile />
+        <div className="min-w-0">
+          <div className="section-label">Keywords by strength</div>
+          <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-surface-400">
+            {totalCount > 0
+              ? (isExpanded ? `${visibleKeywords.length} shown` : `${totalCount} ranked keywords`)
+              : 'No ranked keywords'}
           </div>
-        ))}
+        </div>
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          aria-controls={listId}
+          aria-label={`${isExpanded ? 'Collapse' : 'Show'} ranked keywords for ${conceptName}`}
+          onClick={onToggle}
+          disabled={!canToggle}
+          className="inline-flex min-h-8 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-surface-500/50 bg-surface-900/30 px-2.5 text-[11px] font-bold text-surface-100 transition-all duration-150 hover:bg-surface-700/45 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Icon name={isExpanded ? 'arrow-up' : 'arrow-down'} size={13} />
+          {isExpanded ? 'Hide keywords' : 'Show keywords'}
+        </button>
       </div>
+      {isExpanded && (
+        <div id={listId} className="overflow-hidden rounded-md border border-surface-500/40 bg-surface-950/20">
+          {visibleKeywords.map((keyword, index) => (
+            <div
+              key={`${keyword.keyword}-${index}`}
+              className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_3.25rem] items-center gap-3 border-b border-surface-500/30 px-3 py-2 last:border-b-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_4rem_4rem_4rem]"
+            >
+              <div className="text-right text-[11px] font-extrabold tabular-nums text-surface-400">{index + 1}</div>
+              <div className="min-w-0">
+                <div className="break-words text-[12px] font-extrabold text-surface-100">{keyword.keyword}</div>
+                <div className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-surface-400">
+                  <span className="break-words">{keyword.product}</span>
+                  {keyword.estimatedRevenue ? <span>{fmtPrice(keyword.estimatedRevenue)}/mo</span> : null}
+                </div>
+              </div>
+              <MetricValue label="strength" value={keyword.strength} />
+              <MetricValue label="opp" value={keyword.opportunity} hideOnMobile />
+              <MetricValue label="gap" value={keyword.gap} hideOnMobile />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
