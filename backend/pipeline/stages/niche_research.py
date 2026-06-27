@@ -129,6 +129,7 @@ def run(
     log_fn: Callable[[str], None] | None = None,
     adapter_names: list[str] | None = None,
     skip_scraper: bool = False,
+    include_seasonality: bool = True,
 ) -> NicheReport:
     """
     Full niche research pipeline.
@@ -166,7 +167,10 @@ def run(
         sources_used.append("etsy_search_scraper")
 
     # ── Step 3: Seasonality ───────────────────────────────────────────────────
-    seasonality, peak_months = _get_seasonality(seed_keywords[:2], _log)
+    if include_seasonality:
+        seasonality, peak_months = _get_seasonality(seed_keywords[:2], _log)
+    else:
+        seasonality, peak_months = [], []
 
     # ── Step 4: Aggregate scores ──────────────────────────────────────────────
     demand, competition, margin, trend = _aggregate_scores(

@@ -250,11 +250,15 @@ class AutonomousScheduler:
         )
 
         self._log(f"[scheduler] Scanning: {keyword}")
+        adapter_names = _scheduler_research_adapters()
+        include_seasonality = os.environ.get("SCHEDULER_INCLUDE_SEASONALITY", "0").strip().lower() in {"1", "true", "yes"}
         report = research_run(
             seed_keywords=[keyword],
             store_slug=self._store_slug,
             log_fn=self._log,
+            adapter_names=adapter_names,
             skip_scraper=self._skip_scraper,
+            include_seasonality=include_seasonality,
         )
         has_market_data = _report_has_market_data(report)
         if not has_market_data:
@@ -528,3 +532,9 @@ def _report_has_market_data(report) -> bool:
         ):
             return True
     return False
+
+
+def _scheduler_research_adapters() -> list[str]:
+    raw = os.environ.get("SCHEDULER_RESEARCH_ADAPTERS", "etsy_open_api,etsy_autocomplete")
+    names = [name.strip() for name in raw.split(",") if name.strip()]
+    return names or ["etsy_open_api", "etsy_autocomplete"]
