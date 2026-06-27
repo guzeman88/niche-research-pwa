@@ -1,7 +1,8 @@
 param(
   [int]$Port = 8001,
   [string]$SiteId = "9c00efca-ced9-4097-b302-172437380b32",
-  [string]$RenderFallbackUrl = "https://niche-research-api-kqlt.onrender.com",
+  [Alias("RenderFallbackUrl")]
+  [string]$BackupApiUrls = "",
   [ValidateSet("localtunnel", "cloudflare")]
   [string]$TunnelProvider = "localtunnel",
   [string]$LocalTunnelSubdomain = "etsy-niches-api-guzeman88",
@@ -207,9 +208,9 @@ if ($TunnelProvider -eq "cloudflare") {
   $tunnelUrl = Start-VerifiedLocalTunnel
 }
 
-Write-Step "Updating Netlify production env: local tunnel primary, Render backup"
+Write-Step "Updating Netlify production env: local tunnel primary"
 & netlify env:set VITE_API_URL $tunnelUrl --context production --force --site $SiteId | Write-Host
-& netlify env:set VITE_BACKUP_API_URLS $RenderFallbackUrl --context production --force --site $SiteId | Write-Host
+& netlify env:set VITE_BACKUP_API_URLS $BackupApiUrls --context production --force --site $SiteId | Write-Host
 & netlify env:set VITE_WAKE_BACKEND 1 --context production --force --site $SiteId | Write-Host
 
 if ($NoDeploy) {

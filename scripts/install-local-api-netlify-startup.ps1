@@ -1,7 +1,8 @@
 param(
   [int]$Port = 8001,
   [string]$SiteId = "9c00efca-ced9-4097-b302-172437380b32",
-  [string]$RenderFallbackUrl = "https://niche-research-api-kqlt.onrender.com",
+  [Alias("RenderFallbackUrl")]
+  [string]$BackupApiUrls = "",
   [ValidateSet("localtunnel", "cloudflare")]
   [string]$TunnelProvider = "localtunnel",
   [string]$LocalTunnelSubdomain = "etsy-niches-api-guzeman88"
@@ -20,7 +21,7 @@ $StartupLog = Join-Path $LogsDir "local-api-netlify-sync-startup.log"
 @"
 @echo off
 cd /d "$RepoRoot"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SyncScript" -Port $Port -SiteId "$SiteId" -RenderFallbackUrl "$RenderFallbackUrl" -TunnelProvider "$TunnelProvider" -LocalTunnelSubdomain "$LocalTunnelSubdomain" >> "$StartupLog" 2>&1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SyncScript" -Port $Port -SiteId "$SiteId" -BackupApiUrls "$BackupApiUrls" -TunnelProvider "$TunnelProvider" -LocalTunnelSubdomain "$LocalTunnelSubdomain" >> "$StartupLog" 2>&1
 "@ | Set-Content -Encoding ASCII -Path $StartupFile
 
 Write-Host "Installed startup sync:"

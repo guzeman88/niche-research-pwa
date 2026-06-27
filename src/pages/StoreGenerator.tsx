@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createStore, getProfitableStoreIdeas } from '../lib/api'
-import Icon, { type IconName } from '../components/Icon'
+import Icon from '../components/Icon'
 import PullToRefresh from '../components/PullToRefresh'
 import { fmtPrice, scoreColor } from '../lib/utils'
-import type { StoreIdea } from '../lib/storeIdeas'
+import type { StoreIdea, StoreIdeaKeyword } from '../lib/storeIdeas'
 
 const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
 
@@ -24,7 +24,6 @@ export default function StoreGenerator() {
   })
 
   const concepts = useMemo(() => profitableIdeas || [], [profitableIdeas])
-  const hasAnyProfitEvidence = concepts.some((concept) => Number.isFinite(concept.profitScore))
   const isLoading = profitableLoading
   const loadError = profitableError
   const bestConcept = concepts[0]
@@ -54,7 +53,6 @@ export default function StoreGenerator() {
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <span className="chip">{hasAnyProfitEvidence ? 'profit evidence' : concepts.length ? 'source-backed model' : 'no data'}</span>
           {savedConcepts.size > 0 && (
             <span className="text-[11px] font-semibold text-accent-green">{savedConcepts.size} saved to My Stores</span>
           )}
@@ -95,17 +93,10 @@ export default function StoreGenerator() {
             const color = COLORS[index % COLORS.length]
             const isSaved = savedConcepts.has(concept.id)
             const isSaving = saveStore.isPending && saveStore.variables?.id === concept.id
-            const displayScore = primaryScore(concept)
-            const hasProfitEvidence = Number.isFinite(concept.profitScore)
-            const scoreLabel = hasProfitEvidence ? 'profit' : 'store fit'
-            const grade = hasProfitEvidence
-              ? concept.profitGrade || gradeFor(displayScore)
-              : concept.qualityGrade || gradeFor(displayScore)
-            const evidenceDepth = concept.evidenceDepth
+            const rankedKeywords = rankedStoreIdeaKeywords(concept)
             const keywordClusters = concept.keywordClusters || []
             const listingBlueprints = concept.listingBlueprints || []
             const recommendation = concept.storeRecommendation
-            const profitabilityEvidence = concept.profitabilityEvidence
             const isExpanded = expandedConceptId === concept.id
             const detailsId = `store-idea-details-${concept.id}`
             return (
@@ -114,34 +105,14 @@ export default function StoreGenerator() {
                 <div className="min-w-0 p-4 space-y-3 sm:p-5">
                   <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="min-w-0 max-w-full break-words text-[15px] font-extrabold leading-snug text-surface-50 sm:text-[16px]">{concept.name}</h3>
-                        {index === 0 && <span className="tag border-accent-gold/30 bg-accent-gold/10 text-accent-gold">top {scoreLabel}</span>}
-                        {hasProfitEvidence || displayScore >= 62 ? (
-                          <span className="tag border-primary-300/25 bg-primary-400/10 text-primary-100">
-                            {hasProfitEvidence ? `grade ${grade}` : `quality ${grade}`}
-                          </span>
-                        ) : (
-                          <span className="tag border-accent-amber/25 bg-accent-amber/10 text-accent-amber">needs validation</span>
-                        )}
-                        {evidenceDepth && (
-                          <span className="tag border-surface-400/25 bg-surface-500/10 text-surface-200">
-                            evidence {evidenceDepth.level} {evidenceDepth.score}/100
-                          </span>
-                        )}
+                      <h3 className="min-w-0 max-w-full break-words text-[15px] font-extrabold leading-snug text-surface-50 sm:text-[16px]">{concept.name}</h3>
+                      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-surface-300">
+                        <span className="min-w-0 break-words">{concept.focus}</span>
+                        <span>{rankedKeywords.length} keywords</span>
+                        <span>{concept.productTypes.slice(0, 3).join(', ')}</span>
                       </div>
-                      <p className="mt-1 max-w-full break-words text-[11px] text-surface-300">{concept.focus}</p>
-                      <p className={`mt-2 max-w-3xl break-words text-[12px] leading-relaxed text-surface-200 sm:text-[13px] ${isExpanded ? '' : 'overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]'}`}>{concept.rationale}</p>
                     </div>
-                    <div className="flex min-w-0 flex-row flex-wrap items-center justify-between gap-3 lg:min-w-36 lg:flex-col lg:items-end">
-                      <div className="flex shrink-0 items-baseline gap-2">
-                        <div className={`text-3xl font-extrabold tabular-nums ${scoreColor(displayScore)}`}>{displayScore}</div>
-                        <div className="text-[11px] font-bold text-surface-300">{scoreLabel}</div>
-                      </div>
-                      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:text-right lg:flex-col lg:items-end">
-                        <div className="text-[10px] uppercase font-bold tracking-wider text-surface-400">
-                          store quality {Math.round(concept.storeQualityScore ?? concept.nicheScore)}/100
-                        </div>
+                    <div className="flex min-w-0 flex-row flex-wrap items-center justify-end gap-2 sm:text-right lg:flex-col lg:items-end">
                         <button
                           type="button"
                           aria-label={`Add ${concept.name} to My Stores`}
@@ -166,74 +137,19 @@ export default function StoreGenerator() {
                           <Icon name={isExpanded ? 'arrow-up' : 'arrow-down'} size={14} />
                           {isExpanded ? 'Collapse' : 'Details'}
                         </button>
-                      </div>
                     </div>
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
-                    <Signal label="Store Fit" value={concept.storeQualityScore ?? concept.nicheScore} icon="award" />
-                    <Signal label="Specificity" value={concept.specificityScore ?? concept.scoreBreakdown?.specificity} icon="target" />
-                    <Signal label="Source" value={concept.sourceDiversityScore ?? concept.scoreBreakdown?.sourceDiversity ?? concept.scoreBreakdown?.keywordSourceStrength} icon="database" />
-                    <Signal label="Product Fit" value={concept.productMixScore ?? concept.scoreBreakdown?.productMix} icon="package" />
-                    <Signal label="Keyword Intent" value={concept.buyerIntent} icon="users" />
-                    <Signal label="Evidence" value={concept.evidenceDepth?.score ?? concept.confidenceScore} icon="check-circle" />
-                  </div>
-
-                  <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,0.65fr)_minmax(0,1.35fr)]">
-                    <div className="min-w-0 space-y-2">
-                      <div className="section-label">Product mix</div>
-                      <div className="flex min-w-0 flex-wrap gap-1.5">
-                        {concept.productTypes.slice(0, isExpanded ? concept.productTypes.length : 4).map((product) => (
-                          <span key={product} className="tag max-w-full whitespace-normal break-words text-left">{product}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="min-w-0 space-y-2">
-                      <div className="section-label">Top keywords</div>
-                      <div className="flex min-w-0 flex-wrap gap-1.5">
-                        {concept.keywords.slice(0, isExpanded ? 8 : 4).map((keyword) => (
-                          <span key={keyword.keyword} className="tag max-w-full whitespace-normal break-words text-left">{keyword.keyword}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  <RankedKeywordList keywords={rankedKeywords} totalCount={rankedKeywords.length} />
 
                   {isExpanded && (
                     <div id={detailsId} className="min-w-0 space-y-4 border-t border-surface-500/40 pt-4">
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                        <MarketMetric
-                          label="Revenue signal"
-                          value={formatRevenue(concept)}
-                        />
-                        <MarketMetric
-                          label="Target price"
-                          value={formatPriceRange(concept)}
-                        />
-                        <MarketMetric
-                          label="Gross margin"
-                          value={concept.estimatedGrossMargin ? `${concept.estimatedGrossMargin}% estimated` : 'not enough data'}
-                        />
-                        <MarketMetric
-                          label="Evidence depth"
-                          value={formatEvidenceDepth(concept)}
-                        />
-                        <MarketMetric
-                          label="Revenue/listing"
-                          value={profitabilityEvidence?.revenuePerListing ? fmtPrice(profitabilityEvidence.revenuePerListing) : 'not enough data'}
-                        />
-                        <MarketMetric
-                          label="Profit evidence"
-                          value={profitabilityEvidence ? `${profitabilityEvidence.evidenceLevel} ${profitabilityEvidence.evidenceScore}/100` : 'not enough data'}
-                        />
-                      </div>
-
                       {recommendation && (
                         <div className="rounded-md border border-primary-300/20 bg-primary-400/5 p-4">
                           <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                             <div className="min-w-0">
                               <div className="section-label">Store recommendation</div>
-                              <p className="mt-2 break-words text-[13px] font-semibold leading-relaxed text-surface-100">{recommendation.positioning}</p>
-                              <p className="mt-2 break-words text-[12px] leading-relaxed text-surface-300">{recommendation.qualityPriority || recommendation.profitPriority}</p>
+                              <div className="mt-2 break-words text-[13px] font-semibold leading-relaxed text-surface-100">{recommendation.positioning}</div>
                               {(recommendation.qualityOptimizationPlan || recommendation.profitOptimizationPlan)?.length ? (
                                 <div className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-surface-300">
                                   {(recommendation.qualityOptimizationPlan || recommendation.profitOptimizationPlan || []).slice(0, 3).map((item) => (
@@ -272,9 +188,6 @@ export default function StoreGenerator() {
                                     {cluster.keywords.length} keywords
                                   </div>
                                 </div>
-                                <div className={`flex-shrink-0 text-[13px] font-extrabold tabular-nums ${metricClass(cluster.profitabilityScore ?? cluster.clusterQualityScore)}`}>
-                                  {formatScore(cluster.profitabilityScore ?? cluster.clusterQualityScore)}
-                                </div>
                               </div>
                               <div className="mt-2 break-words text-[11px] text-surface-300">
                                 {cluster.keywords.slice(0, 3).map((keyword) => keyword.keyword).join(' / ')}
@@ -286,23 +199,6 @@ export default function StoreGenerator() {
 
                       <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
                         <div className="min-w-0 space-y-3">
-                          <div className="section-label">Keyword evidence</div>
-                          <div className="space-y-2">
-                            {concept.keywords.map((keyword) => (
-                              <div key={keyword.keyword} className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.75rem_2.75rem_2.75rem] items-center gap-2 text-[12px] sm:grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_3.5rem] sm:gap-3">
-                                <div className="min-w-0">
-                                  <div className="break-words font-bold text-surface-100">{keyword.keyword}</div>
-                                  <div className="break-words text-[10px] text-surface-400">
-                                    {keyword.product}
-                                    {keyword.estimatedRevenue ? ` - ${fmtPrice(keyword.estimatedRevenue)}/mo` : ''}
-                                  </div>
-                                </div>
-                                <ScorePill label="opp" value={keyword.opportunity} />
-                                <ScorePill label="gap" value={keyword.gap} />
-                                <ScorePill label="margin" value={keyword.margin ?? concept.marginScore} />
-                              </div>
-                            ))}
-                          </div>
                           {listingBlueprints.length > 0 && (
                             <div className="space-y-2 pt-2">
                               <div className="section-label">Listing blueprints</div>
@@ -316,15 +212,10 @@ export default function StoreGenerator() {
                                           primary: <span className="font-bold text-surface-100">{blueprint.primaryKeyword}</span>
                                         </div>
                                       </div>
-                                      <div className={`flex-shrink-0 text-[13px] font-extrabold tabular-nums ${metricClass(blueprint.profitabilityScore ?? blueprint.listingQualityScore)}`}>
-                                        {formatScore(blueprint.profitabilityScore ?? blueprint.listingQualityScore)}
-                                      </div>
                                     </div>
                                     {blueprint.supportingKeywords.length > 0 && (
-                                      <div className="mt-2 flex min-w-0 flex-wrap gap-1">
-                                        {blueprint.supportingKeywords.slice(0, 4).map((keyword) => (
-                                          <span key={keyword} className="tag max-w-full whitespace-normal break-words py-0.5 text-left text-[10px]">{keyword}</span>
-                                        ))}
+                                      <div className="mt-2 break-words text-[11px] text-surface-400">
+                                        supporting: {blueprint.supportingKeywords.slice(0, 4).join(', ')}
                                       </div>
                                     )}
                                   </div>
@@ -350,9 +241,9 @@ export default function StoreGenerator() {
                       <div className="grid min-w-0 gap-5 border-t border-surface-500/40 pt-4 lg:grid-cols-3">
                         <div className="min-w-0 space-y-2">
                           <div className="section-label">First listing angles</div>
-                          <div className="flex min-w-0 flex-wrap gap-1.5">
+                          <div className="space-y-1.5 text-[12px] text-surface-300">
                             {concept.listingIdeas.map((idea) => (
-                              <span key={idea} className="chip max-w-full whitespace-normal break-words py-1 text-left text-[10px]">{idea}</span>
+                              <div key={idea} className="break-words">{idea}</div>
                             ))}
                           </div>
                         </div>
@@ -405,60 +296,151 @@ export default function StoreGenerator() {
   )
 }
 
-function Signal({ label, value, icon }: { label: string; value?: number | null; icon: IconName }) {
-  const hasValue = Number.isFinite(value)
+interface RankedKeyword extends StoreIdeaKeyword {
+  strength: number | null
+}
+
+function RankedKeywordList({ keywords, totalCount }: { keywords: RankedKeyword[]; totalCount: number }) {
   return (
-    <div className="min-w-0 rounded-md border border-surface-500/50 bg-surface-900/20 px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <Icon name={icon} size={14} className="text-surface-300" />
-        <div className={`text-[18px] font-extrabold tabular-nums ${hasValue ? scoreColor(value as number) : 'text-surface-400'}`}>
-          {hasValue ? Math.round(value as number) : 'n/a'}{hasValue && <span className="text-[10px] text-surface-400">/100</span>}
+    <div className="min-w-0 space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="section-label">Keywords by strength</div>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-surface-400">
+          {keywords.length} of {totalCount}
         </div>
       </div>
-      <div className="mt-1 break-words text-[10px] uppercase font-bold tracking-wider text-surface-400">{label}</div>
+      <div className="overflow-hidden rounded-md border border-surface-500/40 bg-surface-950/20">
+        {keywords.map((keyword, index) => (
+          <div
+            key={`${keyword.keyword}-${index}`}
+            className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_3.25rem] items-center gap-3 border-b border-surface-500/30 px-3 py-2 last:border-b-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_4rem_4rem_4rem]"
+          >
+            <div className="text-right text-[11px] font-extrabold tabular-nums text-surface-400">{index + 1}</div>
+            <div className="min-w-0">
+              <div className="break-words text-[12px] font-extrabold text-surface-100">{keyword.keyword}</div>
+              <div className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-surface-400">
+                <span className="break-words">{keyword.product}</span>
+                {keyword.estimatedRevenue ? <span>{fmtPrice(keyword.estimatedRevenue)}/mo</span> : null}
+              </div>
+            </div>
+            <MetricValue label="strength" value={keyword.strength} />
+            <MetricValue label="opp" value={keyword.opportunity} hideOnMobile />
+            <MetricValue label="gap" value={keyword.gap} hideOnMobile />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
-function MarketMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-md border border-surface-500/40 bg-surface-900/15 px-3 py-2">
-      <div className="break-words text-[10px] uppercase font-bold tracking-wider text-surface-400">{label}</div>
-      <div className="mt-1 break-words text-[13px] font-extrabold text-surface-50">{value}</div>
-    </div>
-  )
-}
-
-function ScorePill({ label, value }: { label: string; value?: number | null }) {
+function MetricValue({ label, value, hideOnMobile = false }: { label: string; value?: number | null; hideOnMobile?: boolean }) {
   const hasValue = Number.isFinite(value)
   return (
-    <div className="w-11 text-right sm:w-14">
-      <div className={`tabular-nums font-bold ${hasValue ? scoreColor(value as number) : 'text-surface-400'}`}>
+    <div className={`text-right ${hideOnMobile ? 'hidden sm:block' : ''}`}>
+      <div className={`text-[12px] font-extrabold tabular-nums ${hasValue ? scoreColor(value as number) : 'text-surface-500'}`}>
         {hasValue ? Math.round(value as number) : 'n/a'}
       </div>
-      <div className="text-[9px] uppercase text-surface-400">{label}</div>
+      <div className="text-[9px] uppercase text-surface-500">{label}</div>
     </div>
   )
 }
 
-function formatRevenue(concept: StoreIdea): string {
-  return concept.estimatedMonthlyRevenue ? `${fmtPrice(concept.estimatedMonthlyRevenue)}/mo` : 'not enough data'
-}
+function rankedStoreIdeaKeywords(concept: StoreIdea): RankedKeyword[] {
+  const byKeyword = new Map<string, RankedKeyword>()
 
-function formatPriceRange(concept: StoreIdea): string {
-  if (concept.priceRange) {
-    const suffix = concept.priceBasis === 'modeled' ? ' modeled' : ''
-    return `${fmtPrice(concept.priceRange.min)}-${fmtPrice(concept.priceRange.max)}${suffix}`
+  const addKeyword = (keyword: Partial<StoreIdeaKeyword> & { keyword?: string }) => {
+    const name = String(keyword.keyword || '').trim()
+    if (!name) return
+    const key = name.toLowerCase()
+    const existing = byKeyword.get(key)
+    const merged: RankedKeyword = {
+      keyword: existing?.keyword || name,
+      product: existing?.product || keyword.product || 'Keyword',
+      opportunity: bestNumber(existing?.opportunity, keyword.opportunity),
+      gap: bestNumber(existing?.gap, keyword.gap),
+      demand: bestNumber(existing?.demand, keyword.demand),
+      margin: bestNumber(existing?.margin, keyword.margin),
+      estimatedRevenue: bestNumber(existing?.estimatedRevenue, keyword.estimatedRevenue),
+      revenuePerListing: bestNumber(existing?.revenuePerListing, keyword.revenuePerListing),
+      avgPrice: bestNumber(existing?.avgPrice, keyword.avgPrice),
+      competitionEase: bestNumber(existing?.competitionEase, keyword.competitionEase),
+      marketEvidenceScore: bestNumber(existing?.marketEvidenceScore, keyword.marketEvidenceScore),
+      profitabilityIndex: bestNumber(existing?.profitabilityIndex, keyword.profitabilityIndex),
+      avgFavorites: bestNumber(existing?.avgFavorites, keyword.avgFavorites),
+      buyerIntent: bestNumber(existing?.buyerIntent, keyword.buyerIntent),
+      profitGap: bestNumber(existing?.profitGap, keyword.profitGap),
+      sourceStrength: bestNumber(existing?.sourceStrength, keyword.sourceStrength),
+      specificityScore: bestNumber(existing?.specificityScore, keyword.specificityScore),
+      priceRange: existing?.priceRange || keyword.priceRange || null,
+      strength: null,
+    }
+    merged.strength = keywordStrength(merged)
+    byKeyword.set(key, merged)
   }
-  return concept.avgPrice ? fmtPrice(concept.avgPrice) : 'not enough data'
+
+  concept.keywords.forEach(addKeyword)
+  ;(concept.keywordClusters || []).forEach((cluster) => cluster.keywords.forEach(addKeyword))
+  ;(concept.listingBlueprints || []).forEach((blueprint) => {
+    const blueprintStrength = blueprint.profitabilityScore ?? blueprint.listingQualityScore ?? null
+    addKeyword({
+      keyword: blueprint.primaryKeyword,
+      product: blueprint.productType,
+      sourceStrength: blueprintStrength,
+      buyerIntent: blueprint.buyerIntent,
+      priceRange: blueprint.priceBand || null,
+    })
+    blueprint.supportingKeywords.forEach((keyword) => addKeyword({
+      keyword,
+      product: blueprint.productType,
+      sourceStrength: blueprintStrength,
+      buyerIntent: blueprint.buyerIntent,
+    }))
+  })
+
+  return Array.from(byKeyword.values()).sort((a, b) => {
+    const aStrength = a.strength ?? -1
+    const bStrength = b.strength ?? -1
+    if (bStrength !== aStrength) return bStrength - aStrength
+    return a.keyword.localeCompare(b.keyword)
+  })
 }
 
-function formatEvidenceDepth(concept: StoreIdea): string {
-  if (!concept.evidenceDepth) return 'not enough data'
-  const missing = concept.evidenceDepth.missing.length
-  return missing > 0
-    ? `${concept.evidenceDepth.level} ${concept.evidenceDepth.score}/100, ${missing} gaps`
-    : `${concept.evidenceDepth.level} ${concept.evidenceDepth.score}/100`
+function keywordStrength(keyword: StoreIdeaKeyword): number | null {
+  const factors: Array<[number | null | undefined, number]> = [
+    [keyword.profitabilityIndex, 1.35],
+    [keyword.opportunity, 1.25],
+    [keyword.gap, 1.2],
+    [keyword.sourceStrength, 1.1],
+    [keyword.specificityScore, 0.95],
+    [keyword.marketEvidenceScore, 0.95],
+    [keyword.buyerIntent, 0.85],
+    [keyword.demand, 0.75],
+    [keyword.margin, 0.65],
+    [keyword.competitionEase, 0.6],
+    [keyword.profitGap, 0.6],
+  ]
+  let weighted = 0
+  let weight = 0
+  for (const [value, factor] of factors) {
+    if (!Number.isFinite(value)) continue
+    weighted += Number(value) * factor
+    weight += factor
+  }
+  if (weight === 0) return null
+
+  const revenueBoost = keyword.estimatedRevenue
+    ? Math.min(8, Math.log10(Math.max(10, keyword.estimatedRevenue)) * 2)
+    : 0
+  return Math.round(Math.min(100, weighted / weight + revenueBoost))
+}
+
+function bestNumber(a?: number | null, b?: number | null): number | undefined {
+  const aOk = Number.isFinite(a)
+  const bOk = Number.isFinite(b)
+  if (aOk && bOk) return Math.max(Number(a), Number(b))
+  if (aOk) return Number(a)
+  if (bOk) return Number(b)
+  return undefined
 }
 
 function toStorePayload(concept: StoreIdea) {
@@ -540,19 +522,4 @@ function aestheticFor(concept: StoreIdea): string {
 
 function primaryScore(concept: StoreIdea): number {
   return Math.round(concept.profitScore ?? concept.recommendationScore ?? concept.storeQualityScore ?? concept.commercialPotentialScore ?? concept.nicheScore)
-}
-
-function formatScore(value?: number | null): string {
-  return Number.isFinite(value) ? String(Math.round(value as number)) : 'n/a'
-}
-
-function metricClass(value?: number | null): string {
-  return Number.isFinite(value) ? scoreColor(value as number) : 'text-surface-400'
-}
-
-function gradeFor(score: number): string {
-  if (score >= 82) return 'A'
-  if (score >= 72) return 'B'
-  if (score >= 62) return 'C'
-  return 'D'
 }
