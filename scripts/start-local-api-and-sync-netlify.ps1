@@ -210,7 +210,11 @@ if ($TunnelProvider -eq "cloudflare") {
 
 Write-Step "Updating Netlify production env: local tunnel primary"
 & netlify env:set VITE_API_URL $tunnelUrl --context production --force --site $SiteId | Write-Host
-& netlify env:set VITE_BACKUP_API_URLS $BackupApiUrls --context production --force --site $SiteId | Write-Host
+if ([string]::IsNullOrWhiteSpace($BackupApiUrls)) {
+  & netlify env:unset VITE_BACKUP_API_URLS --context production --force --site $SiteId | Write-Host
+} else {
+  & netlify env:set VITE_BACKUP_API_URLS $BackupApiUrls --context production --force --site $SiteId | Write-Host
+}
 & netlify env:set VITE_WAKE_BACKEND 1 --context production --force --site $SiteId | Write-Host
 
 if ($NoDeploy) {
