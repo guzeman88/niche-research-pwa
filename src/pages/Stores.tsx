@@ -471,6 +471,7 @@ function KeywordProductCreationPage({
   const [selectedType, setSelectedType] = useState(productTypes[0]?.value || '')
   const [selectedIdeaId, setSelectedIdeaId] = useState('')
   const [showMockup, setShowMockup] = useState(false)
+  const mockupPanelRef = useRef<HTMLDivElement>(null)
   const activeType = productTypes.find((type) => type.value === selectedType) || productTypes[0]
   const ideas = activeType ? productIdeasForType(store, keyword, activeType.value) : []
   const selectedIdea = ideas.find((idea) => idea.id === selectedIdeaId) || null
@@ -487,8 +488,12 @@ function KeywordProductCreationPage({
     setShowMockup(false)
   }
 
-  const saveSelectedIdea = () => {
-    if (selectedIdea && !savedProduct) onSaveProduct(selectedIdea)
+  const addIdeaToMockup = (idea: StoreProductIdea) => {
+    const existingProduct = workspace.products.find((product) => productKey(product) === productKey(idea))
+    setSelectedIdeaId(idea.id)
+    setShowMockup(true)
+    if (!existingProduct) onSaveProduct(idea)
+    window.requestAnimationFrame(() => mockupPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
   }
 
   return (
@@ -531,66 +536,68 @@ function KeywordProductCreationPage({
             <div className="grid gap-2 sm:grid-cols-2">
               {ideas.map((idea) => {
                 const isSelected = selectedIdea?.id === idea.id
+                const isSaved = workspace.products.some((product) => productKey(product) === productKey(idea))
                 return (
-                  <button
+                  <div
                     key={idea.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedIdeaId(idea.id)
-                      setShowMockup(false)
-                    }}
-                    className={`min-h-14 rounded-md border px-3 text-left text-[13px] font-extrabold transition-colors duration-150 ${
+                    className={`grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border px-3 py-2 transition-colors duration-150 ${
                       isSelected
                         ? 'border-accent-green/45 bg-accent-green/10 text-surface-50'
                         : 'border-surface-600/55 bg-surface-900/20 text-surface-100 hover:bg-surface-700/35'
                     }`}
                   >
-                    {idea.title}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => addIdeaToMockup(idea)}
+                      className="min-w-0 truncate text-left text-[13px] font-extrabold"
+                    >
+                      {idea.title}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addIdeaToMockup(idea)}
+                      className={`inline-flex min-h-8 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11px] font-extrabold transition-colors duration-150 ${
+                        isSaved
+                          ? 'border-accent-green/30 bg-accent-green/10 text-accent-green'
+                          : 'border-primary-300/35 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25'
+                      }`}
+                    >
+                      <Icon name={isSaved ? 'layers' : 'plus-circle'} size={13} />
+                      {isSaved ? 'Mockup' : 'Add'}
+                    </button>
+                  </div>
                 )
               })}
             </div>
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div ref={mockupPanelRef} className="space-y-3">
           <div className="panel p-3">
-            <div className="text-[10px] font-extrabold uppercase tracking-wider text-surface-400">Selected</div>
-            <div className="mt-1 min-h-7 break-words text-lg font-extrabold text-surface-50">{selectedIdea?.title || 'Choose idea'}</div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-              <button
-                type="button"
-                disabled={!selectedIdea || !!savedProduct}
-                onClick={saveSelectedIdea}
-                className={`btn-primary min-h-10 px-3 py-2 text-[13px] ${
-                  !selectedIdea || savedProduct ? 'opacity-60' : ''
-                }`}
-              >
-                <Icon name={savedProduct ? 'check-circle' : 'plus-circle'} size={14} />
-                {savedProduct ? 'Saved' : 'Save'}
-              </button>
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="section-label">Mockup</div>
+                <div className="mt-1 min-h-6 truncate text-[14px] font-extrabold text-surface-50">{selectedIdea?.title || 'Add idea'}</div>
+              </div>
               {savedProduct && (
                 <button
                   type="button"
                   disabled={listingExists}
                   onClick={() => onSendProductToListings(savedProduct)}
-                  className="btn-secondary min-h-10 px-3 py-2 text-[13px]"
+                  className="btn-secondary min-h-9 flex-shrink-0 px-3 py-2 text-[12px]"
                 >
                   <Icon name={listingExists ? 'check-circle' : 'arrow-right'} size={14} />
                   {listingExists ? 'Listed' : 'Listing'}
                 </button>
               )}
             </div>
-          </div>
-
-          <div className="panel p-3">
             <button
               type="button"
               disabled={!selectedIdea}
               onClick={() => setShowMockup((value) => !value)}
-              className="btn-secondary min-h-10 w-full px-3 py-2 text-[13px]"
+              className="btn-secondary mt-3 min-h-10 w-full px-3 py-2 text-[13px]"
             >
-              <Icon name="layers" size={14} /> Mockup
+              <Icon name="layers" size={14} /> {showMockup ? 'Hide' : 'Open'}
             </button>
             {showMockup && selectedIdea && (
               <div className="mt-3 space-y-2 border-t border-surface-600/45 pt-3">
