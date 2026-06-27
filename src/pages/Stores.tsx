@@ -471,6 +471,7 @@ function KeywordProductCreationPage({
   const [selectedType, setSelectedType] = useState(productTypes[0]?.value || '')
   const [selectedIdeaId, setSelectedIdeaId] = useState('')
   const [showMockup, setShowMockup] = useState(false)
+  const [designVariant, setDesignVariant] = useState(0)
   const mockupPanelRef = useRef<HTMLDivElement>(null)
   const activeType = productTypes.find((type) => type.value === selectedType) || productTypes[0]
   const ideas = activeType ? productIdeasForType(store, keyword, activeType.value) : []
@@ -478,6 +479,8 @@ function KeywordProductCreationPage({
   const savedProduct = selectedIdea
     ? workspace.products.find((product) => productKey(product) === productKey(selectedIdea))
     : null
+  const activeProduct = savedProduct || selectedIdea
+  const designSpec = activeProduct ? createDesignSpec(store, activeProduct, designVariant) : null
   const listingExists = savedProduct
     ? workspace.listings.some((listing) => listing.productId === savedProduct.id)
     : false
@@ -486,12 +489,14 @@ function KeywordProductCreationPage({
     setSelectedType(value)
     setSelectedIdeaId('')
     setShowMockup(false)
+    setDesignVariant(0)
   }
 
   const addIdeaToMockup = (idea: StoreProductIdea) => {
     const existingProduct = workspace.products.find((product) => productKey(product) === productKey(idea))
     setSelectedIdeaId(idea.id)
     setShowMockup(true)
+    setDesignVariant(0)
     if (!existingProduct) onSaveProduct(idea)
     window.requestAnimationFrame(() => mockupPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
   }
@@ -600,7 +605,14 @@ function KeywordProductCreationPage({
               <Icon name="layers" size={14} /> {showMockup ? 'Hide' : 'Open'}
             </button>
             {showMockup && selectedIdea && (
-              <div className="mt-3 space-y-2 border-t border-surface-600/45 pt-3">
+              <div className="mt-3 space-y-3 border-t border-surface-600/45 pt-3">
+                {activeProduct && designSpec && (
+                  <GeneratedDesignPanel
+                    spec={designSpec}
+                    product={activeProduct}
+                    onVariant={() => setDesignVariant((value) => value + 1)}
+                  />
+                )}
                 <textarea
                   className="input min-h-28 resize-y text-[12px]"
                   value={savedProduct?.mockupPrompt || selectedIdea.mockupPrompt}
@@ -623,6 +635,204 @@ function KeywordProductCreationPage({
       </div>
     </div>
   )
+}
+
+interface DesignSpec {
+  title: string
+  subtitle: string
+  motif: 'pet' | 'camp' | 'botanical' | 'gift' | 'minimal'
+  bg: string
+  paper: string
+  ink: string
+  accent: string
+  secondary: string
+  variant: number
+}
+
+function GeneratedDesignPanel({
+  spec,
+  product,
+  onVariant,
+}: {
+  spec: DesignSpec
+  product: StoreProductIdea
+  onVariant: () => void
+}) {
+  const svg = designSvgMarkup(spec)
+  return (
+    <div className="overflow-hidden rounded-md border border-surface-600/45 bg-surface-950/25">
+      <div className="flex items-center justify-between gap-2 border-b border-surface-600/35 px-3 py-2">
+        <div className="section-label">Design</div>
+        <div className="flex gap-2">
+          <button type="button" className="btn-secondary min-h-8 px-2.5 py-1 text-[11px]" onClick={onVariant}>
+            <Icon name="refresh-cw" size={13} /> Variant
+          </button>
+          <a
+            className="btn-secondary min-h-8 px-2.5 py-1 text-[11px]"
+            href={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
+            download={`${slugifyLocal(product.title)}-design.svg`}
+          >
+            <Icon name="download" size={13} /> SVG
+          </a>
+        </div>
+      </div>
+      <div className="bg-surface-950/30 p-3">
+        <div className="mx-auto aspect-square max-h-64 overflow-hidden rounded-md border border-surface-600/35 bg-surface-50">
+          <GeneratedDesignSvg spec={spec} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GeneratedDesignSvg({ spec }: { spec: DesignSpec }) {
+  return (
+    <svg viewBox="0 0 600 600" role="img" aria-label={`${spec.title} generated design`} className="h-full w-full">
+      <rect width="600" height="600" fill={spec.bg} />
+      <rect x="54" y="54" width="492" height="492" rx={spec.variant % 2 ? 32 : 6} fill={spec.paper} />
+      <path d={designWavePath(spec.variant)} fill={spec.accent} opacity="0.16" />
+      <path d={designWavePath(spec.variant + 2)} fill={spec.secondary} opacity="0.13" transform="rotate(180 300 300)" />
+      <DesignMotif spec={spec} />
+      <text x="300" y="324" textAnchor="middle" fill={spec.ink} fontFamily="Georgia, serif" fontWeight="800" fontSize={fitDesignFont(spec.title)} letterSpacing="0">
+        {spec.title}
+      </text>
+      <text x="300" y="362" textAnchor="middle" fill={spec.ink} fontFamily="system-ui, sans-serif" fontWeight="800" fontSize="18" letterSpacing="0">
+        {spec.subtitle}
+      </text>
+      <line x1="196" y1="394" x2="404" y2="394" stroke={spec.accent} strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function DesignMotif({ spec }: { spec: DesignSpec }) {
+  if (spec.motif === 'pet') {
+    return (
+      <g transform="translate(300 202)">
+        <circle cx="-38" cy="-28" r="22" fill={spec.accent} />
+        <circle cx="38" cy="-28" r="22" fill={spec.accent} />
+        <circle cx="-16" cy="-58" r="18" fill={spec.secondary} />
+        <circle cx="16" cy="-58" r="18" fill={spec.secondary} />
+        <ellipse cx="0" cy="6" rx="62" ry="50" fill={spec.ink} opacity="0.92" />
+      </g>
+    )
+  }
+  if (spec.motif === 'camp') {
+    return (
+      <g transform="translate(300 210)" fill="none" stroke={spec.ink} strokeWidth="10" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M-84 40 L0 -76 L84 40 Z" fill={spec.accent} stroke="none" opacity="0.9" />
+        <path d="M0 -76 L0 40" />
+        <path d="M-118 58 H118" stroke={spec.secondary} />
+      </g>
+    )
+  }
+  if (spec.motif === 'botanical') {
+    return (
+      <g transform="translate(300 210)" fill="none" stroke={spec.ink} strokeWidth="7" strokeLinecap="round">
+        <path d="M0 62 C-8 10 8 -36 0 -82" />
+        <ellipse cx="-36" cy="-22" rx="26" ry="46" fill={spec.accent} stroke="none" transform="rotate(-35 -36 -22)" />
+        <ellipse cx="38" cy="-2" rx="24" ry="42" fill={spec.secondary} stroke="none" transform="rotate(36 38 -2)" />
+      </g>
+    )
+  }
+  if (spec.motif === 'gift') {
+    return (
+      <g transform="translate(300 204)">
+        <rect x="-78" y="-12" width="156" height="102" rx="10" fill={spec.accent} />
+        <rect x="-12" y="-12" width="24" height="102" fill={spec.ink} opacity="0.86" />
+        <rect x="-88" y="-42" width="176" height="34" rx="8" fill={spec.secondary} />
+        <path d="M-10 -42 C-68 -84 -92 -22 -14 -16 M10 -42 C68 -84 92 -22 14 -16" fill="none" stroke={spec.ink} strokeWidth="8" strokeLinecap="round" />
+      </g>
+    )
+  }
+  return (
+    <g transform="translate(300 204)" fill="none" stroke={spec.ink} strokeWidth="8">
+      <circle r="68" stroke={spec.accent} />
+      <path d="M-82 0 H82 M0 -82 V82" stroke={spec.secondary} />
+      <circle r="18" fill={spec.ink} stroke="none" />
+    </g>
+  )
+}
+
+function createDesignSpec(store: StoreItem, product: StoreProductIdea, variant: number): DesignSpec {
+  const context = `${store.niche} ${store.aesthetic} ${product.keyword} ${product.title} ${product.productType}`.toLowerCase()
+  const palettes = [
+    { bg: '#dfe8e5', paper: '#f8f4eb', ink: '#263238', accent: '#7fa37a', secondary: '#d69a64' },
+    { bg: '#e8e2d5', paper: '#fbf7ef', ink: '#2c2a25', accent: '#b07b57', secondary: '#6f96c8' },
+    { bg: '#e6e8ef', paper: '#f7f4ef', ink: '#243043', accent: '#6f96c8', secondary: '#c86f7a' },
+    { bg: '#eee3e0', paper: '#fff8f2', ink: '#342a2f', accent: '#c86f7a', secondary: '#a9c88f' },
+  ]
+  const palette = palettes[(hashString(product.keyword + product.title) + variant) % palettes.length]
+  return {
+    ...palette,
+    title: titleCase(product.title).slice(0, 28),
+    subtitle: titleCase(product.keyword).slice(0, 32),
+    motif: designMotifFor(context),
+    variant,
+  }
+}
+
+function designMotifFor(context: string): DesignSpec['motif'] {
+  if (/\b(pet|dog|cat|puppy|kitten|rescue|breed)\b/.test(context)) return 'pet'
+  if (/\b(camp|travel|summer|outdoor|hike|trail|vacation)\b/.test(context)) return 'camp'
+  if (/\b(botanical|flower|garden|plant|floral|wildflower)\b/.test(context)) return 'botanical'
+  if (/\b(gift|birthday|wedding|holiday|christmas|mom|dad)\b/.test(context)) return 'gift'
+  return 'minimal'
+}
+
+function designSvgMarkup(spec: DesignSpec): string {
+  return [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" role="img">',
+    `<rect width="600" height="600" fill="${spec.bg}"/>`,
+    `<rect x="54" y="54" width="492" height="492" rx="${spec.variant % 2 ? 32 : 6}" fill="${spec.paper}"/>`,
+    `<path d="${designWavePath(spec.variant)}" fill="${spec.accent}" opacity="0.16"/>`,
+    `<path d="${designWavePath(spec.variant + 2)}" fill="${spec.secondary}" opacity="0.13" transform="rotate(180 300 300)"/>`,
+    designMotifMarkup(spec),
+    `<text x="300" y="324" text-anchor="middle" fill="${spec.ink}" font-family="Georgia, serif" font-weight="800" font-size="${fitDesignFont(spec.title)}" letter-spacing="0">${escapeXml(spec.title)}</text>`,
+    `<text x="300" y="362" text-anchor="middle" fill="${spec.ink}" font-family="system-ui, sans-serif" font-weight="800" font-size="18" letter-spacing="0">${escapeXml(spec.subtitle)}</text>`,
+    `<line x1="196" y1="394" x2="404" y2="394" stroke="${spec.accent}" stroke-width="5" stroke-linecap="round"/>`,
+    '</svg>',
+  ].join('')
+}
+
+function designMotifMarkup(spec: DesignSpec): string {
+  if (spec.motif === 'pet') {
+    return `<g transform="translate(300 202)"><circle cx="-38" cy="-28" r="22" fill="${spec.accent}"/><circle cx="38" cy="-28" r="22" fill="${spec.accent}"/><circle cx="-16" cy="-58" r="18" fill="${spec.secondary}"/><circle cx="16" cy="-58" r="18" fill="${spec.secondary}"/><ellipse cx="0" cy="6" rx="62" ry="50" fill="${spec.ink}" opacity="0.92"/></g>`
+  }
+  if (spec.motif === 'camp') {
+    return `<g transform="translate(300 210)" fill="none" stroke="${spec.ink}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"><path d="M-84 40 L0 -76 L84 40 Z" fill="${spec.accent}" stroke="none" opacity="0.9"/><path d="M0 -76 L0 40"/><path d="M-118 58 H118" stroke="${spec.secondary}"/></g>`
+  }
+  if (spec.motif === 'botanical') {
+    return `<g transform="translate(300 210)" fill="none" stroke="${spec.ink}" stroke-width="7" stroke-linecap="round"><path d="M0 62 C-8 10 8 -36 0 -82"/><ellipse cx="-36" cy="-22" rx="26" ry="46" fill="${spec.accent}" stroke="none" transform="rotate(-35 -36 -22)"/><ellipse cx="38" cy="-2" rx="24" ry="42" fill="${spec.secondary}" stroke="none" transform="rotate(36 38 -2)"/></g>`
+  }
+  if (spec.motif === 'gift') {
+    return `<g transform="translate(300 204)"><rect x="-78" y="-12" width="156" height="102" rx="10" fill="${spec.accent}"/><rect x="-12" y="-12" width="24" height="102" fill="${spec.ink}" opacity="0.86"/><rect x="-88" y="-42" width="176" height="34" rx="8" fill="${spec.secondary}"/><path d="M-10 -42 C-68 -84 -92 -22 -14 -16 M10 -42 C68 -84 92 -22 14 -16" fill="none" stroke="${spec.ink}" stroke-width="8" stroke-linecap="round"/></g>`
+  }
+  return `<g transform="translate(300 204)" fill="none" stroke="${spec.ink}" stroke-width="8"><circle r="68" stroke="${spec.accent}"/><path d="M-82 0 H82 M0 -82 V82" stroke="${spec.secondary}"/><circle r="18" fill="${spec.ink}" stroke="none"/></g>`
+}
+
+function designWavePath(variant: number): string {
+  return variant % 2
+    ? 'M54 154 C170 92 244 196 348 134 C446 76 510 122 546 94 L546 54 L54 54 Z'
+    : 'M54 506 C146 428 240 510 342 452 C438 398 506 436 546 400 L546 546 L54 546 Z'
+}
+
+function fitDesignFont(value: string): number {
+  if (value.length > 22) return 28
+  if (value.length > 16) return 34
+  return 42
+}
+
+function hashString(value: string): number {
+  return value.split('').reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) >>> 0, 0)
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
 }
 
 function ListingManager({
@@ -851,7 +1061,7 @@ function productIdeasForType(store: StoreItem, keyword: StoreKeywordCandidate, p
       productType,
       targetBuyer: store.target_audience || '',
       designBrief: `${title}. ${keyword.keyword}. ${productLabel}.`,
-      mockupPrompt: `${title}. ${keyword.keyword}. ${productLabel}. Clean Etsy thumbnail.`,
+      mockupPrompt: `${title}. ${keyword.keyword}. ${productLabel}. Use generated design as source. Clean Etsy thumbnail.`,
       supportingKeywords,
       evidence: {
         strength: keyword.strength,
