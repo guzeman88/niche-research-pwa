@@ -18,6 +18,7 @@ import {
   validationItems,
   type ListingStatus,
   type ProductStatus,
+  type StoreProductDesignAsset,
   type StoreKeywordCandidate,
   type StoreListingDraft,
   type StoreProductIdea,
@@ -31,8 +32,19 @@ const TABS = [
   { id: 'products', label: 'Product Creator', shortLabel: 'Products', icon: 'package' },
   { id: 'listings', label: 'Listing Manager', shortLabel: 'Listings', icon: 'file-text' },
 ] as const
+const DESIGN_PROVIDERS = [
+  { id: 'ideogram', label: 'Ideogram', fit: 'Text', status: 'needs_key' },
+  { id: 'recraft', label: 'Recraft', fit: 'Vector', status: 'needs_key' },
+  { id: 'krea', label: 'Krea', fit: 'Style', status: 'needs_key' },
+  { id: 'openai', label: 'OpenAI', fit: 'General', status: 'needs_key' },
+  { id: 'firefly', label: 'Firefly', fit: 'Safe', status: 'needs_key' },
+  { id: 'stability', label: 'Stability', fit: 'Art', status: 'needs_key' },
+  { id: 'midjourney', label: 'Midjourney', fit: 'Manual', status: 'manual' },
+  { id: 'local_svg', label: 'Built-in', fit: 'Test', status: 'ready' },
+] as const
 
 type WorkspaceTab = typeof TABS[number]['id']
+type DesignProviderId = typeof DESIGN_PROVIDERS[number]['id']
 
 export default function Stores() {
   const qc = useQueryClient()
@@ -470,9 +482,10 @@ function KeywordProductCreationPage({
   const productTypes = productTypeOptionsFor(store, keyword)
   const [selectedType, setSelectedType] = useState(productTypes[0]?.value || '')
   const [selectedIdeaId, setSelectedIdeaId] = useState('')
-  const [showMockup, setShowMockup] = useState(false)
+  const [showDesign, setShowDesign] = useState(false)
   const [designVariant, setDesignVariant] = useState(0)
-  const mockupPanelRef = useRef<HTMLDivElement>(null)
+  const [selectedProvider, setSelectedProvider] = useState<DesignProviderId>('local_svg')
+  const designPanelRef = useRef<HTMLDivElement>(null)
   const activeType = productTypes.find((type) => type.value === selectedType) || productTypes[0]
   const ideas = activeType ? productIdeasForType(store, keyword, activeType.value) : []
   const selectedIdea = ideas.find((idea) => idea.id === selectedIdeaId) || null
@@ -481,6 +494,8 @@ function KeywordProductCreationPage({
     : null
   const activeProduct = savedProduct || selectedIdea
   const designSpec = activeProduct ? createDesignSpec(store, activeProduct, designVariant) : null
+  const approvedDesign = savedProduct?.approvedDesign
+  const mockupReady = savedProduct?.status === 'mockup_selected' || savedProduct?.status === 'sent_to_listing'
   const listingExists = savedProduct
     ? workspace.listings.some((listing) => listing.productId === savedProduct.id)
     : false
@@ -488,17 +503,29 @@ function KeywordProductCreationPage({
   const selectType = (value: string) => {
     setSelectedType(value)
     setSelectedIdeaId('')
-    setShowMockup(false)
+    setShowDesign(false)
     setDesignVariant(0)
   }
 
-  const addIdeaToMockup = (idea: StoreProductIdea) => {
+  const startDesign = (idea: StoreProductIdea) => {
     const existingProduct = workspace.products.find((product) => productKey(product) === productKey(idea))
     setSelectedIdeaId(idea.id)
-    setShowMockup(true)
+    setShowDesign(true)
     setDesignVariant(0)
     if (!existingProduct) onSaveProduct(idea)
-    window.requestAnimationFrame(() => mockupPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+    window.requestAnimationFrame(() => designPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+  }
+
+  const approveDesign = () => {
+    if (!savedProduct || !designSpec) return
+    const asset = createDesignAsset(savedProduct, designSpec, selectedProvider)
+    onUpdateProduct(savedProduct.id, {
+      approvedDesign: asset,
+      designProvider: selectedProvider,
+      designPrompt: asset.prompt,
+      mockupPrompt: createMockupPrompt(savedProduct, asset),
+      status: 'design_approved',
+    })
   }
 
   return (
@@ -553,14 +580,14 @@ function KeywordProductCreationPage({
                   >
                     <button
                       type="button"
-                      onClick={() => addIdeaToMockup(idea)}
+                      onClick={() => startDesign(idea)}
                       className="min-w-0 truncate text-left text-[13px] font-extrabold"
                     >
                       {idea.title}
                     </button>
                     <button
                       type="button"
-                      onClick={() => addIdeaToMockup(idea)}
+                      onClick={() => startDesign(idea)}
                       className={`inline-flex min-h-8 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11px] font-extrabold transition-colors duration-150 ${
                         isSaved
                           ? 'border-accent-green/30 bg-accent-green/10 text-accent-green'
@@ -568,7 +595,7 @@ function KeywordProductCreationPage({
                       }`}
                     >
                       <Icon name={isSaved ? 'layers' : 'plus-circle'} size={13} />
-                      {isSaved ? 'Mockup' : 'Add'}
+                      {isSaved ? 'Design' : 'Start'}
                     </button>
                   </div>
                 )
@@ -577,19 +604,19 @@ function KeywordProductCreationPage({
           </div>
         </div>
 
-        <div ref={mockupPanelRef} className="space-y-3">
+        <div ref={designPanelRef} className="space-y-3">
           <div className="panel p-3">
             <div className="flex min-w-0 items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="section-label">Mockup</div>
+                <div className="section-label">Design</div>
                 <div className="mt-1 min-h-6 truncate text-[14px] font-extrabold text-surface-50">{selectedIdea?.title || 'Add idea'}</div>
               </div>
               {savedProduct && (
                 <button
                   type="button"
-                  disabled={listingExists}
+                  disabled={listingExists || !mockupReady}
                   onClick={() => onSendProductToListings(savedProduct)}
-                  className="btn-secondary min-h-9 flex-shrink-0 px-3 py-2 text-[12px]"
+                  className="btn-secondary min-h-9 flex-shrink-0 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Icon name={listingExists ? 'check-circle' : 'arrow-right'} size={14} />
                   {listingExists ? 'Listed' : 'Listing'}
@@ -599,34 +626,31 @@ function KeywordProductCreationPage({
             <button
               type="button"
               disabled={!selectedIdea}
-              onClick={() => setShowMockup((value) => !value)}
+              onClick={() => setShowDesign((value) => !value)}
               className="btn-secondary mt-3 min-h-10 w-full px-3 py-2 text-[13px]"
             >
-              <Icon name="layers" size={14} /> {showMockup ? 'Hide' : 'Open'}
+              <Icon name="layers" size={14} /> {showDesign ? 'Hide' : 'Open'}
             </button>
-            {showMockup && selectedIdea && (
+            {showDesign && selectedIdea && (
               <div className="mt-3 space-y-3 border-t border-surface-600/45 pt-3">
                 {activeProduct && designSpec && (
                   <GeneratedDesignPanel
                     spec={designSpec}
                     product={activeProduct}
+                    provider={selectedProvider}
+                    approvedDesign={approvedDesign}
+                    onProviderChange={setSelectedProvider}
                     onVariant={() => setDesignVariant((value) => value + 1)}
+                    onApprove={approveDesign}
                   />
                 )}
-                <textarea
-                  className="input min-h-28 resize-y text-[12px]"
-                  value={savedProduct?.mockupPrompt || selectedIdea.mockupPrompt}
-                  readOnly={!savedProduct}
-                  onChange={(event) => savedProduct && onUpdateProduct(savedProduct.id, { mockupPrompt: event.target.value })}
-                />
-                {savedProduct && (
-                  <button
-                    type="button"
-                    className="btn-secondary min-h-9 w-full px-3 py-2 text-[12px]"
-                    onClick={() => onUpdateProduct(savedProduct.id, { status: 'mockup_selected' })}
-                  >
-                    <Icon name="check-circle" size={14} /> Use mockup
-                  </button>
+                {savedProduct && approvedDesign && (
+                  <MockupGate
+                    product={savedProduct}
+                    design={approvedDesign}
+                    isReady={mockupReady}
+                    onUseMockup={() => onUpdateProduct(savedProduct.id, { status: 'mockup_selected' })}
+                  />
                 )}
               </div>
             )}
@@ -652,34 +676,157 @@ interface DesignSpec {
 function GeneratedDesignPanel({
   spec,
   product,
+  provider,
+  approvedDesign,
+  onProviderChange,
   onVariant,
+  onApprove,
 }: {
   spec: DesignSpec
   product: StoreProductIdea
+  provider: DesignProviderId
+  approvedDesign?: StoreProductDesignAsset
+  onProviderChange: (provider: DesignProviderId) => void
   onVariant: () => void
+  onApprove: () => void
 }) {
   const svg = designSvgMarkup(spec)
+  const providerInfo = designProviderInfo(provider)
+  const canGenerate = providerInfo.status === 'ready'
+  const prompt = createDesignPrompt(product, provider)
+  return (
+    <div className="overflow-hidden rounded-md border border-surface-600/45 bg-surface-950/25">
+      <div className="border-b border-surface-600/35 px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="section-label">Generator</div>
+          <span className={`rounded-md border px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider ${providerStatusClass(providerInfo.status)}`}>
+            {providerInfo.status === 'ready' ? 'Ready' : providerInfo.status === 'manual' ? 'Manual' : 'Needs key'}
+          </span>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4 xl:grid-cols-2">
+          {DESIGN_PROVIDERS.map((option) => {
+            const selected = option.id === provider
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => onProviderChange(option.id)}
+                className={`min-w-0 rounded-md border px-2.5 py-2 text-left transition-colors duration-150 ${
+                  selected
+                    ? 'border-primary-300/45 bg-primary-400/15 text-surface-50'
+                    : 'border-surface-600/45 bg-surface-900/25 text-surface-200 hover:bg-surface-700/35'
+                }`}
+              >
+                <span className="block truncate text-[11px] font-extrabold">{option.label}</span>
+                <span className="mt-0.5 block truncate text-[9px] font-bold uppercase tracking-wider text-surface-400">{option.fit}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-3 bg-surface-950/30 p-3">
+        {canGenerate ? (
+          <div className="mx-auto aspect-square max-h-64 overflow-hidden rounded-md border border-surface-600/35 bg-surface-50">
+            <GeneratedDesignSvg spec={spec} />
+          </div>
+        ) : (
+          <div className="rounded-md border border-surface-600/45 bg-surface-900/30 p-3">
+            <div className="text-[12px] font-extrabold text-surface-100">{providerInfo.title}</div>
+            <div className="mt-1 text-[11px] leading-relaxed text-surface-300">{providerInfo.detail}</div>
+          </div>
+        )}
+
+        <div className="rounded-md border border-surface-600/35 bg-surface-900/25 p-2.5">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-surface-400">Prompt</div>
+          <div className="line-clamp-3 break-words text-[11px] leading-relaxed text-surface-200">{prompt}</div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className="btn-secondary min-h-9 px-2.5 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={onVariant}
+            disabled={!canGenerate}
+          >
+            <Icon name="refresh-cw" size={13} /> Generate
+          </button>
+          {canGenerate ? (
+            <a
+              className="btn-secondary min-h-9 px-2.5 py-2 text-[11px]"
+              href={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
+              download={`${slugifyLocal(product.title)}-design.svg`}
+            >
+              <Icon name="download" size={13} /> SVG
+            </a>
+          ) : (
+            <button type="button" className="btn-secondary min-h-9 px-2.5 py-2 text-[11px] opacity-50" disabled>
+              <Icon name="download" size={13} /> Asset
+            </button>
+          )}
+        </div>
+
+        <button
+          type="button"
+          className={`min-h-10 w-full rounded-md border px-3 py-2 text-[12px] font-extrabold transition-colors duration-150 ${
+            approvedDesign?.prompt === prompt
+              ? 'border-accent-green/35 bg-accent-green/10 text-accent-green'
+              : 'border-primary-300/35 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25 disabled:cursor-not-allowed disabled:opacity-50'
+          }`}
+          disabled={!canGenerate}
+          onClick={onApprove}
+        >
+          <Icon name={approvedDesign?.prompt === prompt ? 'check-circle' : 'plus-circle'} size={14} />
+          {approvedDesign?.prompt === prompt ? 'Approved' : 'Approve design'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function MockupGate({
+  product,
+  design,
+  isReady,
+  onUseMockup,
+}: {
+  product: StoreProductIdea
+  design: StoreProductDesignAsset
+  isReady: boolean
+  onUseMockup: () => void
+}) {
   return (
     <div className="overflow-hidden rounded-md border border-surface-600/45 bg-surface-950/25">
       <div className="flex items-center justify-between gap-2 border-b border-surface-600/35 px-3 py-2">
-        <div className="section-label">Design</div>
-        <div className="flex gap-2">
-          <button type="button" className="btn-secondary min-h-8 px-2.5 py-1 text-[11px]" onClick={onVariant}>
-            <Icon name="refresh-cw" size={13} /> Variant
-          </button>
-          <a
-            className="btn-secondary min-h-8 px-2.5 py-1 text-[11px]"
-            href={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
-            download={`${slugifyLocal(product.title)}-design.svg`}
-          >
-            <Icon name="download" size={13} /> SVG
-          </a>
-        </div>
+        <div className="section-label">Mockups</div>
+        <span className="truncate text-[10px] font-bold uppercase tracking-wider text-surface-400">{design.provider}</span>
       </div>
-      <div className="bg-surface-950/30 p-3">
-        <div className="mx-auto aspect-square max-h-64 overflow-hidden rounded-md border border-surface-600/35 bg-surface-50">
-          <GeneratedDesignSvg spec={spec} />
+      <div className="space-y-3 p-3">
+        <div className="grid grid-cols-[4.75rem_minmax(0,1fr)] gap-3">
+          <div className="aspect-square overflow-hidden rounded-md border border-surface-600/35 bg-surface-50">
+            {design.type === 'svg' && design.svgMarkup ? (
+              <div className="h-full w-full" dangerouslySetInnerHTML={{ __html: design.svgMarkup }} />
+            ) : (
+              <img src={design.assetUrl} alt={`${product.title} approved design`} className="h-full w-full object-cover" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-[12px] font-extrabold text-surface-50">{product.title}</div>
+            <div className="mt-1 line-clamp-3 break-words text-[11px] leading-relaxed text-surface-300">{product.mockupPrompt}</div>
+          </div>
         </div>
+        <button
+          type="button"
+          className={`min-h-9 w-full rounded-md border px-3 py-2 text-[12px] font-extrabold transition-colors duration-150 ${
+            isReady
+              ? 'border-accent-green/35 bg-accent-green/10 text-accent-green'
+              : 'border-primary-300/35 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25'
+          }`}
+          onClick={onUseMockup}
+        >
+          <Icon name={isReady ? 'check-circle' : 'layers'} size={14} />
+          {isReady ? 'Mockup ready' : 'Add to mockups'}
+        </button>
       </div>
     </div>
   )
@@ -751,6 +898,78 @@ function DesignMotif({ spec }: { spec: DesignSpec }) {
       <circle r="18" fill={spec.ink} stroke="none" />
     </g>
   )
+}
+
+function designProviderInfo(provider: DesignProviderId): { status: typeof DESIGN_PROVIDERS[number]['status']; title: string; detail: string } {
+  const option = DESIGN_PROVIDERS.find((item) => item.id === provider) || DESIGN_PROVIDERS[0]
+  if (option.status === 'ready') {
+    return {
+      status: option.status,
+      title: `${option.label} is ready`,
+      detail: 'Built-in generation is available now for testing the approval workflow.',
+    }
+  }
+  if (option.status === 'manual') {
+    return {
+      status: option.status,
+      title: `${option.label} is manual`,
+      detail: 'Use this as a benchmark provider. Save the prompt, generate manually, then connect a supported API path when available.',
+    }
+  }
+  return {
+    status: option.status,
+    title: `${option.label} needs an API key`,
+    detail: 'Add the provider key on the backend before this generator can create real design assets.',
+  }
+}
+
+function providerStatusClass(status: typeof DESIGN_PROVIDERS[number]['status']): string {
+  if (status === 'ready') return 'border-accent-green/25 bg-accent-green/10 text-accent-green'
+  if (status === 'manual') return 'border-accent-amber/25 bg-accent-amber/10 text-accent-amber'
+  return 'border-surface-500/45 bg-surface-800/45 text-surface-300'
+}
+
+function createDesignAsset(product: StoreProductIdea, spec: DesignSpec, provider: DesignProviderId): StoreProductDesignAsset {
+  const svgMarkup = designSvgMarkup(spec)
+  return {
+    id: `design-${product.id}-${provider}-${spec.variant}`,
+    provider,
+    type: 'svg',
+    title: spec.title,
+    prompt: createDesignPrompt(product, provider),
+    assetUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`,
+    svgMarkup,
+    approvedAt: new Date().toISOString(),
+  }
+}
+
+function createDesignPrompt(product: StoreProductIdea, provider: DesignProviderId): string {
+  const providerHint = {
+    ideogram: 'typography-first merch design with accurate readable text',
+    recraft: 'clean print-ready vector-style design asset',
+    krea: 'premium style exploration with polished visual taste',
+    openai: 'balanced commercial product design concept',
+    firefly: 'commercially safe graphic design asset',
+    stability: 'illustrative high-impact product graphic',
+    midjourney: 'high-taste artistic benchmark concept',
+    local_svg: 'simple deterministic approval-test design',
+  } satisfies Record<DesignProviderId, string>
+  return [
+    `${product.title} for ${formatProductType(product.productType)}.`,
+    `Primary keyword: ${product.keyword}.`,
+    `Create a flat printable design asset, not a product mockup.`,
+    `Style target: ${providerHint[provider]}.`,
+    `Use only intentional text that supports the keyword.`,
+    `Transparent or clean background preferred.`,
+  ].join(' ')
+}
+
+function createMockupPrompt(product: StoreProductIdea, design: StoreProductDesignAsset): string {
+  return [
+    `Mock up "${product.title}" as a ${formatProductType(product.productType)}.`,
+    `Use the approved ${design.provider} design asset as the only artwork source.`,
+    `Keep the Etsy thumbnail clean, realistic, and product-focused.`,
+  ].join(' ')
 }
 
 function createDesignSpec(store: StoreItem, product: StoreProductIdea, variant: number): DesignSpec {

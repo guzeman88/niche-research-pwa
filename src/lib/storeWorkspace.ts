@@ -1,7 +1,7 @@
 import type { StoreItem } from './api'
 import type { StoreIdeaKeyword } from './storeIdeas'
 
-export type ProductStatus = 'idea' | 'brief_ready' | 'mockup_selected' | 'sent_to_listing'
+export type ProductStatus = 'idea' | 'brief_ready' | 'design_approved' | 'mockup_selected' | 'sent_to_listing'
 export type ListingStatus = 'draft' | 'needs_review' | 'ready'
 
 export interface StoreKeywordCandidate extends StoreIdeaKeyword {
@@ -18,6 +18,9 @@ export interface StoreProductIdea {
   targetBuyer: string
   designBrief: string
   mockupPrompt: string
+  designProvider?: string
+  designPrompt?: string
+  approvedDesign?: StoreProductDesignAsset
   supportingKeywords: string[]
   evidence: {
     strength?: number | null
@@ -28,6 +31,17 @@ export interface StoreProductIdea {
   status: ProductStatus
   createdAt: string
   updatedAt: string
+}
+
+export interface StoreProductDesignAsset {
+  id: string
+  provider: string
+  type: 'svg' | 'image' | 'external'
+  title: string
+  prompt: string
+  assetUrl: string
+  svgMarkup?: string
+  approvedAt: string
 }
 
 export interface StoreListingDraft {
@@ -296,6 +310,13 @@ export function validationItems(store: StoreItem, workspace: StoreWorkspace): Ar
       label: 'Product ideas saved',
       complete: workspace.products.length >= 3,
       detail: `${workspace.products.length} product ideas saved`,
+    },
+    {
+      label: 'Design approved',
+      complete: workspace.products.some((product) => !!product.approvedDesign || product.status === 'design_approved' || product.status === 'mockup_selected' || product.status === 'sent_to_listing'),
+      detail: workspace.products.some((product) => !!product.approvedDesign || product.status === 'design_approved' || product.status === 'mockup_selected' || product.status === 'sent_to_listing')
+        ? 'At least one product has an approved design'
+        : 'No product has an approved design yet',
     },
     {
       label: 'Mockup direction selected',
