@@ -53,6 +53,7 @@ class KeywordItem(BaseModel):
 class DiscoveryRequest(BaseModel):
     seasonal: bool = True
     llm: bool = True
+    google_suggest: bool = True
     autocomplete: bool = True
     etsy_trending: bool = True
     llm_count: int = Field(default=30, ge=5, le=100)

@@ -98,6 +98,7 @@ def run_discovery(req: DiscoveryRequest = DiscoveryRequest()):
     result = disc.run_all(
         seasonal=req.seasonal,
         llm=req.llm,
+        google_suggest=req.google_suggest,
         autocomplete=req.autocomplete,
         etsy_trending=req.etsy_trending,
         llm_count=req.llm_count,

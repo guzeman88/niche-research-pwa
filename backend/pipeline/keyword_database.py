@@ -526,6 +526,10 @@ _LOW_BUYER_INTENT_PHRASES = {
 
 _SOURCE_QUALITY_BOOST = {
     "expand_google_suggest": 8.0,
+    "expand_competitor_terms": 9.0,
+    "expand_trends_related": 6.0,
+    "expand_etsy_autocomplete": 7.0,
+    "google_suggest_bootstrap": 8.0,
     "etsy_autocomplete_bootstrap": 7.0,
     "etsy_trending_page": 10.0,
     "library": 3.0,
@@ -629,7 +633,7 @@ def score_keyword_scan_priority(
     score += _SOURCE_QUALITY_BOOST.get(source_key, 0.0)
     if source_key.startswith("compound_"):
         score += 4.0
-    if source_key.startswith("expand_") and source_key != "expand_google_suggest":
+    if source_key.startswith("expand_") and source_key not in _SOURCE_QUALITY_BOOST:
         score -= 4.0
 
     return _clamp_score(score)

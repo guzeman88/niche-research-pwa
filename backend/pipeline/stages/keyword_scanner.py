@@ -13,6 +13,7 @@ import json
 import os
 import re
 import time
+from collections import Counter
 from calendar import month_name
 from datetime import datetime
 from pathlib import Path
@@ -171,6 +172,49 @@ _BOOTSTRAP_TERMS = [
     "hiking", "yoga", "running", "cycling", "fishing", "gardening",
 ]
 
+_BUYER_INTENT_ROOTS = [
+    "personalized gift for",
+    "custom shirt for",
+    "custom sweatshirt for",
+    "funny mug for",
+    "teacher appreciation gift",
+    "nurse appreciation gift",
+    "pet memorial gift",
+    "dog mom gift",
+    "cat mom gift",
+    "first christmas as",
+    "bridesmaid proposal gift",
+    "maid of honor gift",
+    "new mom gift",
+    "new dad gift",
+    "grandma gift",
+    "grandpa gift",
+    "retirement gift for",
+    "graduation gift for",
+    "housewarming gift",
+    "book lover gift",
+    "reading journal",
+    "recipe book",
+    "family recipe book",
+    "lake house wall art",
+    "cabin wall art",
+    "vintage wall art",
+    "dark academia wall art",
+    "botanical wall art",
+    "custom pet portrait",
+    "personalized ornament",
+    "memorial ornament",
+    "teacher tote bag",
+    "nurse badge reel",
+    "occupational therapist gift",
+    "speech therapist gift",
+    "realtor closing gift",
+    "wedding welcome sign",
+    "baby shower game",
+    "printable planner",
+    "adhd planner",
+]
+
 
 def get_autocomplete_seeds(log_fn=None) -> list[dict]:
     """
@@ -205,6 +249,53 @@ def get_autocomplete_seeds(log_fn=None) -> list[dict]:
             continue
 
     _log(f"[seed_discovery] Autocomplete expansion: {len(discovered)} new seeds")
+    return list(discovered.values())
+
+
+def get_google_suggest_bootstrap_seeds(log_fn=None) -> list[dict]:
+    """
+    Use Google Suggest against buyer-intent roots to find real search phrases.
+    This is the primary free source for new high-quality terms.
+    """
+    _log = log_fn or print
+
+    try:
+        from adapters.research.google_suggest import GoogleSuggestAdapter
+        adapter = GoogleSuggestAdapter(request_delay=0.2)
+    except Exception as e:
+        _log(f"[seed_discovery] Google Suggest unavailable: {e}")
+        return []
+
+    discovered: dict[str, dict] = {}
+    try:
+        max_roots = max(5, int(os.environ.get("GOOGLE_SUGGEST_BOOTSTRAP_ROOT_LIMIT", "20")))
+    except ValueError:
+        max_roots = 20
+    for root in _BUYER_INTENT_ROOTS[:max_roots]:
+        try:
+            signals = adapter.search(root)
+            for sig in signals:
+                kw = sig.keyword.strip().lower()
+                if not kw or kw == root:
+                    continue
+                if not kdb.is_scanworthy_seed(
+                    kw,
+                    domain="discovered",
+                    source="google_suggest_bootstrap",
+                    min_score=62,
+                ):
+                    continue
+                if kw not in discovered:
+                    discovered[kw] = {
+                        "keyword": kw,
+                        "domain": "discovered",
+                        "source": "google_suggest_bootstrap",
+                        "priority": 7,
+                    }
+        except Exception:
+            continue
+
+    _log(f"[seed_discovery] Google Suggest buyer roots: {len(discovered)} new candidate seeds")
     return list(discovered.values())
 
 
@@ -330,7 +421,7 @@ def get_etsy_trending_seeds(log_fn=None) -> list[dict]:
 
 class SeedDiscovery:
     """
-    Runs all 4 seed discovery methods and bulk-inserts new finds into the DB.
+    Runs seed discovery methods and bulk-inserts new finds into the DB.
     Each method is independently togglable.
     """
 
@@ -341,6 +432,7 @@ class SeedDiscovery:
         self,
         seasonal: bool = True,
         llm: bool = True,
+        google_suggest: bool = True,
         autocomplete: bool = True,
         etsy_trending: bool = True,
         llm_count: int = 30,
@@ -370,6 +462,14 @@ class SeedDiscovery:
             self._log(f"[seed_discovery] LLM brainstorm: +{added} new seeds")
             total_added += added
             sources_run.append("llm_brainstorm")
+
+        if google_suggest:
+            self._log("[seed_discovery] Running Google Suggest buyer-root expansion...")
+            seeds = get_google_suggest_bootstrap_seeds(log_fn=self._log)
+            added = self._persist(seeds)
+            self._log(f"[seed_discovery] Google Suggest buyer roots: +{added} new seeds")
+            total_added += added
+            sources_run.append("google_suggest_bootstrap")
 
         if autocomplete:
             self._log("[seed_discovery] Running Etsy autocomplete expansion...")
@@ -478,6 +578,56 @@ class KeywordScanner:
 # Expansion helpers — called by AutonomousScheduler after each scan
 # ---------------------------------------------------------------------------
 
+_TITLE_STOPWORDS = {
+    "and", "with", "for", "the", "your", "from", "this", "that", "gift",
+    "gifts", "sale", "free", "shipping", "personalized", "custom", "handmade",
+    "etsy", "new", "best", "set", "pack", "bundle",
+}
+
+_TITLE_NOISE_PHRASES = {
+    "free shipping",
+    "made to order",
+    "gift for",
+    "birthday gift",
+}
+
+_TITLE_PRODUCT_TERMS = {
+    "shirt", "t-shirt", "tee", "sweatshirt", "hoodie", "mug", "tumbler",
+    "sticker", "stickers", "print", "prints", "poster", "posters", "canvas",
+    "wall art", "tote", "bag", "ornament", "planner", "journal", "template",
+    "printable", "svg", "invitation", "sign", "decor", "keychain", "badge reel",
+}
+
+
+def _normalize_keyword_phrase(value: str) -> str:
+    phrase = re.sub(r"[^a-z0-9&' -]+", " ", value.lower())
+    phrase = re.sub(r"\s+", " ", phrase).strip(" -")
+    return phrase
+
+
+def _phrase_has_buyer_shape(phrase: str) -> bool:
+    words = phrase.split()
+    if not 2 <= len(words) <= 5:
+        return False
+    if any(noise in phrase for noise in _TITLE_NOISE_PHRASES):
+        return False
+    if all(word in _TITLE_STOPWORDS for word in words):
+        return False
+    if words[0] in _TITLE_STOPWORDS or words[-1] in _TITLE_STOPWORDS:
+        return False
+    has_product = any(term in phrase for term in _TITLE_PRODUCT_TERMS)
+    if not has_product:
+        return False
+    if not kdb.is_scanworthy_seed(
+        phrase,
+        domain="discovered",
+        source="expand_competitor_terms",
+        min_score=62,
+    ):
+        return False
+    return True
+
+
 def _extract_competitor_tags(report_dict: dict) -> list[str]:
     """
     Pull unique tags/phrases from competitor listing data embedded in a NicheReport.
@@ -486,6 +636,7 @@ def _extract_competitor_tags(report_dict: dict) -> list[str]:
     listing titles. These become new seed keywords for recursive expansion.
     """
     tags: set[str] = set()
+    phrase_counts: Counter[str] = Counter()
 
     # Prefer real tags from the most recent gap report for any keyword in this report
     try:
@@ -495,25 +646,33 @@ def _extract_competitor_tags(report_dict: dict) -> list[str]:
             if kw:
                 gr = kdb.get_gap_report(kw)
                 if gr:
-                    for tag in gr.get("dominant_competitor_tags_json", []):
-                        if tag and len(tag) > 3:
-                            tags.add(tag.strip().lower())
                     for tag in gr.get("recommended_tags_json", []):
-                        if tag and len(tag) > 3:
-                            tags.add(tag.strip().lower())
+                        phrase = _normalize_keyword_phrase(str(tag))
+                        if phrase and len(phrase) > 3:
+                            tags.add(phrase)
+                    for tag in gr.get("dominant_competitor_tags_json", []):
+                        phrase = _normalize_keyword_phrase(str(tag))
+                        if phrase and len(phrase) > 3:
+                            tags.add(phrase)
     except Exception:
         pass
 
     # Fallback: extract n-gram phrases from listing titles
     if len(tags) < 10:
+        seed_terms = {str(ksd.get("keyword", "")).lower() for ksd in report_dict.get("keyword_search_data", [])}
         for ksd in report_dict.get("keyword_search_data", []):
             for title in ksd.get("top_listing_titles", []):
-                words = title.lower().split()
-                for n in (2, 3, 4):
-                    for i in range(len(words) - n + 1):
-                        phrase = " ".join(words[i:i + n])
-                        if all(len(w) > 2 for w in phrase.split()):
-                            tags.add(phrase)
+                segments = re.split(r"[,|;•]+", str(title))
+                for segment in segments:
+                    clean_title = _normalize_keyword_phrase(segment)
+                    words = clean_title.split()
+                    for n in (2, 3, 4):
+                        for i in range(len(words) - n + 1):
+                            phrase = " ".join(words[i:i + n])
+                            if phrase not in seed_terms and _phrase_has_buyer_shape(phrase):
+                                phrase_counts[phrase] += 1
+        for phrase, _ in phrase_counts.most_common(25):
+            tags.add(phrase)
 
     # Keep reasonable length, discard duplicates of original report seeds
     return [t for t in tags if 6 < len(t) < 60][:30]

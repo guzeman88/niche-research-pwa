@@ -262,6 +262,7 @@ class AutonomousScheduler:
                 f"[scheduler]   Thin market evidence for '{keyword}' - saving no-data scores and queuing for evidence refresh"
             )
         kdb.save_scan(keyword, report)
+        report_dict = self._report_to_dict(report)
 
         # Gap analysis — runs after every scan to score the 6 gap types
         if not self._skip_scraper and has_market_data:
@@ -279,6 +280,21 @@ class AutonomousScheduler:
             return 0
 
         new_seeds_total = 0
+
+        if has_market_data:
+            try:
+                competitor_terms = self._rank_expansion_candidates(
+                    _extract_competitor_tags(report_dict),
+                    min_quality=MIN_EXPANSION_QUALITY + 3,
+                    source="expand_competitor_terms",
+                )
+                if competitor_terms:
+                    added = kdb.record_expansion(keyword, competitor_terms[:10], "competitor_terms", depth + 1)
+                    new_seeds_total += added
+                    if added:
+                        self._log(f"[scheduler]   +{added} seeds from competitor phrases/tags")
+            except Exception as e:
+                self._log(f"[scheduler]   Competitor phrase expansion failed: {e}")
 
         # Google Suggest expansion — real buyer search queries, free & unblocked
         try:
@@ -300,6 +316,21 @@ class AutonomousScheduler:
                     self._log(f"[scheduler]   +{added} seeds from Google Suggest")
         except Exception as e:
             self._log(f"[scheduler]   Google Suggest failed: {e}")
+
+        if has_market_data:
+            try:
+                trends_terms = self._rank_expansion_candidates(
+                    _extract_trends_related(keyword),
+                    min_quality=MIN_EXPANSION_QUALITY + 5,
+                    source="expand_trends_related",
+                )
+                if trends_terms:
+                    added = kdb.record_expansion(keyword, trends_terms[:6], "trends_related", depth + 1)
+                    new_seeds_total += added
+                    if added:
+                        self._log(f"[scheduler]   +{added} seeds from Google Trends related queries")
+            except Exception as e:
+                self._log(f"[scheduler]   Trends related expansion failed: {e}")
 
         # LLM-based expansion — fallback for deeper keyword generation
         if os.environ.get("ALLOW_LLM_KEYWORD_EXPANSION", "0").strip().lower() in {"1", "true", "yes"}:
@@ -360,6 +391,12 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
             ranked.append((score, kw))
         ranked.sort(reverse=True)
         return [kw for _, kw in ranked]
+
+    def _report_to_dict(self, report) -> dict:
+        if hasattr(report, "__dataclass_fields__"):
+            import dataclasses
+            return dataclasses.asdict(report)
+        return dict(report)
 
     def _analyze_gaps(self, keyword: str, report) -> None:
         """
