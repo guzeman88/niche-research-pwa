@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getStores } from '../lib/api'
 import type { StoreItem } from '../lib/api'
@@ -28,9 +28,9 @@ import { scoreColor } from '../lib/utils'
 
 const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
 const TABS = [
-  { id: 'dashboard', label: 'Store Dashboard', icon: 'dashboard' },
-  { id: 'products', label: 'Product Creator', icon: 'package' },
-  { id: 'listings', label: 'Listing Manager', icon: 'file-text' },
+  { id: 'dashboard', label: 'Store Dashboard', shortLabel: 'Store', icon: 'dashboard' },
+  { id: 'products', label: 'Product Creator', shortLabel: 'Products', icon: 'package' },
+  { id: 'listings', label: 'Listing Manager', shortLabel: 'Listings', icon: 'file-text' },
 ] as const
 
 type WorkspaceTab = typeof TABS[number]['id']
@@ -200,6 +200,12 @@ function StoreWorkspaceView({
   onUpdateListing: (listingId: string, patch: Partial<StoreListingDraft>) => void
   onSendProductToListings: (product: StoreProductIdea) => void
 }) {
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 })
+  }, [activeTab, store.slug])
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-surface-600/60 bg-surface-900/55 px-4 pb-3 pt-4">
@@ -215,8 +221,8 @@ function StoreWorkspaceView({
             {workspace.products.length} products / {workspace.listings.length} listings
           </div>
         </div>
-        <div className="mt-4 overflow-x-auto">
-          <div className="flex min-w-max gap-1 rounded-lg border border-surface-600/65 bg-surface-950/30 p-1">
+        <div className="mt-4">
+          <div className="grid grid-cols-3 gap-1 rounded-lg border border-surface-600/65 bg-surface-950/30 p-1">
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id
               return (
@@ -224,14 +230,15 @@ function StoreWorkspaceView({
                   key={tab.id}
                   type="button"
                   onClick={() => onTabChange(tab.id)}
-                  className={`inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 text-[12px] font-bold transition-all duration-150 ${
+                  className={`inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-[11px] font-bold transition-all duration-150 sm:gap-2 sm:px-3 sm:text-[12px] ${
                     isActive
                       ? 'bg-primary-400/18 text-primary-100 ring-1 ring-primary-300/25'
                       : 'text-surface-300 hover:bg-surface-800/80 hover:text-surface-100'
                   }`}
                 >
                   <Icon name={tab.icon} size={14} />
-                  {tab.label}
+                  <span className="truncate sm:hidden">{tab.shortLabel}</span>
+                  <span className="hidden truncate sm:inline">{tab.label}</span>
                 </button>
               )
             })}
@@ -239,7 +246,7 @@ function StoreWorkspaceView({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div ref={contentRef} className="flex-1 overflow-y-auto px-4 py-4">
         {activeTab === 'dashboard' && <StoreDashboard store={store} workspace={workspace} onTabChange={onTabChange} />}
         {activeTab === 'products' && (
           <ProductCreator
@@ -374,159 +381,399 @@ function ProductCreator({
   onSendProductToListings: (product: StoreProductIdea) => void
 }) {
   const keywords = extractStoreKeywords(store)
-  const [selectedKeyword, setSelectedKeyword] = useState('')
-  const activeKeyword = keywords.find((keyword) => keyword.keyword === selectedKeyword) || keywords[0]
-  const ideas = activeKeyword ? createProductIdeas(store, activeKeyword) : []
-  const savedKeys = new Set(workspace.products.map((product) => productKey(product)))
+  const [activeKeywordName, setActiveKeywordName] = useState('')
+  const activeKeyword = keywords.find((keyword) => keyword.keyword === activeKeywordName) || null
+
+  if (!keywords.length) {
+    return (
+      <div className="space-y-4">
+        <ProductCreatorHeader title="Product Creator" detail="No keyword snapshot is saved for this store yet." />
+        <EmptyState icon="search" title="No keywords saved" text="Add a store idea with keyword evidence before creating products." />
+      </div>
+    )
+  }
+
+  if (!activeKeyword) {
+    return (
+      <ProductKeywordPicker
+        store={store}
+        keywords={keywords}
+        workspace={workspace}
+        onSelectKeyword={(keyword) => setActiveKeywordName(keyword.keyword)}
+      />
+    )
+  }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(16rem,0.7fr)_minmax(0,1.3fr)]">
-      <div className="space-y-4">
+    <KeywordProductCreationPage
+      store={store}
+      keyword={activeKeyword}
+      workspace={workspace}
+      onBack={() => setActiveKeywordName('')}
+      onSaveProduct={onSaveProduct}
+      onUpdateProduct={onUpdateProduct}
+      onSendProductToListings={onSendProductToListings}
+    />
+  )
+}
+
+function ProductCreatorHeader({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="section-label">{title}</div>
+        <p className="mt-0.5 max-w-3xl break-words text-[12px] leading-relaxed text-surface-300">{detail}</p>
+      </div>
+    </div>
+  )
+}
+
+function ProductKeywordPicker({
+  store,
+  keywords,
+  workspace,
+  onSelectKeyword,
+}: {
+  store: StoreItem
+  keywords: StoreKeywordCandidate[]
+  workspace: StoreWorkspace
+  onSelectKeyword: (keyword: StoreKeywordCandidate) => void
+}) {
+  const savedByKeyword = keywords.reduce<Record<string, number>>((counts, keyword) => {
+    counts[keyword.keyword.toLowerCase()] = workspace.products.filter((product) => sameKeyword(product.keyword, keyword.keyword)).length
+    return counts
+  }, {})
+
+  return (
+    <div className="space-y-4">
+      <ProductCreatorHeader
+        title="Product Creator"
+        detail="Start from the strongest keyword evidence saved with this store, then build products, briefs, mockup directions, and listing drafts from that keyword."
+      />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
         <div className="panel p-4">
-          <div className="section-label mb-3">Store keywords</div>
-          {keywords.length ? (
-            <div className="max-h-[32rem] space-y-1.5 overflow-y-auto pr-1">
-              {keywords.map((keyword, index) => {
-                const isActive = activeKeyword?.keyword === keyword.keyword
-                return (
-                  <button
-                    key={keyword.keyword}
-                    type="button"
-                    onClick={() => setSelectedKeyword(keyword.keyword)}
-                    className={`grid w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_3rem] items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-all duration-150 ${
-                      isActive
-                        ? 'border-primary-300/35 bg-primary-400/12'
-                        : 'border-surface-600/40 bg-surface-900/20 hover:bg-surface-700/35'
-                    }`}
-                  >
-                    <span className="text-right text-[10px] font-extrabold tabular-nums text-surface-400">{index + 1}</span>
-                    <span className="min-w-0">
-                      <span className="block break-words text-[12px] font-bold text-surface-100">{keyword.keyword}</span>
-                      <span className="mt-0.5 block truncate text-[10px] text-surface-400">{keyword.product}</span>
-                    </span>
-                    <span className={`text-right text-[12px] font-extrabold tabular-nums ${scoreClass(keyword.strength)}`}>{formatMetric(keyword.strength)}</span>
-                  </button>
-                )
-              })}
+          <div className="mb-3 flex min-w-0 flex-wrap items-end justify-between gap-3">
+            <div>
+              <div className="section-label">Keyword workbench</div>
+              <div className="mt-0.5 text-[12px] text-surface-300">{keywords.length} keywords ordered by strength</div>
             </div>
-          ) : (
-            <EmptyState icon="search" title="No keywords saved" text="Add a store idea with keyword evidence before creating products." />
-          )}
+            <div className="rounded-md border border-surface-600/45 bg-surface-950/25 px-3 py-2 text-right">
+              <div className="text-[15px] font-extrabold tabular-nums text-surface-50">{workspace.products.length}</div>
+              <div className="text-[9px] font-bold uppercase tracking-wider text-surface-500">saved products</div>
+            </div>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+            {keywords.map((keyword, index) => {
+              const savedCount = savedByKeyword[keyword.keyword.toLowerCase()] || 0
+              return (
+                <button
+                  key={keyword.keyword}
+                  type="button"
+                  onClick={() => onSelectKeyword(keyword)}
+                  className="group min-w-0 rounded-md border border-surface-600/45 bg-surface-900/20 p-3 text-left transition-all duration-150 hover:border-primary-300/35 hover:bg-primary-400/10"
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-extrabold uppercase tracking-wider text-surface-500">#{index + 1}</div>
+                      <div className="mt-1 break-words text-[13px] font-extrabold leading-snug text-surface-50">{keyword.keyword}</div>
+                      <div className="mt-1 truncate text-[11px] text-surface-300">{keyword.product}</div>
+                    </div>
+                    <EvidenceNumber value={keyword.strength} label="strength" />
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 rounded-md border border-surface-700/50 bg-surface-950/20 px-2 py-2">
+                    <EvidenceNumber value={keyword.opportunity} label="opp" />
+                    <EvidenceNumber value={keyword.gap} label="gap" />
+                    <EvidenceNumber value={keyword.buyerIntent} label="intent" />
+                  </div>
+
+                  <div className="mt-3 flex min-w-0 items-center justify-between gap-3 text-[11px] font-bold">
+                    <span className="min-w-0 truncate text-surface-300">{savedCount ? `${savedCount} saved` : 'No products yet'}</span>
+                    <span className="inline-flex items-center gap-1 text-primary-100">
+                      Open creator <Icon name="chevron-right" size={13} className="transition-transform duration-150 group-hover:translate-x-0.5" />
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="panel p-4">
+            <div className="section-label mb-3">Creation queue</div>
+            {workspace.products.length ? (
+              <div className="space-y-2">
+                {workspace.products.slice(0, 6).map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => {
+                      const keyword = keywords.find((item) => sameKeyword(item.keyword, product.keyword))
+                      if (keyword) onSelectKeyword(keyword)
+                    }}
+                    className="grid w-full min-w-0 gap-2 rounded-md border border-surface-600/40 bg-surface-900/20 px-3 py-2 text-left transition-all duration-150 hover:bg-surface-700/35 sm:grid-cols-[minmax(0,1fr)_6.5rem]"
+                  >
+                    <span className="min-w-0">
+                      <span className="block break-words text-[12px] font-bold text-surface-100">{product.title}</span>
+                      <span className="mt-0.5 block break-words text-[11px] text-surface-300">{product.keyword}</span>
+                    </span>
+                    <StatusPill status={product.status} />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <EmptyState icon="package" title="No product ideas yet" text="Open a keyword to create the first product idea for this store." />
+            )}
+          </div>
+
+          <div className="panel-soft p-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <Icon name="target" size={18} className="mt-0.5 flex-shrink-0 text-primary-100" />
+              <div className="min-w-0">
+                <div className="text-[12px] font-extrabold text-surface-100">{store.name}</div>
+                <div className="mt-1 break-words text-[12px] leading-relaxed text-surface-300">
+                  {store.target_audience || 'Target audience is not specified yet.'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function KeywordProductCreationPage({
+  store,
+  keyword,
+  workspace,
+  onBack,
+  onSaveProduct,
+  onUpdateProduct,
+  onSendProductToListings,
+}: {
+  store: StoreItem
+  keyword: StoreKeywordCandidate
+  workspace: StoreWorkspace
+  onBack: () => void
+  onSaveProduct: (product: StoreProductIdea) => void
+  onUpdateProduct: (productId: string, patch: Partial<StoreProductIdea>) => void
+  onSendProductToListings: (product: StoreProductIdea) => void
+}) {
+  const ideas = createProductIdeas(store, keyword)
+  const savedKeys = new Set(workspace.products.map((product) => productKey(product)))
+  const savedProducts = workspace.products.filter((product) => sameKeyword(product.keyword, keyword.keyword))
+  const supportingKeywords = Array.from(new Set(ideas.flatMap((idea) => idea.supportingKeywords))).slice(0, 12)
+
+  return (
+    <div className="space-y-4">
+      <div className="panel p-4">
+        <button type="button" className="btn-secondary mb-4 min-h-9 px-3 py-2 text-[12px]" onClick={onBack}>
+          <Icon name="arrow-left" size={14} /> Keywords
+        </button>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.42fr)]">
+          <div className="min-w-0">
+            <div className="section-label">Product creation page</div>
+            <h3 className="mt-1 break-words text-2xl font-extrabold tracking-tight text-surface-50">{keyword.keyword}</h3>
+            <p className="mt-1 max-w-3xl break-words text-[12px] leading-relaxed text-surface-300">
+              Products, briefs, mockup directions, and listings created here stay attached to this keyword.
+            </p>
+            {supportingKeywords.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {supportingKeywords.map((term) => (
+                  <span key={term} className="max-w-full break-words rounded-md border border-surface-600/45 bg-surface-950/25 px-2 py-1 text-[10px] font-bold text-surface-300">
+                    {term}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
+            <EvidenceNumber value={keyword.strength} label="strength" />
+            <EvidenceNumber value={keyword.opportunity} label="opportunity" />
+            <EvidenceNumber value={keyword.gap} label="gap" />
+            <EvidenceNumber value={keyword.buyerIntent} label="intent" />
+          </div>
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.72fr)]">
         <div className="panel p-4">
-          <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="mb-3 flex min-w-0 flex-wrap items-end justify-between gap-3">
             <div>
-              <div className="section-label">Generated product ideas</div>
-              <p className="mt-0.5 text-[12px] text-surface-300">
-                {activeKeyword ? `Based on "${activeKeyword.keyword}" and this store's saved product mix.` : 'Select a keyword to generate product ideas.'}
-              </p>
+              <div className="section-label">Brainstorm board</div>
+              <p className="mt-0.5 text-[12px] text-surface-300">Generated from this keyword and the store's saved product mix.</p>
+            </div>
+            <div className="rounded-md border border-surface-600/45 bg-surface-950/25 px-3 py-2 text-right">
+              <div className="text-[15px] font-extrabold tabular-nums text-surface-50">{ideas.length}</div>
+              <div className="text-[9px] font-bold uppercase tracking-wider text-surface-500">concepts</div>
             </div>
           </div>
-          {activeKeyword ? (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {ideas.map((idea) => {
-                const isSaved = savedKeys.has(productKey(idea))
-                return (
-                  <div key={idea.id} className="min-w-0 rounded-md border border-surface-600/45 bg-surface-900/20 p-3">
-                    <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="break-words text-[13px] font-extrabold text-surface-50">{idea.title}</div>
-                        <div className="mt-0.5 break-words text-[11px] text-surface-300">{formatProductType(idea.productType)} / {idea.keyword}</div>
-                      </div>
-                      <EvidenceNumber value={idea.evidence.strength} label="strength" />
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            {ideas.map((idea) => {
+              const isSaved = savedKeys.has(productKey(idea))
+              return (
+                <div key={idea.id} className="min-w-0 rounded-md border border-surface-600/45 bg-surface-900/20 p-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="break-words text-[13px] font-extrabold text-surface-50">{idea.title}</div>
+                      <div className="mt-0.5 break-words text-[11px] text-surface-300">{formatProductType(idea.productType)} / {idea.targetBuyer}</div>
                     </div>
-                    <div className="mt-3 break-words text-[12px] leading-relaxed text-surface-200">{idea.designBrief}</div>
-                    <button
-                      type="button"
-                      disabled={isSaved}
-                      onClick={() => onSaveProduct(idea)}
-                      className={`mt-3 inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-[12px] font-bold transition-all duration-150 ${
-                        isSaved
-                          ? 'border-accent-green/25 bg-accent-green/10 text-accent-green'
-                          : 'border-primary-300/30 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25'
-                      }`}
-                    >
-                      <Icon name={isSaved ? 'check-circle' : 'plus-circle'} size={14} />
-                      {isSaved ? 'Saved' : 'Add product idea'}
-                    </button>
+                    <EvidenceNumber value={idea.evidence.strength} label="strength" />
                   </div>
-                )
-              })}
-            </div>
-          ) : null}
+
+                  <div className="mt-3 line-clamp-4 break-words text-[12px] leading-relaxed text-surface-200">{idea.designBrief}</div>
+                  {idea.supportingKeywords.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {idea.supportingKeywords.slice(0, 5).map((term) => (
+                        <span key={term} className="max-w-full break-words rounded-md bg-surface-950/35 px-2 py-1 text-[10px] font-bold text-surface-400">{term}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={isSaved}
+                    onClick={() => onSaveProduct(idea)}
+                    className={`mt-3 inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-[12px] font-bold transition-all duration-150 ${
+                      isSaved
+                        ? 'border-accent-green/25 bg-accent-green/10 text-accent-green'
+                        : 'border-primary-300/30 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25'
+                    }`}
+                  >
+                    <Icon name={isSaved ? 'check-circle' : 'plus-circle'} size={14} />
+                    {isSaved ? 'Saved' : 'Add product idea'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
-        <div className="panel p-4">
-          <div className="section-label mb-3">Saved product ideas and mockups</div>
-          {workspace.products.length ? (
-            <div className="space-y-3">
-              {workspace.products.map((product) => {
+        <div className="space-y-4">
+          <div className="panel p-4">
+            <div className="mb-3 flex min-w-0 flex-wrap items-end justify-between gap-3">
+              <div>
+                <div className="section-label">Mockup lab</div>
+                <p className="mt-0.5 text-[12px] text-surface-300">Saved products for this keyword.</p>
+              </div>
+              <div className="rounded-md border border-surface-600/45 bg-surface-950/25 px-3 py-2 text-right">
+                <div className="text-[15px] font-extrabold tabular-nums text-surface-50">{savedProducts.length}</div>
+                <div className="text-[9px] font-bold uppercase tracking-wider text-surface-500">saved</div>
+              </div>
+            </div>
+
+            {savedProducts.length ? (
+              <div className="space-y-3">
+                {savedProducts.map((product) => {
                 const listingExists = workspace.listings.some((listing) => listing.productId === product.id)
                 return (
-                  <div key={product.id} className="rounded-md border border-surface-600/45 bg-surface-900/25 p-3">
-                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="break-words text-[13px] font-extrabold text-surface-50">{product.title}</div>
-                        <div className="mt-0.5 break-words text-[11px] text-surface-300">{product.keyword} / {formatProductType(product.productType)}</div>
-                      </div>
-                      <StatusPill status={product.status} />
-                    </div>
-
-                    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
-                      <label className="block">
-                        <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-300">Design brief</span>
-                        <textarea
-                          className="input min-h-28 resize-y text-[12px]"
-                          value={product.designBrief}
-                          onChange={(event) => onUpdateProduct(product.id, { designBrief: event.target.value })}
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-300">Mockup prompt</span>
-                        <textarea
-                          className="input min-h-28 resize-y text-[12px]"
-                          value={product.mockupPrompt}
-                          onChange={(event) => onUpdateProduct(product.id, { mockupPrompt: event.target.value })}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="mt-3 rounded-md border border-dashed border-surface-500/60 bg-surface-950/25 p-3">
-                      <div className="flex min-w-0 items-start gap-3">
-                        <Icon name="layers" size={18} className="mt-0.5 flex-shrink-0 text-primary-100" />
-                        <div className="min-w-0">
-                          <div className="text-[12px] font-bold text-surface-100">{mockupLabel(product.status)}</div>
-                          <div className="mt-0.5 break-words text-[11px] text-surface-300">
-                            {product.status === 'mockup_selected'
-                              ? 'A mockup direction has been selected and can be sent to listings.'
-                              : 'Mockup image generation is not connected yet. Use the brief and prompt here as the production direction.'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" className="btn-secondary min-h-9 px-3 py-2 text-[12px]" onClick={() => onUpdateProduct(product.id, { status: 'brief_ready' })}>
-                        <Icon name="file-text" size={14} /> Brief ready
-                      </button>
-                      <button type="button" className="btn-secondary min-h-9 px-3 py-2 text-[12px]" onClick={() => onUpdateProduct(product.id, { status: 'mockup_selected' })}>
-                        <Icon name="check-circle" size={14} /> Mockup selected
-                      </button>
-                      <button type="button" disabled={listingExists} className="btn-primary min-h-9 px-3 py-2 text-[12px]" onClick={() => onSendProductToListings(product)}>
-                        <Icon name={listingExists ? 'check-circle' : 'arrow-right'} size={14} /> {listingExists ? 'In listing manager' : 'Send to listings'}
-                      </button>
-                    </div>
-                  </div>
+                  <ProductWorkbenchCard
+                    key={product.id}
+                    store={store}
+                    product={product}
+                    listingExists={listingExists}
+                    onUpdate={(patch) => onUpdateProduct(product.id, patch)}
+                    onSend={() => onSendProductToListings(product)}
+                  />
                 )
               })}
             </div>
           ) : (
-            <EmptyState icon="package" title="No saved product ideas" text="Choose a keyword and save generated ideas before building mockups or listings." />
+              <EmptyState icon="package" title="No saved products for this keyword" text="Add a product idea from the brainstorm board to start mockup work." />
           )}
+          </div>
+
+          <NoDataPanel icon="layers" title="Image rendering" text="No real mockup image generator is connected yet. This lab creates editable mockup directions and keeps them with the product record." />
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ProductWorkbenchCard({
+  store,
+  product,
+  listingExists,
+  onUpdate,
+  onSend,
+}: {
+  store: StoreItem
+  product: StoreProductIdea
+  listingExists: boolean
+  onUpdate: (patch: Partial<StoreProductIdea>) => void
+  onSend: () => void
+}) {
+  return (
+    <div className="rounded-md border border-surface-600/45 bg-surface-900/25 p-3">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="break-words text-[13px] font-extrabold text-surface-50">{product.title}</div>
+          <div className="mt-0.5 break-words text-[11px] text-surface-300">{product.keyword} / {formatProductType(product.productType)}</div>
+        </div>
+        <StatusPill status={product.status} />
+      </div>
+
+      <div className="mt-3 space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-300">Brainstorm brief</span>
+          <textarea
+            className="input min-h-28 resize-y text-[12px]"
+            value={product.designBrief}
+            onChange={(event) => onUpdate({ designBrief: event.target.value })}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-300">Mockup directions</span>
+          <textarea
+            className="input min-h-32 resize-y text-[12px]"
+            value={product.mockupPrompt}
+            onChange={(event) => onUpdate({ mockupPrompt: event.target.value })}
+          />
+        </label>
+      </div>
+
+      <div className="mt-3 rounded-md border border-dashed border-surface-500/60 bg-surface-950/25 p-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <Icon name="layers" size={18} className="mt-0.5 flex-shrink-0 text-primary-100" />
+          <div className="min-w-0">
+            <div className="text-[12px] font-bold text-surface-100">{mockupLabel(product.status)}</div>
+            <div className="mt-0.5 break-words text-[11px] text-surface-300">
+              {product.status === 'mockup_selected' || product.status === 'sent_to_listing'
+                ? 'A mockup direction has been selected and can be sent to listings.'
+                : 'Generate or edit the production direction before selecting a mockup.'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn-secondary min-h-9 px-3 py-2 text-[12px]"
+          onClick={() => onUpdate({ designBrief: buildBrainstormBrief(store, product), status: 'brief_ready' })}
+        >
+          <Icon name="file-text" size={14} /> Generate brief
+        </button>
+        <button
+          type="button"
+          className="btn-secondary min-h-9 px-3 py-2 text-[12px]"
+          onClick={() => onUpdate({ mockupPrompt: buildMockupDirection(store, product), status: 'brief_ready' })}
+        >
+          <Icon name="layers" size={14} /> Generate mockup directions
+        </button>
+        <button type="button" className="btn-secondary min-h-9 px-3 py-2 text-[12px]" onClick={() => onUpdate({ status: 'mockup_selected' })}>
+          <Icon name="check-circle" size={14} /> Mockup selected
+        </button>
+        <button type="button" disabled={listingExists} className="btn-primary min-h-9 px-3 py-2 text-[12px]" onClick={onSend}>
+          <Icon name={listingExists ? 'check-circle' : 'arrow-right'} size={14} /> {listingExists ? 'In listing manager' : 'Send to listings'}
+        </button>
       </div>
     </div>
   )
@@ -729,6 +976,38 @@ function NoDataPanel({ icon, title, text }: { icon: Parameters<typeof Icon>[0]['
       </div>
     </div>
   )
+}
+
+function sameKeyword(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase()
+}
+
+function buildBrainstormBrief(store: StoreItem, product: StoreProductIdea): string {
+  const productType = formatProductType(product.productType).toLowerCase()
+  const buyer = product.targetBuyer || store.target_audience || `buyers searching for ${product.keyword}`
+  const aesthetic = store.aesthetic || store.niche || 'the store aesthetic'
+  const supporting = product.supportingKeywords.slice(0, 5).join(', ')
+
+  return [
+    `Build a ${productType} concept for "${product.keyword}" aimed at ${buyer}.`,
+    `Use ${aesthetic} as the visual direction and make the buyer outcome obvious in the first thumbnail.`,
+    supporting ? `Work in supporting keyword angles: ${supporting}.` : '',
+    'Avoid generic filler. The product should have one clear use case, one clear buyer, and one clear reason it belongs in this store.',
+  ].filter(Boolean).join(' ')
+}
+
+function buildMockupDirection(store: StoreItem, product: StoreProductIdea): string {
+  const productType = formatProductType(product.productType).toLowerCase()
+  const aesthetic = store.aesthetic || store.niche || 'cohesive Etsy-ready style'
+  const supporting = product.supportingKeywords.slice(0, 5).join(', ')
+
+  return [
+    `Create Etsy listing mockup directions for "${product.title}" as a ${productType}.`,
+    `Primary keyword: ${product.keyword}.`,
+    supporting ? `Secondary keyword cues: ${supporting}.` : '',
+    `Style: ${aesthetic}. Keep the hero image clean, readable, and specific to the keyword.`,
+    'Include a primary thumbnail, one detail close-up, and one in-use context image. Do not add fake reviews, sales badges, bestseller badges, or unsupported claims.',
+  ].filter(Boolean).join(' ')
 }
 
 function productKey(product: Pick<StoreProductIdea, 'keyword' | 'title' | 'productType'>): string {
