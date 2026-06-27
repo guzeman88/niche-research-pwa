@@ -21,6 +21,7 @@ scheduler can resume after app restart.
 """
 
 import json
+import os
 import threading
 import time
 from datetime import datetime
@@ -33,16 +34,19 @@ STATE_FILE = Path(__file__).parent.parent / "workspace/_keyword_db/scheduler_sta
 
 # Rates: how long to sleep between each keyword scan (seconds)
 RATES = {
+    "performance": 30,
     "continuous": 90,   # ~40 keywords/hour — gentle background operation
     "burst":      20,   # ~180 keywords/hour — fast batch when app is idle
     "slow":       300,  # ~12 keywords/hour — minimal footprint
 }
 
 # How often (in keywords scanned) to run full seed discovery
-DISCOVER_EVERY_N_SCANS = 50
+DISCOVER_EVERY_N_SCANS = max(25, int(os.environ.get("DISCOVER_EVERY_N_SCANS", "200")))
 
 # Max expansion depth — don't expand keywords that are already 3 levels deep
-MAX_EXPANSION_DEPTH = 3
+MAX_EXPANSION_DEPTH = max(1, int(os.environ.get("MAX_EXPANSION_DEPTH", "2")))
+
+MIN_EXPANSION_QUALITY = float(os.environ.get("SCANNER_MIN_EXPANSION_QUALITY", "62"))
 
 
 class AutonomousScheduler:
@@ -54,7 +58,7 @@ class AutonomousScheduler:
     def __init__(
         self,
         store_slug: str = "__global__",
-        mode: str = "continuous",
+        mode: str = "performance",
         batch_size: int = 5,
         stale_days: int = 30,
         skip_scraper: bool = False,
@@ -281,8 +285,12 @@ class AutonomousScheduler:
             from adapters.research.google_suggest import GoogleSuggestAdapter
             gs = GoogleSuggestAdapter()
             sigs = gs.search(keyword)
-            gs_kws = [s.keyword for s in sigs if s.keyword != keyword.lower()]
-            expansion_limit = 10 if has_market_data else 3
+            gs_kws = self._rank_expansion_candidates(
+                [s.keyword for s in sigs if s.keyword != keyword.lower()],
+                min_quality=MIN_EXPANSION_QUALITY if has_market_data else MIN_EXPANSION_QUALITY + 8,
+                source="expand_google_suggest",
+            )
+            expansion_limit = 14 if has_market_data else 2
             if not has_market_data and kdb.score_keyword_buyer_intent(keyword) < 45:
                 gs_kws = []
             if gs_kws:
@@ -294,26 +302,64 @@ class AutonomousScheduler:
             self._log(f"[scheduler]   Google Suggest failed: {e}")
 
         # LLM-based expansion — fallback for deeper keyword generation
-        try:
-            from adapters.registry import get_llm_with_fallback
-            llm = get_llm_with_fallback()
-            if llm.health_check():
-                prompt = f"""Generate 5-8 Etsy search keywords related to "{keyword}" that buyers might type.
+        if os.environ.get("ALLOW_LLM_KEYWORD_EXPANSION", "0").strip().lower() in {"1", "true", "yes"}:
+            try:
+                from adapters.registry import get_llm_with_fallback
+                llm = get_llm_with_fallback()
+                if llm.health_check():
+                    prompt = f"""Generate 5-8 Etsy search keywords related to "{keyword}" that buyers might type.
 Return ONLY a JSON array of strings: ["keyword1", "keyword2", ...]
 Make them specific, 2-5 words, realistic search phrases. No markdown, no explanation."""
-                resp = llm.complete(prompt, json_mode=True)
-                related = json.loads(resp.content)
-                if isinstance(related, list) and related:
-                    valid = [k.strip().lower() for k in related if isinstance(k, str) and len(k.strip()) > 3 and k.strip().lower() != keyword.lower()]
-                    if valid:
-                        added = kdb.record_expansion(keyword, valid, "llm_related", depth + 1)
-                        new_seeds_total += added
-                        if added:
-                            self._log(f"[scheduler]   +{added} seeds from LLM expansion")
-        except Exception as e:
-            self._log(f"[scheduler]   LLM expansion failed: {e}")
+                    resp = llm.complete(prompt, json_mode=True)
+                    related = json.loads(resp.content)
+                    if isinstance(related, list) and related:
+                        valid = self._rank_expansion_candidates(
+                            [
+                                k.strip().lower()
+                                for k in related
+                                if isinstance(k, str) and len(k.strip()) > 3 and k.strip().lower() != keyword.lower()
+                            ],
+                            min_quality=MIN_EXPANSION_QUALITY + 5,
+                            source="expand_llm_related",
+                        )
+                        if valid:
+                            added = kdb.record_expansion(keyword, valid[:5], "llm_related", depth + 1)
+                            new_seeds_total += added
+                            if added:
+                                self._log(f"[scheduler]   +{added} seeds from LLM expansion")
+            except Exception as e:
+                self._log(f"[scheduler]   LLM expansion failed: {e}")
 
         return new_seeds_total
+
+    def _rank_expansion_candidates(
+        self,
+        candidates: list[str],
+        min_quality: float,
+        source: str,
+    ) -> list[str]:
+        ranked: list[tuple[float, str]] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            kw = " ".join(str(candidate).lower().split())
+            if not kw or kw in seen:
+                continue
+            seen.add(kw)
+            if not kdb.is_scanworthy_seed(
+                kw,
+                domain="discovered",
+                source=source,
+                min_score=min_quality,
+            ):
+                continue
+            score = kdb.score_keyword_scan_priority(
+                kw,
+                domain="discovered",
+                source=source,
+            )
+            ranked.append((score, kw))
+        ranked.sort(reverse=True)
+        return [kw for _, kw in ranked]
 
     def _analyze_gaps(self, keyword: str, report) -> None:
         """
@@ -383,7 +429,8 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
     def _run_discovery(self) -> int:
         from pipeline.stages.keyword_scanner import SeedDiscovery
         disc = SeedDiscovery(log_fn=self._log)
-        result = disc.run_all(llm_count=20)
+        llm_enabled = os.environ.get("ALLOW_LLM_SEED_DISCOVERY", "0").strip().lower() in {"1", "true", "yes"}
+        result = disc.run_all(llm=llm_enabled, llm_count=20)
         return result.get("total_added", 0)
 
     def _interruptible_sleep(self, seconds: float) -> None:

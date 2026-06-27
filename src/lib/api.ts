@@ -237,7 +237,7 @@ export function hasConfiguredBackend(): boolean {
 export function ensureScannerRunning(): Promise<Record<string, unknown>> {
   return request('/api/scheduler/start', {
     method: 'POST',
-    body: JSON.stringify({ mode: 'continuous', batch_size: 5 }),
+    body: JSON.stringify({ mode: 'performance', batch_size: 5 }),
   });
 }
 

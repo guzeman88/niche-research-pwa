@@ -495,6 +495,43 @@ _PASSION_TERMS = {
     "zodiac",
 }
 
+_RETAILER_NOISE_TERMS = {
+    "amazon",
+    "walmart",
+    "target",
+    "five below",
+    "temu",
+    "shein",
+    "costco",
+    "etsy.com",
+}
+
+_LOCAL_NOISE_TERMS = {
+    "near me",
+    "nearby",
+    "local",
+    "in store",
+    "same day",
+}
+
+_LOW_BUYER_INTENT_PHRASES = {
+    "how to",
+    "tutorial",
+    "ideas for",
+    "meaning of",
+    "definition",
+    "reddit",
+    "pinterest",
+}
+
+_SOURCE_QUALITY_BOOST = {
+    "expand_google_suggest": 8.0,
+    "etsy_autocomplete_bootstrap": 7.0,
+    "etsy_trending_page": 10.0,
+    "library": 3.0,
+    "llm_brainstorm": -30.0,
+}
+
 _DOMAIN_PRIORITY_BOOST = {
     "professions": 9,
     "occasions_holidays": 8,
@@ -542,6 +579,77 @@ def score_keyword_buyer_intent(keyword: str) -> float:
         score -= 25.0
 
     return _clamp_score(score)
+
+
+def _contains_any_phrase(keyword: str, phrases: set[str]) -> bool:
+    return any(phrase in keyword for phrase in phrases)
+
+
+def score_keyword_scan_priority(
+    keyword: str,
+    domain: str | None = None,
+    priority: int | None = None,
+    source: str | None = None,
+) -> float:
+    """
+    Pre-scan quality score for deciding what deserves scanner time.
+
+    This intentionally favors buyer-ready Etsy searches and pushes noisy
+    retailer/local/research phrases out of the high-throughput queue.
+    """
+    kw = " ".join(keyword.lower().split())
+    words = kw.split()
+    score = _score_seed_priority(keyword, domain, priority)
+
+    if _contains_any_phrase(kw, _RETAILER_NOISE_TERMS):
+        score -= 42.0
+    if _contains_any_phrase(kw, _LOCAL_NOISE_TERMS):
+        score -= 38.0
+    if _contains_any_phrase(kw, _LOW_BUYER_INTENT_PHRASES):
+        score -= 28.0
+    if ":" in kw:
+        score -= 18.0
+
+    word_count = len(words)
+    if 2 <= word_count <= 5:
+        score += 8.0
+    elif word_count == 1:
+        score -= 22.0
+    elif word_count > 7:
+        score -= 24.0
+
+    if any(term in kw for term in _PRODUCT_TERMS):
+        score += 9.0
+    if any(term in kw for term in _BUYER_INTENT_TERMS):
+        score += 7.0
+    if any(term in kw for term in _PASSION_TERMS):
+        score += 5.0
+
+    source_key = (source or "").lower()
+    score += _SOURCE_QUALITY_BOOST.get(source_key, 0.0)
+    if source_key.startswith("compound_"):
+        score += 4.0
+    if source_key.startswith("expand_") and source_key != "expand_google_suggest":
+        score -= 4.0
+
+    return _clamp_score(score)
+
+
+def is_scanworthy_seed(
+    keyword: str,
+    domain: str | None = None,
+    priority: int | None = None,
+    source: str | None = None,
+    min_score: float = 58.0,
+) -> bool:
+    kw = " ".join(keyword.lower().split())
+    if not kw or len(kw) < 4:
+        return False
+    if _contains_any_phrase(kw, _LOCAL_NOISE_TERMS):
+        return False
+    if _contains_any_phrase(kw, _RETAILER_NOISE_TERMS):
+        return False
+    return score_keyword_scan_priority(kw, domain, priority, source) >= min_score
 
 
 def _score_supply_gap(listing_count: int | None) -> float:
@@ -928,31 +1036,38 @@ def rebuild_gap_scores() -> int:
 
 # ── Queue / batch selection ───────────────────────────────────────────────────
 
-def get_unscanned(limit: int = 20, domain: Optional[str] = None) -> list[str]:
+def get_unscanned(limit: int = 20, domain: Optional[str] = None, min_quality: float = 58.0) -> list[str]:
     with _conn() as con:
-        candidate_limit = max(limit * 12, 100)
+        candidate_limit = max(limit * 50, 500)
         if domain:
             rows = con.execute("""
-                SELECT s.keyword, s.domain, s.priority, s.added_at FROM seeds s
+                SELECT s.keyword, s.domain, s.source, s.priority, s.added_at FROM seeds s
                 WHERE s.domain=?
                   AND NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
                 ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
             """, (domain, candidate_limit)).fetchall()
         else:
             rows = con.execute("""
-                SELECT s.keyword, s.domain, s.priority, s.added_at FROM seeds s
+                SELECT s.keyword, s.domain, s.source, s.priority, s.added_at FROM seeds s
                 WHERE NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
                 ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
             """, (candidate_limit,)).fetchall()
-        ranked = sorted(
-            rows,
-            key=lambda r: (
-                _score_seed_priority(r["keyword"], r["domain"], r["priority"]),
-                r["added_at"] or "",
-            ),
-            reverse=True,
-        )
-        return [r["keyword"] for r in ranked[:limit]]
+        scored = [
+            (
+                score_keyword_scan_priority(r["keyword"], r["domain"], r["priority"], r["source"]),
+                r,
+            )
+            for r in rows
+        ]
+        ranked = sorted(scored, key=lambda item: (item[0], item[1]["added_at"] or ""), reverse=True)
+        qualified = [r["keyword"] for score, r in ranked if score >= min_quality]
+        if len(qualified) >= limit:
+            return qualified[:limit]
+
+        # Do not starve the scanner if the queue is temporarily weak; fill the
+        # tail with the best remaining candidates after the strong ones.
+        fallback = [r["keyword"] for score, r in ranked if score < min_quality]
+        return (qualified + fallback)[:limit]
 
 
 def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> list[str]:
@@ -1016,6 +1131,10 @@ def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[s
             WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
               AND sc.scanned_at < ?
               AND (
+                s.source != 'llm_brainstorm'
+                OR COALESCE(sc.market_evidence_score, 0) >= 55
+              )
+              AND (
                 COALESCE(sc.market_evidence_score, 0) < 55
                 OR COALESCE(sc.avg_price_usd, 0) <= 0
                 OR COALESCE(sc.monthly_revenue_usd, 0) <= 0
@@ -1049,7 +1168,7 @@ def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
 
     _add(get_breakouts(limit=count))
     _add(get_profit_evidence_gaps(limit=count))
-    _add(get_unscanned(limit=count))
+    _add(get_unscanned(limit=count, min_quality=62.0))
     _add(get_stale(days=stale_days, limit=count))
     return result[:count]
 

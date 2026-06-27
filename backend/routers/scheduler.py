@@ -19,13 +19,13 @@ def status():
     return SchedulerStatus(
         running=s.get("running", False),
         paused=s.get("paused", False),
-        mode=s.get("mode", "continuous"),
+        mode=s.get("mode", "performance"),
         batch_size=s.get("batch_size", 5),
         keywords_scanned=s.get("keywords_scanned", 0),
         new_seeds_found=s.get("new_seeds_found", 0),
         current_keyword=s.get("current_keyword"),
         started_at=s.get("started_at"),
-        interval_s=s.get("interval_s", 90),
+        interval_s=s.get("interval_s", 30),
         errors=s.get("errors", []),
     )
 
@@ -34,7 +34,7 @@ def status():
 def start(action: SchedulerAction = SchedulerAction()):
     """Start the scheduler."""
     result = start_scheduler(
-        mode=action.mode or "continuous",
+        mode=action.mode or "performance",
         batch_size=action.batch_size or 5,
     )
     return result

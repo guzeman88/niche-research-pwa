@@ -1,5 +1,5 @@
 param(
-  [string]$LocalUrl = "http://127.0.0.1:8000",
+  [string]$LocalUrl = "http://127.0.0.1:8001",
   [string]$LogPath = ""
 )
 

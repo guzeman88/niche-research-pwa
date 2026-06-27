@@ -11,6 +11,8 @@ PWA_DIR = Path(__file__).resolve().parents[1]
 BACKEND = PWA_DIR / "backend"
 LOG_FILE = PWA_DIR / "scanner.log"
 PWA_URL = "https://etsy-niches.netlify.app"
+BACKEND_PORT = int(os.environ.get("NICHE_BACKEND_PORT", "8001"))
+BACKEND_URL = f"http://localhost:{BACKEND_PORT}"
 
 _procs = []
 _log_lines = []
@@ -29,7 +31,7 @@ def log(msg: str) -> None:
 def _backend_ready() -> bool:
     try:
         import httpx
-        r = httpx.get("http://localhost:8000/api/stats/health", timeout=3)
+        r = httpx.get(f"{BACKEND_URL}/api/stats/health", timeout=3)
         return r.status_code == 200
     except Exception:
         return False
@@ -37,13 +39,13 @@ def _backend_ready() -> bool:
 
 def start_backend():
     if _backend_ready():
-        log("Backend already running on http://localhost:8000")
+        log(f"Backend already running on {BACKEND_URL}")
         return
     log("Starting backend API...")
     env = os.environ.copy()
     env["PYTHONPATH"] = str(BACKEND)
     p = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"],
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(BACKEND_PORT)],
         cwd=str(BACKEND), env=env,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NO_WINDOW,
@@ -57,8 +59,8 @@ def start_scheduler():
     import httpx
     for i in range(10):
         try:
-            r = httpx.post("http://localhost:8000/api/scheduler/start",
-                          json={"mode": "continuous", "batch_size": 5}, timeout=5)
+            r = httpx.post(f"{BACKEND_URL}/api/scheduler/start",
+                          json={"mode": "performance", "batch_size": 5}, timeout=5)
             if r.status_code == 200:
                 log(f"Scheduler started: {r.json().get('running', False)}")
                 return
@@ -73,7 +75,7 @@ def start_tunnel():
         log("cloudflared not found — tunnel skipped")
         return
     p = subprocess.Popen(
-        [cloudflared, "tunnel", "--url", "http://localhost:8000", "--no-autoupdate"],
+        [cloudflared, "tunnel", "--url", BACKEND_URL, "--no-autoupdate"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
@@ -97,7 +99,7 @@ def refresh_pwa_data():
         data_result = subprocess.run(
             [node, "scripts/build-data.cjs"],
             cwd=str(pwa_dir), capture_output=True, timeout=60, creationflags=subprocess.CREATE_NO_WINDOW,
-            env={**os.environ, "VITE_API_URL": "http://localhost:8000"},
+            env={**os.environ, "VITE_API_URL": BACKEND_URL},
         )
         if data_result.returncode != 0:
             log(f"PWA data build failed: {(data_result.stderr or data_result.stdout).decode(errors='replace')[:300]}")
@@ -155,11 +157,11 @@ def stop_all():
 def get_status() -> str:
     try:
         import httpx
-        r = httpx.get("http://localhost:8000/api/scheduler/status", timeout=5)
+        r = httpx.get(f"{BACKEND_URL}/api/scheduler/status", timeout=5)
         if r.status_code == 200:
             d = r.json()
             return f"Scanner: {'Running' if d.get('running') else 'Stopped'} | "
-        r2 = httpx.get("http://localhost:8000/api/stats", timeout=5)
+        r2 = httpx.get(f"{BACKEND_URL}/api/stats", timeout=5)
         if r2.status_code == 200:
             s = r2.json()
             return f"Scanner: Running | Keywords: {s.get('total_seeds',0)} | Scanned: {s.get('scanned',0)} | Coverage: {s.get('coverage_pct',0):.0f}%"

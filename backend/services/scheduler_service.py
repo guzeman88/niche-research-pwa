@@ -10,6 +10,8 @@ from typing import Callable
 from services.research_service import _emit
 
 _scheduler = None
+DEFAULT_SCHEDULER_MODE = "performance"
+DEFAULT_BATCH_SIZE = 5
 
 
 def _scheduler_log(msg: str) -> None:
@@ -29,19 +31,34 @@ def get_scheduler():
         from pipeline.autonomous_scheduler import AutonomousScheduler
         _scheduler = AutonomousScheduler(
             store_slug="__global__",
-            mode="continuous",
-            batch_size=5,
+            mode=DEFAULT_SCHEDULER_MODE,
+            batch_size=DEFAULT_BATCH_SIZE,
             log_fn=_scheduler_log,
         )
     return _scheduler
 
 
-def start_scheduler(mode: str = "continuous", batch_size: int = 5) -> dict:
+def _apply_scheduler_settings(s, mode: str, batch_size: int) -> bool:
+    changed = False
+    status = s.status()
+    if mode and status.get("mode") != mode:
+        s.set_mode(mode)
+        changed = True
+    if batch_size and status.get("batch_size") != batch_size:
+        s.set_batch_size(batch_size)
+        changed = True
+    return changed
+
+
+def start_scheduler(mode: str = DEFAULT_SCHEDULER_MODE, batch_size: int = DEFAULT_BATCH_SIZE) -> dict:
     s = get_scheduler()
     if s.is_running():
+        changed = _apply_scheduler_settings(s, mode, batch_size)
         if s.is_paused():
             s.resume()
             return {"status": "resumed", "message": "Scheduler was paused and is now running", **s.status()}
+        if changed:
+            return {"status": "retuned", "message": "Scheduler settings updated while running", **s.status()}
         return {"status": "already_running", "message": "Scheduler is already running", **s.status()}
 
     s.set_mode(mode)
@@ -50,14 +67,17 @@ def start_scheduler(mode: str = "continuous", batch_size: int = 5) -> dict:
     return s.status()
 
 
-def ensure_scheduler_running(mode: str = "continuous", batch_size: int = 5) -> dict:
+def ensure_scheduler_running(mode: str = DEFAULT_SCHEDULER_MODE, batch_size: int = DEFAULT_BATCH_SIZE) -> dict:
     """Idempotently keep the scanner alive in the expected continuous mode."""
     s = get_scheduler()
     if not s.is_running():
         return start_scheduler(mode=mode, batch_size=batch_size)
+    changed = _apply_scheduler_settings(s, mode, batch_size)
     if s.is_paused():
         s.resume()
         return {"status": "resumed", "message": "Scheduler was paused and is now running", **s.status()}
+    if changed:
+        return {"status": "retuned", "message": "Scheduler settings updated while running", **s.status()}
     return {"status": "running", "message": "Scheduler is running", **s.status()}
 
 

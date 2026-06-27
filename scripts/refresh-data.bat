@@ -2,7 +2,7 @@
 cd /d "%~dp0.."
 
 echo [%date% %time%] Pulling fresh data from local scanner...
-set VITE_API_URL=http://localhost:8000
+set VITE_API_URL=http://localhost:8001
 node scripts\build-data.cjs
 
 echo.

@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Hostname,
   [string]$TunnelName = "etsy-niches-api",
-  [string]$LocalUrl = "http://127.0.0.1:8000"
+  [string]$LocalUrl = "http://127.0.0.1:8001"
 )
 
 $ErrorActionPreference = "Stop"

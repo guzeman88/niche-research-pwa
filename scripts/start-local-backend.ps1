@@ -1,8 +1,8 @@
 param(
-  [int]$Port = 8000,
+  [int]$Port = 8001,
   [switch]$NoScheduler,
   [int]$SchedulerBatchSize = 5,
-  [string]$SchedulerMode = "continuous"
+  [string]$SchedulerMode = "performance"
 )
 
 $ErrorActionPreference = "Stop"

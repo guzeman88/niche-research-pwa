@@ -6,7 +6,7 @@ os.chdir(os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 from services.scheduler_service import start_scheduler
 
-MODE = os.environ.get('SCHEDULER_MODE', 'burst')
+MODE = os.environ.get('SCHEDULER_MODE', 'performance')
 BATCH = int(os.environ.get('SCHEDULER_BATCH', '5'))
 
 print(f'[daemon] Starting scheduler: mode={MODE}, batch={BATCH}')
