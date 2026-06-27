@@ -75,6 +75,16 @@ function apiCandidates(): string[] {
   return import.meta.env.DEV ? [''] : [];
 }
 
+function tunnelBypassHeaders(baseUrl: string): Record<string, string> {
+  try {
+    return new URL(baseUrl).hostname.endsWith('.loca.lt')
+      ? { 'bypass-tunnel-reminder': 'true' }
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 async function fetchApi(path: string, options?: RequestInit, timeoutMs = 3000): Promise<Response | null> {
   const isGet = !options?.method || options.method === 'GET';
   const sep = path.includes('?') ? '&' : '?';
@@ -84,7 +94,7 @@ async function fetchApi(path: string, options?: RequestInit, timeoutMs = 3000): 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        headers: { 'Content-Type': 'application/json', ...tunnelBypassHeaders(baseUrl), ...options?.headers },
         ...options,
         signal: controller.signal,
       });
