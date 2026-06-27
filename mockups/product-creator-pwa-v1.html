@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Product Creator PWA Mockup</title>
+<link rel="icon" href="data:,">
+<style>
+:root{
+  --bg:#202631;
+  --app:#222a36;
+  --panel:#29313f;
+  --panel-2:#242c38;
+  --line:#465365;
+  --line-soft:#394656;
+  --text:#f4f7fb;
+  --muted:#aab8ca;
+  --dim:#75859a;
+  --primary:#8fb2de;
+  --green:#a9c88f;
+  --amber:#f0cf89;
+  --radius:8px;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%;margin:0}
+body{
+  background:linear-gradient(135deg,#1c222c,#252d3a 48%,#1f2631);
+  color:var(--text);
+  font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;
+  letter-spacing:0;
+  display:flex;
+  justify-content:center;
+}
+button,textarea{font:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.phone{
+  width:100%;
+  max-width:430px;
+  min-height:100svh;
+  background:var(--app);
+  box-shadow:0 0 0 1px rgba(255,255,255,.04),0 24px 80px rgba(0,0,0,.35);
+  position:relative;
+  overflow:hidden;
+}
+.screen{
+  height:100svh;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+}
+.top{
+  background:rgba(36,44,56,.92);
+  border-bottom:1px solid var(--line);
+  padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
+}
+.store{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.store h1{
+  margin:0;
+  font-size:19px;
+  line-height:1.08;
+  font-weight:900;
+}
+.store .sub{
+  margin-top:4px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:750;
+}
+.count{
+  color:var(--dim);
+  font-size:11px;
+  font-weight:850;
+  white-space:nowrap;
+}
+.workspace-tabs{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:4px;
+  margin-top:14px;
+  padding:4px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:rgba(32,38,49,.54);
+}
+.workspace-tabs button{
+  min-width:0;
+  min-height:38px;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:900;
+}
+.workspace-tabs button.active{
+  color:var(--text);
+  background:rgba(143,178,222,.15);
+  box-shadow:inset 0 0 0 1px rgba(143,178,222,.32);
+}
+.content{
+  min-height:0;
+  overflow:auto;
+  padding:14px 16px 94px;
+}
+.view{display:none}
+.view.active{display:block}
+.bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:10px;
+}
+.bar h2{
+  margin:0;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.tiny{
+  color:var(--dim);
+  font-size:11px;
+  font-weight:850;
+}
+.panel{
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:rgba(41,49,63,.88);
+}
+.keyword-list{
+  display:grid;
+  gap:1px;
+  overflow:hidden;
+}
+.row{
+  width:100%;
+  min-height:48px;
+  display:grid;
+  grid-template-columns:2rem minmax(0,1fr) 2.8rem;
+  align-items:center;
+  gap:10px;
+  border:0;
+  border-bottom:1px solid rgba(70,83,101,.55);
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  padding:0 12px;
+}
+.row:last-child{border-bottom:0}
+.row:active{background:rgba(143,178,222,.1)}
+.rank,.score{
+  font-size:12px;
+  font-weight:900;
+  font-variant-numeric:tabular-nums;
+}
+.rank{color:var(--dim)}
+.score{text-align:right;color:var(--green)}
+.kw{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:13px;
+  font-weight:850;
+}
+.creator-head{
+  display:grid;
+  gap:9px;
+  margin-bottom:12px;
+}
+.back{
+  width:max-content;
+  min-height:34px;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:rgba(32,38,49,.45);
+  color:var(--muted);
+  padding:0 11px;
+  font-size:12px;
+  font-weight:900;
+}
+.creator-title{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:10px;
+}
+.creator-title h2{
+  margin:0;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.creator-title h3{
+  margin:4px 0 0;
+  font-size:22px;
+  line-height:1.08;
+  font-weight:950;
+}
+.step{
+  padding:13px;
+  border-bottom:1px solid rgba(70,83,101,.6);
+}
+.step:last-child{border-bottom:0}
+.step-title{
+  margin:0 0 10px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.chip{
+  min-height:36px;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:rgba(32,38,49,.45);
+  color:var(--text);
+  padding:0 12px;
+  font-size:13px;
+  font-weight:900;
+}
+.chip.active{
+  border-color:rgba(143,178,222,.5);
+  background:rgba(143,178,222,.16);
+}
+.ideas{
+  display:grid;
+  gap:8px;
+}
+.idea{
+  width:100%;
+  min-height:52px;
+  border:1px solid var(--line-soft);
+  border-radius:7px;
+  background:rgba(32,38,49,.36);
+  color:var(--text);
+  text-align:left;
+  padding:0 12px;
+  font-size:13px;
+  font-weight:900;
+}
+.idea.active{
+  border-color:rgba(169,200,143,.55);
+  background:rgba(169,200,143,.12);
+}
+.sheet{
+  margin-top:14px;
+  display:grid;
+  gap:10px;
+}
+.selected{
+  padding:13px;
+}
+.label{
+  color:var(--dim);
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.value{
+  margin-top:5px;
+  font-size:18px;
+  line-height:1.1;
+  font-weight:950;
+}
+.save{
+  width:100%;
+  min-height:42px;
+  margin-top:12px;
+  border:1px solid rgba(143,178,222,.38);
+  border-radius:7px;
+  background:rgba(143,178,222,.17);
+  color:var(--text);
+  font-weight:950;
+}
+.toggle{
+  width:100%;
+  min-height:40px;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:transparent;
+  color:var(--muted);
+  font-weight:900;
+}
+.fold{
+  display:none;
+  padding-top:10px;
+  margin-top:10px;
+  border-top:1px solid rgba(70,83,101,.55);
+}
+.fold.open{display:block}
+.metric{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:8px;
+  padding:8px 0;
+  border-bottom:1px solid rgba(70,83,101,.38);
+  font-size:12px;
+  font-weight:850;
+}
+.metric:last-child{border-bottom:0}
+.metric span:first-child{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--muted);
+}
+.mockup{
+  width:100%;
+  min-height:92px;
+  resize:vertical;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:rgba(32,38,49,.58);
+  color:var(--text);
+  padding:10px;
+  font-size:12px;
+  line-height:1.45;
+}
+.bottom{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:8px 14px calc(8px + env(safe-area-inset-bottom));
+  background:linear-gradient(to top,rgba(32,38,49,.98),rgba(32,38,49,.86));
+  border-top:1px solid rgba(70,83,101,.7);
+}
+.bottom-inner{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:6px;
+  max-width:390px;
+  margin:0 auto;
+  padding:5px;
+  border:1px solid rgba(96,120,147,.55);
+  border-radius:12px;
+  background:rgba(36,44,56,.86);
+}
+.nav{
+  min-width:0;
+  min-height:54px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:var(--muted);
+  display:grid;
+  place-items:center;
+  gap:3px;
+  font-size:11px;
+  font-weight:850;
+}
+.nav.active{
+  color:var(--text);
+  background:rgba(143,178,222,.13);
+  box-shadow:inset 0 0 0 1px rgba(143,178,222,.22);
+}
+.nav span:first-child{
+  width:18px;
+  height:18px;
+  border:2px solid currentColor;
+  border-radius:5px;
+  opacity:.9;
+}
+@media(min-width:700px){
+  body{padding:24px 0}
+  .phone{
+    min-height:844px;
+    height:844px;
+    border-radius:20px;
+  }
+  .screen{height:844px}
+}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="screen">
+    <header class="top">
+      <div class="store">
+        <div>
+          <h1>Pet Friendly Gift Studio</h1>
+          <div class="sub">Pet Friendly</div>
+        </div>
+        <div class="count">23</div>
+      </div>
+      <div class="workspace-tabs" aria-label="Store workspace">
+        <button>Store</button>
+        <button class="active">Products</button>
+        <button>Listings</button>
+      </div>
+    </header>
+
+    <section class="content">
+      <div id="keywordView" class="view active">
+        <div class="bar">
+          <h2>Keywords</h2>
+          <span class="tiny">strength</span>
+        </div>
+        <div class="panel">
+          <div class="keyword-list" id="keywordList"></div>
+        </div>
+      </div>
+
+      <div id="creatorView" class="view">
+        <div class="creator-head">
+          <button id="backBtn" class="back">Keywords</button>
+          <div class="creator-title">
+            <div>
+              <h2>Product Creator</h2>
+              <h3 id="activeKeyword">eco-friendly pet supplies</h3>
+            </div>
+            <span class="tiny">real</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="step">
+            <div class="step-title">Brainstorm</div>
+            <div class="chips" id="productTypes"></div>
+          </div>
+          <div class="step">
+            <div class="step-title">Ideas</div>
+            <div class="ideas" id="ideaList"></div>
+          </div>
+        </div>
+
+        <div class="sheet">
+          <div class="panel selected">
+            <div class="label">Selected</div>
+            <div class="value" id="selectedIdea">Choose idea</div>
+            <button id="saveBtn" class="save">Save</button>
+          </div>
+
+          <div class="panel selected">
+            <button class="toggle" data-fold="mockup">Mockup</button>
+            <div class="fold" id="mockupFold">
+              <textarea id="mockupText" class="mockup"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="bottom" aria-label="Primary">
+      <div class="bottom-inner">
+        <button class="nav"><span></span><span>Home</span></button>
+        <button class="nav"><span></span><span>Keywords</span></button>
+        <button class="nav"><span></span><span>Generator</span></button>
+        <button class="nav active"><span></span><span>Stores</span></button>
+      </div>
+    </nav>
+  </div>
+</div>
+
+<script>
+const keywords = [
+  {name:'eco-friendly pet supplies', score:84, related:[['cat lover gift',78],['pet-friendly gift baskets',75],['pet rescue tote bags',73],['pet ownership stickers',76]]},
+  {name:'handcrafted stickers featuring pet breeds', score:84, related:[['pet-friendly phone case stickers',84],['cute pet superhero stickers set',80],['pet ownership stickers',76]]},
+  {name:'pet-friendly phone case stickers', score:84, related:[['handcrafted stickers featuring pet breeds',84],['trendy pet stickers',80],['cute pet superhero stickers set',80]]},
+  {name:'pet micro-identity bookmark holder', score:81, related:[['pet adoption guide',76],['pet grooming guide',76],['cat lover gift',78]]},
+  {name:'pet ownership stickers', score:76, related:[['pet-friendly phone case stickers',84],['pet ownership tote bag',76],['cute pet superhero stickers set',80]]},
+  {name:'pet-friendly gift baskets', score:75, related:[['cat lover gift',78],['dog mom travel essentials',73],['eco-friendly pet supplies',84]]},
+  {name:'pet rescue tote bags', score:73, related:[['seasonal pet supplies tote bag',73],['pet ownership tote bag',76],['cat lover gift',78]]},
+  {name:'summer-themed pet accessories', score:73, related:[['pet-friendly home decor',72],['pet-friendly gift baskets',75],['seasonal pet supplies tote bag',73]]}
+];
+
+const types = ['Wall Art','Digital','Mug','Sticker','Apparel'];
+const ideas = {
+  'Wall Art':['Pet name print','Rescue quote print','Breed line art','Adoption poster'],
+  'Digital':['Care checklist','Travel planner','Adoption guide','Sitter sheet'],
+  'Mug':['Dog mom mug','Cat dad mug','Rescue mug','Custom mug'],
+  'Sticker':['Breed set','Rescue sticker','Pet icons','Phone decal'],
+  'Apparel':['Dog walk tee','Rescue hoodie','Breed sweatshirt','Pet parent hat']
+};
+
+let activeKeyword = keywords[0];
+let activeType = types[0];
+let activeIdea = '';
+
+const keywordView = document.getElementById('keywordView');
+const creatorView = document.getElementById('creatorView');
+const keywordList = document.getElementById('keywordList');
+const activeKeywordEl = document.getElementById('activeKeyword');
+const productTypes = document.getElementById('productTypes');
+const ideaList = document.getElementById('ideaList');
+const selectedIdea = document.getElementById('selectedIdea');
+const mockupText = document.getElementById('mockupText');
+
+function renderKeywords(){
+  keywordList.innerHTML = keywords.map((item,index)=>`
+    <button class="row" data-keyword="${item.name}">
+      <span class="rank">${index+1}</span>
+      <span class="kw">${item.name}</span>
+      <span class="score">${item.score}</span>
+    </button>
+  `).join('');
+}
+
+function openCreator(name){
+  activeKeyword = keywords.find(item=>item.name===name) || keywords[0];
+  activeType = types[0];
+  activeIdea = '';
+  keywordView.classList.remove('active');
+  creatorView.classList.add('active');
+  renderCreator();
+  document.querySelector('.content').scrollTop = 0;
+}
+
+function renderCreator(){
+  activeKeywordEl.textContent = activeKeyword.name;
+  productTypes.innerHTML = types.map(type=>`
+    <button class="chip ${type===activeType?'active':''}" data-type="${type}">${type}</button>
+  `).join('');
+  ideaList.innerHTML = ideas[activeType].map(item=>`
+    <button class="idea ${item===activeIdea?'active':''}" data-idea="${item}">${item}</button>
+  `).join('');
+  selectedIdea.textContent = activeIdea || 'Choose idea';
+  mockupText.value = activeIdea
+    ? `${activeIdea}. ${activeKeyword.name}. ${activeType}.`
+    : `${activeKeyword.name}.`;
+}
+
+renderKeywords();
+
+keywordList.addEventListener('click',event=>{
+  const row = event.target.closest('[data-keyword]');
+  if(row) openCreator(row.dataset.keyword);
+});
+
+productTypes.addEventListener('click',event=>{
+  const button = event.target.closest('[data-type]');
+  if(!button) return;
+  activeType = button.dataset.type;
+  activeIdea = '';
+  renderCreator();
+});
+
+ideaList.addEventListener('click',event=>{
+  const button = event.target.closest('[data-idea]');
+  if(!button) return;
+  activeIdea = button.dataset.idea;
+  renderCreator();
+});
+
+document.getElementById('backBtn').addEventListener('click',()=>{
+  creatorView.classList.remove('active');
+  keywordView.classList.add('active');
+  document.querySelector('.content').scrollTop = 0;
+});
+
+document.querySelectorAll('[data-fold]').forEach(button=>{
+  button.addEventListener('click',()=>{
+    const fold = document.getElementById(button.dataset.fold + 'Fold');
+    fold.classList.toggle('open');
+  });
+});
+
+document.getElementById('saveBtn').addEventListener('click',()=>{
+  if(!activeIdea) return;
+  const button = document.getElementById('saveBtn');
+  button.textContent = 'Saved';
+  setTimeout(()=>button.textContent='Save',900);
+});
+</script>
+</body>
+</html>
