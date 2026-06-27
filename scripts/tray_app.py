@@ -26,7 +26,19 @@ def log(msg: str) -> None:
             f.write(line + "\n")
     except: pass
 
+def _backend_ready() -> bool:
+    try:
+        import httpx
+        r = httpx.get("http://localhost:8000/api/stats/health", timeout=3)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
 def start_backend():
+    if _backend_ready():
+        log("Backend already running on http://localhost:8000")
+        return
     log("Starting backend API...")
     env = os.environ.copy()
     env["PYTHONPATH"] = str(BACKEND)
@@ -46,7 +58,7 @@ def start_scheduler():
     for i in range(10):
         try:
             r = httpx.post("http://localhost:8000/api/scheduler/start",
-                          json={"mode": "burst", "batch_size": 5}, timeout=5)
+                          json={"mode": "continuous", "batch_size": 5}, timeout=5)
             if r.status_code == 200:
                 log(f"Scheduler started: {r.json().get('running', False)}")
                 return

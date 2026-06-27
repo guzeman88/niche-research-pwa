@@ -15,7 +15,7 @@ export default function Stores() {
   const [selected, setSelected] = useState<string>('')
   const current = stores.find(s => s.slug === selected)
   const showDetail = !!current
-  const refresh = () => { qc.invalidateQueries(); return Promise.resolve() }
+  const refresh = () => qc.invalidateQueries({ refetchType: 'active' })
 
   const colorFor = (slug: string) => COLORS[Math.max(0, stores.findIndex(s => s.slug === slug)) % COLORS.length]
 

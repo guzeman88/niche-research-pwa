@@ -5,6 +5,7 @@ Serves REST API + SSE for the niche research Progressive Web App.
 from __future__ import annotations
 
 import sys
+import asyncio
 from pathlib import Path
 
 # Ensure backend/ is on sys.path so all internal imports resolve
@@ -46,6 +47,26 @@ app.include_router(stream.router)
 app.include_router(export.router)
 app.include_router(stores.router)
 app.include_router(store_ideas.router)
+
+
+async def _scheduler_watchdog() -> None:
+    """Keep the background scanner alive for long-running local/API processes."""
+    import os
+
+    interval_s = max(15, int(os.environ.get("SCHEDULER_WATCHDOG_INTERVAL", "60")))
+    mode = os.environ.get("SCHEDULER_MODE", "continuous")
+    batch_size = int(os.environ.get("SCHEDULER_BATCH_SIZE", "5"))
+    while True:
+        await asyncio.sleep(interval_s)
+        try:
+            from services.scheduler_service import ensure_scheduler_running
+            result = ensure_scheduler_running(mode=mode, batch_size=batch_size)
+            if result.get("status") not in {"running", "already_running"}:
+                print(f"[watchdog] Scheduler ensure result: {result}", flush=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[watchdog] Scheduler ensure failed: {exc}", flush=True)
 
 
 # ── Startup ─────────────────────────────────────────────────────────────────
@@ -123,6 +144,9 @@ async def startup():
             batch_size = int(os.environ.get("SCHEDULER_BATCH_SIZE", "5"))
             result = start_scheduler(mode=mode, batch_size=batch_size)
             print(f"[startup] Scheduler auto-start result: {result}")
+            if not hasattr(app.state, "scheduler_watchdog_task"):
+                app.state.scheduler_watchdog_task = asyncio.create_task(_scheduler_watchdog())
+                print("[startup] Scheduler watchdog started")
         except Exception as exc:
             print(f"[startup] Scheduler auto-start failed: {exc}", flush=True)
     else:
@@ -133,6 +157,9 @@ async def startup():
 async def shutdown():
     """Gracefully stop the scheduler if running."""
     try:
+        task = getattr(app.state, "scheduler_watchdog_task", None)
+        if task:
+            task.cancel()
         from services.scheduler_service import _scheduler
         if _scheduler and _scheduler.is_running():
             _scheduler.stop()

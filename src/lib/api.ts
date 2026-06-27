@@ -46,7 +46,8 @@ async function fetchStatic(path: string): Promise<any | null> {
   const staticPath = STATIC_MAP[path] || (path.startsWith('/api/keywords?') ? '/data/keywords.json' : null);
   if (!staticPath) return null;
   try {
-    const res = await fetch(staticPath);
+    const sep = staticPath.includes('?') ? '&' : '?';
+    const res = await fetch(`${staticPath}${sep}_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = await res.json();
     if (path === '/api/keywords/domains' && Array.isArray(data)) {
@@ -227,6 +228,17 @@ export function getStats(): Promise<StatsResponse> {
 
 export function getHealth(): Promise<HealthResponse> {
   return request('/api/stats/health');
+}
+
+export function hasConfiguredBackend(): boolean {
+  return import.meta.env.DEV || API_URLS.length > 0;
+}
+
+export function ensureScannerRunning(): Promise<Record<string, unknown>> {
+  return request('/api/scheduler/start', {
+    method: 'POST',
+    body: JSON.stringify({ mode: 'continuous', batch_size: 5 }),
+  });
 }
 
 // ── Stores ─────────────────────────────────────────────────────────────

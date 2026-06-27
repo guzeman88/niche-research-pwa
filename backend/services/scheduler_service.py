@@ -39,12 +39,26 @@ def get_scheduler():
 def start_scheduler(mode: str = "continuous", batch_size: int = 5) -> dict:
     s = get_scheduler()
     if s.is_running():
-        return {"status": "already_running", "message": "Scheduler is already running"}
+        if s.is_paused():
+            s.resume()
+            return {"status": "resumed", "message": "Scheduler was paused and is now running", **s.status()}
+        return {"status": "already_running", "message": "Scheduler is already running", **s.status()}
 
     s.set_mode(mode)
     s.set_batch_size(batch_size)
     s.start()
     return s.status()
+
+
+def ensure_scheduler_running(mode: str = "continuous", batch_size: int = 5) -> dict:
+    """Idempotently keep the scanner alive in the expected continuous mode."""
+    s = get_scheduler()
+    if not s.is_running():
+        return start_scheduler(mode=mode, batch_size=batch_size)
+    if s.is_paused():
+        s.resume()
+        return {"status": "resumed", "message": "Scheduler was paused and is now running", **s.status()}
+    return {"status": "running", "message": "Scheduler is running", **s.status()}
 
 
 def stop_scheduler() -> dict:

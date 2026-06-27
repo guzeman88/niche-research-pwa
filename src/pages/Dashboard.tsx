@@ -15,7 +15,7 @@ export default function Dashboard() {
   const qc = useQueryClient()
   const { data: stats } = useQuery<StatsResponse>({ queryKey: ['stats'], queryFn: getStats, refetchInterval: 15_000 })
   const { data: reports } = useQuery<ReportListItem[]>({ queryKey: ['reports'], queryFn: () => listReports('__global__', 12) })
-  const refresh = () => { qc.invalidateQueries(); return Promise.resolve() }
+  const refresh = () => qc.invalidateQueries({ refetchType: 'active' })
 
   const opportunities = (reports || []).sort((a, b) => numericScore(b.opportunity_score) - numericScore(a.opportunity_score)).slice(0, 8)
   const domains = (stats?.domains || []).sort((a: any, b: any) => (b.cnt || 0) - (a.cnt || 0)).slice(0, 6)

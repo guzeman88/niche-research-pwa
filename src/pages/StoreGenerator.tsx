@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createStore, getProfitableStoreIdeas } from '../lib/api'
 import Icon, { type IconName } from '../components/Icon'
+import PullToRefresh from '../components/PullToRefresh'
 import { fmtPrice, scoreColor } from '../lib/utils'
 import type { StoreIdea } from '../lib/storeIdeas'
 
@@ -27,6 +28,7 @@ export default function StoreGenerator() {
   const isLoading = profitableLoading
   const loadError = profitableError
   const bestConcept = concepts[0]
+  const refresh = () => queryClient.invalidateQueries({ refetchType: 'active' })
   const saveStore = useMutation({
     mutationFn: (concept: StoreIdea) => createStore(toStorePayload(concept)),
     onMutate: () => setSaveError(''),
@@ -40,6 +42,7 @@ export default function StoreGenerator() {
   })
 
   return (
+    <PullToRefresh onRefresh={refresh}>
     <div className="page">
       <div className="page-header">
         <div>
@@ -398,6 +401,7 @@ export default function StoreGenerator() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   )
 }
 

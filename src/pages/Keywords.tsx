@@ -106,8 +106,7 @@ export default function Keywords() {
   }
 
   const refresh = () => {
-    queryClient.invalidateQueries()
-    return Promise.resolve()
+    return queryClient.invalidateQueries({ refetchType: 'active' })
   }
 
   if (!keywords && !isLoading) return <KeywordsSkeleton />

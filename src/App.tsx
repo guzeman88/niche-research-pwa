@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import type { ReactNode } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import useScannerHeartbeat from './hooks/useScannerHeartbeat'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Keywords = lazy(() => import('./pages/Keywords'))
@@ -25,6 +26,8 @@ function page(element: ReactNode) {
 }
 
 export default function App() {
+  useScannerHeartbeat()
+
   return (
     <Routes>
       <Route element={<Layout />}>

@@ -57,7 +57,7 @@ export default function PullToRefresh({ onRefresh, children, disabled }: Props) 
         <div className={`flex items-center gap-2 px-4 py-2 rounded-full bg-surface-900/90 backdrop-blur border border-surface-600/60 shadow-lg ${refreshing ? 'animate-pulse' : ''}`}>
           <Icon name="refresh-cw" size={16} className={`text-primary-200 ${refreshing ? 'animate-spin' : ''}`} />
           <span className="text-[12px] font-semibold text-surface-100">
-            {refreshing ? 'Refreshing…' : pullDist > 50 ? 'Release to refresh' : 'Pull to refresh'}
+            {refreshing ? 'Refreshing...' : pullDist > 50 ? 'Release to refresh' : 'Pull to refresh'}
           </span>
         </div>
       </div>

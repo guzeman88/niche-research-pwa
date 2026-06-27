@@ -89,6 +89,11 @@
     Cache-Control = "no-store, max-age=0, must-revalidate"
 
 [[headers]]
+  for = "/data/*.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0, must-revalidate"
+
+[[headers]]
   for = "/asset-missing.js"
   [headers.values]
     Cache-Control = "no-store, max-age=0, must-revalidate"
