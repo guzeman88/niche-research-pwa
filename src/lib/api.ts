@@ -102,24 +102,21 @@ async function fetchApi(path: string, options?: RequestInit, timeoutMs = 3000): 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const isGet = !options?.method || options.method === 'GET';
 
-  // Static snapshots keep first paint instant; API candidates handle live actions.
+  // Prefer live APIs in configured order: local-machine tunnel first, then backups
+  // such as Render. Static snapshots are only the final read fallback.
   if (isGet) {
-    const staticData = await fetchStatic(path.split('?')[0]);
-    if (staticData) {
-      wakeBackend();
-      return staticData as T;
-    }
-
     const res = await fetchApi(path, options);
     if (res?.ok) {
       const ct = res.headers.get('content-type') || '';
       if (ct.includes('application/json')) return res.json() as Promise<T>;
     }
-    if (!res) {
-      // Backend unreachable — fall back to static CDN
-      if (!import.meta.env.DEV) {
-        const staticData = await fetchStatic(path.split('?')[0]);
-        if (staticData) return staticData as T;
+
+    // Backend unreachable or returned non-JSON HTML — fall back to static CDN.
+    if (!import.meta.env.DEV) {
+      const staticData = await fetchStatic(path.split('?')[0]);
+      if (staticData) {
+        wakeBackend();
+        return staticData as T;
       }
     }
   }
