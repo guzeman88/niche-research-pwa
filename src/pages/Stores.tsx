@@ -52,7 +52,7 @@ const DESIGN_PROVIDERS = [
 
 type WorkspaceTab = typeof TABS[number]['id']
 type DesignProviderId = typeof DESIGN_PROVIDERS[number]['id']
-type ProviderStatus = 'ready' | 'needs_key' | 'manual' | 'unsupported'
+type ProviderStatus = 'ready' | 'needs_key' | 'manual' | 'unsupported' | 'billing_locked'
 
 export default function Stores() {
   const qc = useQueryClient()
@@ -1012,6 +1012,13 @@ function designProviderInfo(provider: DesignProviderId, providerStatuses: Design
       detail: backendStatus.detail,
     }
   }
+  if (backendStatus?.status === 'billing_locked') {
+    return {
+      status: 'billing_locked',
+      title: `${option.label} is cost locked`,
+      detail: backendStatus.detail,
+    }
+  }
   const envVars = backendStatus?.env_vars?.join(', ') || providerEnvVars(provider).join(', ')
   return {
     status: 'needs_key',
@@ -1024,6 +1031,7 @@ function providerStatusClass(status: ProviderStatus): string {
   if (status === 'ready') return 'border-accent-green/25 bg-accent-green/10 text-accent-green'
   if (status === 'manual') return 'border-accent-amber/25 bg-accent-amber/10 text-accent-amber'
   if (status === 'unsupported') return 'border-accent-amber/25 bg-accent-amber/10 text-accent-amber'
+  if (status === 'billing_locked') return 'border-accent-amber/25 bg-accent-amber/10 text-accent-amber'
   return 'border-surface-500/45 bg-surface-800/45 text-surface-300'
 }
 
@@ -1031,6 +1039,7 @@ function providerStatusLabel(status: ProviderStatus): string {
   if (status === 'ready') return 'Ready'
   if (status === 'manual') return 'Manual'
   if (status === 'unsupported') return 'Setup'
+  if (status === 'billing_locked') return 'Locked'
   return 'Needs key'
 }
 

@@ -27,7 +27,7 @@ ProviderId = Literal[
     "leonardo",
     "midjourney",
 ]
-ProviderStatus = Literal["ready", "needs_key", "manual", "unsupported"]
+ProviderStatus = Literal["ready", "needs_key", "manual", "unsupported", "billing_locked"]
 
 
 class ProviderInfo(BaseModel):
@@ -61,71 +61,85 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "ideogram": {
         "label": "Ideogram",
         "env_vars": ["IDEOGRAM_API_KEY"],
+        "free_tier_candidate": False,
         "detail": "Best for text-heavy merch designs and slogan concepts.",
     },
     "recraft": {
         "label": "Recraft",
         "env_vars": ["RECRAFT_API_TOKEN"],
+        "free_tier_candidate": False,
         "detail": "Best for clean production design assets and vector-style art.",
     },
     "krea": {
         "label": "Krea",
         "env_vars": ["KREA_API_KEY"],
+        "free_tier_candidate": False,
         "detail": "Best for testing multiple curated image models through one API.",
     },
     "openai": {
         "label": "OpenAI",
         "env_vars": ["OPENAI_API_KEY"],
+        "free_tier_candidate": False,
         "detail": "General-purpose high-quality image generation.",
     },
     "stability": {
         "label": "Stability",
         "env_vars": ["STABILITY_API_KEY"],
+        "free_tier_candidate": False,
         "detail": "Fast image generation using Stability AI image services.",
     },
     "firefly": {
         "label": "Firefly",
         "env_vars": ["FIREFLY_SERVICES_CLIENT_ID", "FIREFLY_SERVICES_CLIENT_SECRET"],
+        "free_tier_candidate": False,
         "detail": "Requires Adobe Firefly Services OAuth server-to-server access.",
     },
     "fal": {
         "label": "fal",
         "env_vars": ["FAL_KEY"],
+        "free_tier_candidate": False,
         "detail": "Unified API for fast production image models including Flux, Ideogram, GPT Image, and Nano Banana.",
     },
     "replicate": {
         "label": "Replicate",
         "env_vars": ["REPLICATE_API_TOKEN"],
+        "free_tier_candidate": False,
         "detail": "Runs hosted image models such as Flux, Stable Diffusion, Ideogram, and Recraft through one API.",
     },
     "bfl": {
         "label": "BFL Flux",
         "env_vars": ["BFL_API_KEY"],
+        "free_tier_candidate": False,
         "detail": "Official Black Forest Labs Flux API for high-quality prompt following and visual quality.",
     },
     "gemini": {
         "label": "Gemini",
         "env_vars": ["GEMINI_API_KEY"],
-        "detail": "Google Gemini native image generation with strong reasoning and product composition support.",
+        "free_tier_candidate": True,
+        "detail": "Free-tier candidate only when the Google project has no billing enabled and the selected image model is covered by free quota.",
     },
     "luma": {
         "label": "Luma",
         "env_vars": ["LUMA_API_KEY"],
+        "free_tier_candidate": False,
         "detail": "Dream Machine image generation for polished product and campaign visuals.",
     },
     "magnific": {
         "label": "Magnific",
         "env_vars": ["MAGNIFIC_API_KEY"],
+        "free_tier_candidate": False,
         "detail": "Text-to-image API focused on high-detail creative visuals.",
     },
     "leonardo": {
         "label": "Leonardo",
         "env_vars": ["LEONARDO_API_KEY"],
+        "free_tier_candidate": False,
         "detail": "Commercial image API with Flux, Lucid, Phoenix, and production style presets.",
     },
     "midjourney": {
         "label": "Midjourney",
         "env_vars": [],
+        "free_tier_candidate": False,
         "detail": "No public app-ready API is available; use manually as a quality benchmark.",
     },
 }
@@ -136,16 +150,7 @@ def list_design_providers() -> list[ProviderInfo]:
     providers: list[ProviderInfo] = []
     for provider_id, meta in PROVIDERS.items():
         env_vars = list(meta["env_vars"])
-        configured = bool(env_vars) and all(bool(os.getenv(name)) for name in env_vars)
-        if provider_id == "midjourney":
-            status: ProviderStatus = "manual"
-            available = False
-        elif provider_id == "firefly":
-            status = "unsupported" if configured else "needs_key"
-            available = False
-        else:
-            status = "ready" if configured else "needs_key"
-            available = configured
+        configured, status, available, detail = _provider_state(provider_id, meta)
         providers.append(
             ProviderInfo(
                 id=provider_id,
@@ -153,7 +158,7 @@ def list_design_providers() -> list[ProviderInfo]:
                 configured=configured,
                 available=available,
                 status=status,
-                detail=meta["detail"],
+                detail=detail,
                 env_vars=env_vars,
             )
         )
@@ -162,6 +167,7 @@ def list_design_providers() -> list[ProviderInfo]:
 
 @router.post("/generate", response_model=DesignGenerateResponse)
 async def generate_design(req: DesignGenerateRequest) -> DesignGenerateResponse:
+    _require_generation_allowed(cast(str, req.provider))
     if req.provider == "ideogram":
         return await _generate_ideogram(req)
     if req.provider == "recraft":
@@ -189,6 +195,57 @@ async def generate_design(req: DesignGenerateRequest) -> DesignGenerateResponse:
     if req.provider == "firefly":
         raise HTTPException(status_code=501, detail="Firefly requires Adobe OAuth project-specific setup before generation can be safely enabled.")
     raise HTTPException(status_code=501, detail="This provider does not expose a supported public generation API.")
+
+
+def _provider_state(provider_id: str, meta: dict[str, Any]) -> tuple[bool, ProviderStatus, bool, str]:
+    env_vars = list(meta["env_vars"])
+    configured = bool(env_vars) and all(bool(os.getenv(name)) for name in env_vars)
+    if provider_id == "midjourney":
+        return configured, "manual", False, meta["detail"]
+    if provider_id == "firefly":
+        status: ProviderStatus = "unsupported" if configured else "needs_key"
+        return configured, status, False, meta["detail"]
+    if not configured:
+        return configured, "needs_key", False, meta["detail"]
+    if _paid_generation_enabled():
+        return configured, "ready", True, "Paid provider generation is explicitly enabled on the backend."
+    if provider_id in _free_tier_allowlist():
+        return configured, "ready", True, "Enabled for free-tier testing. Confirm the provider account has no billing attached before generating."
+    if meta.get("free_tier_candidate"):
+        detail = (
+            "Key found, but generation is locked to avoid accidental charges. "
+            f"After confirming free quota and no billing, set DESIGN_FREE_TIER_PROVIDERS={provider_id}."
+        )
+    else:
+        detail = (
+            "Key found, but this provider is billing-locked. "
+            "Set DESIGN_ALLOW_PAID_PROVIDERS=1 only when you intentionally allow paid generation."
+        )
+    return configured, "billing_locked", False, detail
+
+
+def _require_generation_allowed(provider_id: str) -> None:
+    meta = PROVIDERS.get(provider_id)
+    if not meta:
+        raise HTTPException(status_code=400, detail="Unknown design provider.")
+    _configured, status, available, detail = _provider_state(provider_id, meta)
+    if status == "ready" and available:
+        return
+    if status == "needs_key":
+        env_vars = ", ".join(meta["env_vars"])
+        raise HTTPException(status_code=400, detail=f"{env_vars} is not configured on the backend.")
+    if status == "billing_locked":
+        raise HTTPException(status_code=402, detail=detail)
+    raise HTTPException(status_code=501, detail=detail)
+
+
+def _free_tier_allowlist() -> set[str]:
+    raw = os.getenv("DESIGN_FREE_TIER_PROVIDERS", "")
+    return {item.strip().lower() for item in raw.split(",") if item.strip()}
+
+
+def _paid_generation_enabled() -> bool:
+    return os.getenv("DESIGN_ALLOW_PAID_PROVIDERS", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 async def _generate_ideogram(req: DesignGenerateRequest) -> DesignGenerateResponse:

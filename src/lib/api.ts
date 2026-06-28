@@ -239,7 +239,7 @@ export interface DesignProviderInfo {
   label: string;
   configured: boolean;
   available: boolean;
-  status: 'ready' | 'needs_key' | 'manual' | 'unsupported';
+  status: 'ready' | 'needs_key' | 'manual' | 'unsupported' | 'billing_locked';
   detail: string;
   env_vars: string[];
 }
