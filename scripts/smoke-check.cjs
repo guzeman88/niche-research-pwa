@@ -3,6 +3,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const MIN_KEYWORDS = Number(process.env.MIN_KEYWORD_SNAPSHOT_COUNT || 13000);
+const MIN_SCORED_KEYWORDS = Number(process.env.MIN_SCORED_KEYWORD_COUNT || 1000);
 const BLOCKED_BACKEND_URLS = [
   ['https://niche-research-api', 'onrender.com'].join('.'),
   ['https://niche-research-api-kqlt', 'onrender', 'com'].join('.'),
@@ -46,6 +47,10 @@ if (Array.isArray(keywords)) {
   if (keywords.length < MIN_KEYWORDS) {
     fail(`public/data/keywords.json has ${keywords.length} rows; expected at least ${MIN_KEYWORDS}`);
   }
+  const scoredKeywords = keywords.filter((item) => Number(item && (item.opportunity_score ?? item.gap_score)) > 0);
+  if (scoredKeywords.length < MIN_SCORED_KEYWORDS) {
+    fail(`public/data/keywords.json has ${scoredKeywords.length} scored rows; expected at least ${MIN_SCORED_KEYWORDS}`);
+  }
 } else if (keywords) {
   fail('public/data/keywords.json must be an array');
 }
@@ -53,6 +58,18 @@ if (Array.isArray(keywords)) {
 const stats = readJson('public/data/stats.json');
 if (stats && Number(stats.total_seeds || 0) < MIN_KEYWORDS) {
   fail(`public/data/stats.json reports ${stats.total_seeds || 0} seeds; expected at least ${MIN_KEYWORDS}`);
+}
+if (stats && Number(stats.avg_opportunity || 0) <= 0) {
+  fail('public/data/stats.json must include real opportunity scoring');
+}
+
+const opportunities = readJson('public/data/opportunities.json');
+if (Array.isArray(opportunities)) {
+  if (opportunities.length === 0) {
+    fail('public/data/opportunities.json must include real keyword opportunities');
+  }
+} else if (opportunities) {
+  fail('public/data/opportunities.json must be an array');
 }
 
 const storeIdeas = readJson('public/data/store-ideas.json');

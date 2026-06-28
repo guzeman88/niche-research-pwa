@@ -10,6 +10,7 @@ const API = process.env.VITE_API_URL || '';
 const OUT = path.join(__dirname, '..', 'public', 'data');
 const FALLBACK = path.join(__dirname, '..', 'backend', 'seed_data', 'static');
 const MIN_KEYWORD_SNAPSHOT_COUNT = Number(process.env.MIN_KEYWORD_SNAPSHOT_COUNT || 13000);
+const MIN_SCORED_KEYWORD_COUNT = Number(process.env.MIN_SCORED_KEYWORD_COUNT || 1000);
 
 function fetch(url) {
   return new Promise((resolve, reject) => {
@@ -102,6 +103,17 @@ print(json.dumps(generate_profitable_store_ideas(limit=12, signal_limit=1000)))
     return JSON.parse(fs.readFileSync(filepath, 'utf8'));
   }
 
+  function scoredKeywordCount(data) {
+    if (!Array.isArray(data)) return 0;
+    return data.filter((item) => Number(item && (item.opportunity_score ?? item.gap_score)) > 0).length;
+  }
+
+  function fallbackOrThrow(filename, message) {
+    const fallback = readFallback(filename);
+    if (!fallback) throw new Error(`${message}; fallback is missing`);
+    return fallback;
+  }
+
   for (const [filename, endpoint] of endpoints) {
     try {
       let data = filename === 'store-ideas.json'
@@ -121,6 +133,13 @@ print(json.dumps(generate_profitable_store_ideas(limit=12, signal_limit=1000)))
         }
         console.warn(`  ${filename}: backend only reports ${data.total_seeds} keywords; using seed snapshot stats`);
         data = fallback;
+      } else if (filename === 'stats.json' && Number(data?.avg_opportunity || 0) <= 0) {
+        const fallback = fallbackOrThrow(filename, `stats snapshot has no opportunity scoring`);
+        if (Number(fallback.avg_opportunity || 0) <= 0) {
+          throw new Error('stats snapshot and fallback both have no opportunity scoring');
+        }
+        console.warn(`  ${filename}: backend stats have no opportunity scoring; using seed snapshot stats`);
+        data = fallback;
       } else if (useSeedFallback) {
         const fallback = readFallback(filename);
         if (fallback) {
@@ -134,6 +153,23 @@ print(json.dumps(generate_profitable_store_ideas(limit=12, signal_limit=1000)))
           throw new Error(`keyword snapshot only has ${data.length} rows; fallback is missing or too small`);
         }
         console.warn(`  ${filename}: backend only returned ${data.length}; using ${fallback.length}-row seed snapshot`);
+        data = fallback;
+      }
+      if (filename === 'keywords.json' && scoredKeywordCount(data) < MIN_SCORED_KEYWORD_COUNT) {
+        const fallback = fallbackOrThrow(filename, `keyword snapshot only has ${scoredKeywordCount(data)} scored rows`);
+        const fallbackScored = scoredKeywordCount(fallback);
+        if (fallbackScored < MIN_SCORED_KEYWORD_COUNT) {
+          throw new Error(`keyword fallback only has ${fallbackScored} scored rows`);
+        }
+        console.warn(`  ${filename}: backend scoring is too sparse; using ${fallbackScored}-scored-row seed snapshot`);
+        data = fallback;
+      }
+      if (filename === 'opportunities.json' && Array.isArray(data) && data.length === 0) {
+        const fallback = fallbackOrThrow(filename, 'opportunities snapshot is empty');
+        if (!Array.isArray(fallback) || fallback.length === 0) {
+          throw new Error('opportunities snapshot and fallback are both empty');
+        }
+        console.warn(`  ${filename}: backend returned 0 opportunities; using ${fallback.length}-row seed snapshot`);
         data = fallback;
       }
       const filepath = path.join(OUT, filename);
