@@ -49,10 +49,27 @@ const DESIGN_PROVIDERS = [
   { id: 'midjourney', label: 'Midjourney', fit: 'Manual' },
   { id: 'local_svg', label: 'Built-in', fit: 'Test' },
 ] as const
+const PROMPT_LAUNCHERS = [
+  { id: 'ideogram_web', label: 'Ideogram', fit: 'Text', url: 'https://ideogram.ai/', promptProvider: 'ideogram' },
+  { id: 'recraft_web', label: 'Recraft', fit: 'Vector', url: 'https://www.recraft.ai/', promptProvider: 'recraft' },
+  { id: 'krea_web', label: 'Krea', fit: 'Style', url: 'https://www.krea.ai/', promptProvider: 'krea' },
+  { id: 'leonardo_web', label: 'Leonardo', fit: 'Art', url: 'https://leonardo.ai/', promptProvider: 'leonardo' },
+  { id: 'firefly_web', label: 'Firefly', fit: 'Safe', url: 'https://firefly.adobe.com/', promptProvider: 'firefly' },
+  { id: 'designer_web', label: 'Designer', fit: 'Free', url: 'https://designer.microsoft.com/', promptProvider: 'gemini' },
+] as const
 
 type WorkspaceTab = typeof TABS[number]['id']
 type DesignProviderId = typeof DESIGN_PROVIDERS[number]['id']
+type PromptLauncherId = typeof PROMPT_LAUNCHERS[number]['id']
 type ProviderStatus = 'ready' | 'needs_key' | 'manual' | 'unsupported' | 'billing_locked'
+
+interface ManualDesignAsset {
+  asset_url: string
+  title: string
+  prompt: string
+  content_type: string
+  provider: string
+}
 
 export default function Stores() {
   const qc = useQueryClient()
@@ -503,6 +520,8 @@ function KeywordProductCreationPage({
   const [showDesign, setShowDesign] = useState(false)
   const [designVariant, setDesignVariant] = useState(0)
   const [selectedProvider, setSelectedProvider] = useState<DesignProviderId>('local_svg')
+  const [manualSource, setManualSource] = useState<PromptLauncherId>('ideogram_web')
+  const [manualDesign, setManualDesign] = useState<ManualDesignAsset | null>(null)
   const [generatedDesign, setGeneratedDesign] = useState<GeneratedDesignAsset | null>(null)
   const designPanelRef = useRef<HTMLDivElement>(null)
   const generateMutation = useMutation({
@@ -533,6 +552,7 @@ function KeywordProductCreationPage({
     setSelectedIdeaId('')
     setShowDesign(false)
     setDesignVariant(0)
+    setManualDesign(null)
     setGeneratedDesign(null)
   }
 
@@ -541,6 +561,7 @@ function KeywordProductCreationPage({
     setSelectedIdeaId(idea.id)
     setShowDesign(true)
     setDesignVariant(0)
+    setManualDesign(null)
     setGeneratedDesign(null)
     if (!existingProduct) onSaveProduct(idea)
     window.requestAnimationFrame(() => designPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
@@ -550,9 +571,11 @@ function KeywordProductCreationPage({
     if (!activeProduct || !designSpec) return
     if (selectedProvider === 'local_svg') {
       setDesignVariant((value) => value + 1)
+      setManualDesign(null)
       setGeneratedDesign(null)
       return
     }
+    setManualDesign(null)
     generateMutation.mutate({
       provider: selectedProvider,
       prompt: createDesignPrompt(activeProduct, selectedProvider),
@@ -560,14 +583,34 @@ function KeywordProductCreationPage({
     })
   }
 
+  const attachManualDesign = (file: File) => {
+    if (!activeProduct) return
+    const launcher = promptLauncherInfo(manualSource)
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return
+      setManualDesign({
+        asset_url: reader.result,
+        title: file.name.replace(/\.[^.]+$/, '') || activeProduct.title,
+        prompt: createDesignPrompt(activeProduct, launcher.promptProvider),
+        content_type: file.type || 'image/png',
+        provider: launcher.label,
+      })
+      setGeneratedDesign(null)
+    }
+    reader.readAsDataURL(file)
+  }
+
   const approveDesign = () => {
     if (!savedProduct || !designSpec) return
-    const asset = generatedDesign
+    const asset = manualDesign
+      ? createManualDesignAsset(savedProduct, manualDesign, manualSource)
+      : generatedDesign
       ? createProviderDesignAsset(savedProduct, generatedDesign, selectedProvider)
       : createDesignAsset(savedProduct, designSpec, selectedProvider)
     onUpdateProduct(savedProduct.id, {
       approvedDesign: asset,
-      designProvider: selectedProvider,
+      designProvider: manualDesign ? `web:${manualSource}` : selectedProvider,
       designPrompt: asset.prompt,
       mockupPrompt: createMockupPrompt(savedProduct, asset),
       status: 'design_approved',
@@ -685,15 +728,23 @@ function KeywordProductCreationPage({
                     product={activeProduct}
                     provider={selectedProvider}
                     providerStatuses={designProviders}
+                    manualSource={manualSource}
+                    manualDesign={manualDesign}
                     generatedDesign={generatedDesign}
                     isGenerating={generateMutation.isPending}
                     generationError={generateMutation.error instanceof Error ? generateMutation.error.message : ''}
                     approvedDesign={approvedDesign}
                     onProviderChange={(provider) => {
                       setSelectedProvider(provider)
+                      setManualDesign(null)
                       setGeneratedDesign(null)
                       generateMutation.reset()
                     }}
+                    onManualSourceChange={(source) => {
+                      setManualSource(source)
+                      setManualDesign(null)
+                    }}
+                    onAttachManualDesign={attachManualDesign}
                     onGenerate={generateDesign}
                     onApprove={approveDesign}
                   />
@@ -732,11 +783,15 @@ function GeneratedDesignPanel({
   product,
   provider,
   providerStatuses,
+  manualSource,
+  manualDesign,
   generatedDesign,
   isGenerating,
   generationError,
   approvedDesign,
   onProviderChange,
+  onManualSourceChange,
+  onAttachManualDesign,
   onGenerate,
   onApprove,
 }: {
@@ -744,19 +799,38 @@ function GeneratedDesignPanel({
   product: StoreProductIdea
   provider: DesignProviderId
   providerStatuses: DesignProviderInfo[]
+  manualSource: PromptLauncherId
+  manualDesign: ManualDesignAsset | null
   generatedDesign: GeneratedDesignAsset | null
   isGenerating: boolean
   generationError: string
   approvedDesign?: StoreProductDesignAsset
   onProviderChange: (provider: DesignProviderId) => void
+  onManualSourceChange: (source: PromptLauncherId) => void
+  onAttachManualDesign: (file: File) => void
   onGenerate: () => void
   onApprove: () => void
 }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
   const svg = designSvgMarkup(spec)
   const providerInfo = designProviderInfo(provider, providerStatuses)
+  const launcher = promptLauncherInfo(manualSource)
   const canGenerate = providerInfo.status === 'ready'
   const prompt = createDesignPrompt(product, provider)
-  const activeAssetUrl = generatedDesign?.asset_url
+  const launcherPrompt = createDesignPrompt(product, launcher.promptProvider)
+  const activeAssetUrl = manualDesign?.asset_url || generatedDesign?.asset_url
+  const hasApiAsset = !!generatedDesign?.asset_url
+  const canApprove = provider === 'local_svg' || hasApiAsset || !!manualDesign
+  const isApproved = approvedDesign?.prompt === prompt || approvedDesign?.prompt === launcherPrompt
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(launcherPrompt)
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 1200)
+    } catch {
+      setCopyState('idle')
+    }
+  }
   return (
     <div className="overflow-hidden rounded-md border border-surface-600/45 bg-surface-950/25">
       <div className="border-b border-surface-600/35 px-3 py-2">
@@ -789,7 +863,7 @@ function GeneratedDesignPanel({
       </div>
 
       <div className="space-y-3 bg-surface-950/30 p-3">
-        {canGenerate ? (
+        {canGenerate || activeAssetUrl || provider === 'local_svg' ? (
           <div className="mx-auto aspect-square max-h-64 overflow-hidden rounded-md border border-surface-600/35 bg-surface-50">
             {activeAssetUrl ? (
               <img src={activeAssetUrl} alt={`${product.title} generated design`} className="h-full w-full object-cover" />
@@ -815,6 +889,55 @@ function GeneratedDesignPanel({
           <div className="line-clamp-3 break-words text-[11px] leading-relaxed text-surface-200">{prompt}</div>
         </div>
 
+        <div className="rounded-md border border-surface-600/35 bg-surface-900/25 p-2.5">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-surface-400">Free web</div>
+            <span className="truncate text-[10px] font-extrabold text-surface-300">{manualDesign ? 'Attached' : launcher.label}</span>
+          </div>
+          <div className="line-clamp-3 break-words text-[11px] leading-relaxed text-surface-200">{launcherPrompt}</div>
+          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-2">
+            {PROMPT_LAUNCHERS.map((option) => {
+              const selected = option.id === manualSource
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => onManualSourceChange(option.id)}
+                  className={`min-w-0 rounded-md border px-2.5 py-2 text-left transition-colors duration-150 ${
+                    selected
+                      ? 'border-accent-green/40 bg-accent-green/10 text-surface-50'
+                      : 'border-surface-600/45 bg-surface-950/30 text-surface-200 hover:bg-surface-700/35'
+                  }`}
+                >
+                  <span className="block truncate text-[11px] font-extrabold">{option.label}</span>
+                  <span className="mt-0.5 block truncate text-[9px] font-bold uppercase tracking-wider text-surface-400">{option.fit}</span>
+                </button>
+              )
+            })}
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <button type="button" className="btn-secondary min-h-9 px-2.5 py-2 text-[11px]" onClick={copyPrompt}>
+              <Icon name={copyState === 'copied' ? 'check-circle' : 'file-text'} size={13} /> {copyState === 'copied' ? 'Copied' : 'Copy'}
+            </button>
+            <a className="btn-secondary min-h-9 px-2.5 py-2 text-[11px]" href={launcher.url} target="_blank" rel="noreferrer">
+              <Icon name="external-link" size={13} /> Open
+            </a>
+            <label className="btn-secondary min-h-9 cursor-pointer px-2.5 py-2 text-[11px]">
+              <Icon name={manualDesign ? 'check-circle' : 'plus-circle'} size={13} /> {manualDesign ? 'Attached' : 'Attach'}
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) onAttachManualDesign(file)
+                  event.currentTarget.value = ''
+                }}
+              />
+            </label>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -824,7 +947,7 @@ function GeneratedDesignPanel({
           >
             <Icon name={isGenerating ? 'loader' : 'refresh-cw'} size={13} className={isGenerating ? 'animate-spin' : ''} /> {isGenerating ? 'Working' : 'Generate'}
           </button>
-          {canGenerate && !activeAssetUrl ? (
+          {!activeAssetUrl ? (
             <a
               className="btn-secondary min-h-9 px-2.5 py-2 text-[11px]"
               href={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
@@ -832,33 +955,29 @@ function GeneratedDesignPanel({
             >
               <Icon name="download" size={13} /> SVG
             </a>
-          ) : canGenerate && activeAssetUrl ? (
+          ) : (
             <a
               className="btn-secondary min-h-9 px-2.5 py-2 text-[11px]"
               href={activeAssetUrl}
-              download={`${slugifyLocal(product.title)}-${provider}-design.png`}
+              download={`${slugifyLocal(product.title)}-${manualDesign ? manualSource : provider}-design.png`}
             >
               <Icon name="download" size={13} /> Image
             </a>
-          ) : (
-            <button type="button" className="btn-secondary min-h-9 px-2.5 py-2 text-[11px] opacity-50" disabled>
-              <Icon name="download" size={13} /> Asset
-            </button>
           )}
         </div>
 
         <button
           type="button"
           className={`min-h-10 w-full rounded-md border px-3 py-2 text-[12px] font-extrabold transition-colors duration-150 ${
-            approvedDesign?.prompt === prompt
+            isApproved
               ? 'border-accent-green/35 bg-accent-green/10 text-accent-green'
               : 'border-primary-300/35 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25 disabled:cursor-not-allowed disabled:opacity-50'
           }`}
-          disabled={!canGenerate || isGenerating || (provider !== 'local_svg' && !generatedDesign)}
+          disabled={isGenerating || !canApprove}
           onClick={onApprove}
         >
-          <Icon name={approvedDesign?.prompt === prompt ? 'check-circle' : 'plus-circle'} size={14} />
-          {approvedDesign?.prompt === prompt ? 'Approved' : 'Approve design'}
+          <Icon name={isApproved ? 'check-circle' : 'plus-circle'} size={14} />
+          {isApproved ? 'Approved' : 'Approve'}
         </button>
       </div>
     </div>
@@ -1067,6 +1186,23 @@ function createProviderDesignAsset(product: StoreProductIdea, generated: Generat
     assetUrl: generated.asset_url,
     approvedAt: new Date().toISOString(),
   }
+}
+
+function createManualDesignAsset(product: StoreProductIdea, manual: ManualDesignAsset, source: PromptLauncherId): StoreProductDesignAsset {
+  const launcher = promptLauncherInfo(source)
+  return {
+    id: `design-${product.id}-${source}-${Date.now()}`,
+    provider: `web:${launcher.label}`,
+    type: 'external',
+    title: manual.title || product.title,
+    prompt: manual.prompt,
+    assetUrl: manual.asset_url,
+    approvedAt: new Date().toISOString(),
+  }
+}
+
+function promptLauncherInfo(source: PromptLauncherId) {
+  return PROMPT_LAUNCHERS.find((launcher) => launcher.id === source) || PROMPT_LAUNCHERS[0]
 }
 
 function providerEnvVars(provider: DesignProviderId): string[] {
