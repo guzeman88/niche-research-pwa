@@ -69,8 +69,8 @@ export default function Stores() {
   )
   const showDetail = !!current
   const refresh = () => {
-    qc.invalidateQueries({ refetchType: 'active' })
     setWorkspaceVersion((value) => value + 1)
+    return qc.refetchQueries({ type: 'active' })
   }
 
   const colorFor = (slug: string) => COLORS[Math.max(0, stores.findIndex((store) => store.slug === slug)) % COLORS.length]

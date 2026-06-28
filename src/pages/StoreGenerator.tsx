@@ -28,7 +28,7 @@ export default function StoreGenerator() {
   const isLoading = profitableLoading
   const loadError = profitableError
   const bestConcept = concepts[0]
-  const refresh = () => queryClient.invalidateQueries({ refetchType: 'active' })
+  const refresh = () => queryClient.refetchQueries({ type: 'active' })
   const toggleKeywordList = (conceptId: string) => {
     setExpandedKeywordIds((current) => {
       const next = new Set(current)

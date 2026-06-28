@@ -30,7 +30,6 @@ function parseApiUrls(value: string): string[] {
 
 // Static CDN data paths — instant, no backend needed for reads
 const STATIC_MAP: Record<string, string> = {
-  '/api/stats': '/data/stats.json',
   '/api/keywords/opportunities': '/data/opportunities.json',
   '/api/store-ideas/profitable': '/data/store-ideas.json',
   '/api/gaps': '/data/gaps.json',
@@ -39,6 +38,10 @@ const STATIC_MAP: Record<string, string> = {
   '/api/research/reports': '/data/reports.json',
   '/api/keywords/breakouts': '/data/breakouts.json',
 };
+
+const LIVE_ONLY_GET_PATHS = new Set([
+  '/api/stats',
+]);
 
 // Try loading from static CDN JSON first (instant), fall back to API
 async function fetchStatic(path: string): Promise<any | null> {
@@ -85,7 +88,7 @@ function tunnelBypassHeaders(baseUrl: string): Record<string, string> {
   }
 }
 
-async function fetchApi(path: string, options?: RequestInit, timeoutMs = 3000): Promise<Response | null> {
+async function fetchApi(path: string, options?: RequestInit, timeoutMs = 8000): Promise<Response | null> {
   const isGet = !options?.method || options.method === 'GET';
   const sep = path.includes('?') ? '&' : '?';
   for (const baseUrl of apiCandidates()) {
@@ -111,6 +114,8 @@ async function fetchApi(path: string, options?: RequestInit, timeoutMs = 3000): 
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const isGet = !options?.method || options.method === 'GET';
+  const pathOnly = path.split('?')[0];
+  const liveOnly = isGet && LIVE_ONLY_GET_PATHS.has(pathOnly);
 
   // Prefer live APIs in configured order: local-machine tunnel first, then backups
   // such as Render. Static snapshots are only the final read fallback.
@@ -122,8 +127,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     }
 
     // Backend unreachable or returned non-JSON HTML — fall back to static CDN.
-    if (!import.meta.env.DEV) {
-      const staticData = await fetchStatic(path.split('?')[0]);
+    if (!liveOnly && !import.meta.env.DEV) {
+      const staticData = await fetchStatic(pathOnly);
       if (staticData) {
         wakeBackend();
         return staticData as T;
@@ -132,8 +137,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   // POST requests or backend-down fallback: use static CDN
-  if (isGet && !import.meta.env.DEV) {
-    const staticData = await fetchStatic(path.split('?')[0]);
+  if (isGet && !liveOnly && !import.meta.env.DEV) {
+    const staticData = await fetchStatic(pathOnly);
     if (staticData) return staticData as T;
   }
   const res = await fetchApi(path, options, path === '/api/designs/generate' ? 140000 : 8000);
