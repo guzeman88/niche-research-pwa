@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { getStats, listReports } from '../lib/api'
+import { getOpportunities, getStats, listReports } from '../lib/api'
 import Icon from '../components/Icon'
 import ScoreDistribution from '../components/ScoreDistribution'
 import GapOverview from '../components/GapOverview'
@@ -11,18 +11,26 @@ import { fmt, fmtDate, scoreColor } from '../lib/utils'
 import type { StatsResponse } from '../types/api'
 import type { ReportListItem } from '../types/research'
 
+interface DashboardOpportunity {
+  id: string
+  title: string
+  generatedAt?: string | null
+  opportunityScore: number | null
+}
+
 export default function Dashboard() {
   const qc = useQueryClient()
   const { data: stats } = useQuery<StatsResponse>({ queryKey: ['stats'], queryFn: getStats, refetchInterval: 15_000 })
   const { data: reports } = useQuery<ReportListItem[]>({ queryKey: ['reports'], queryFn: () => listReports('__global__', 12) })
+  const { data: keywordOpportunities } = useQuery<Record<string, unknown>[]>({ queryKey: ['opportunities', 'dashboard'], queryFn: () => getOpportunities(undefined, 12) })
   const refresh = () => qc.refetchQueries({ type: 'active' })
 
-  const opportunities = (reports || []).sort((a, b) => numericScore(b.opportunity_score) - numericScore(a.opportunity_score)).slice(0, 8)
+  const opportunities = normalizeDashboardOpportunities(reports, keywordOpportunities)
   const domains = (stats?.domains || []).sort((a: any, b: any) => (b.cnt || 0) - (a.cnt || 0)).slice(0, 6)
   const topOpportunity = opportunities[0]
   const topGap = (stats as any)?.top_gap_keyword
 
-  if (!stats && !reports) return <DashboardSkeleton />
+  if (!stats && !reports && !keywordOpportunities) return <DashboardSkeleton />
 
   return (
     <PullToRefresh onRefresh={refresh}>
@@ -40,14 +48,14 @@ export default function Dashboard() {
 
       <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
         <Chip val={fmt(stats?.total_seeds)} label="Keywords" sub={stats?.total_seeds ? `${stats.total_seeds} seeds` : 'No data'} color="indigo" />
-        <Chip val={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} label="Avg Opp" sub={topOpportunity ? 'from reports' : 'no reports'} color="emerald" />
+        <Chip val={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} label="Avg Opp" sub={topOpportunity ? 'real keywords' : 'No data'} color="emerald" />
         <Chip val={fmt(stats?.breakout_count)} label="Breakouts" sub="rising fast" color="amber" />
         <Chip val={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} label="Avg Gap" sub={topGap?.keyword ? 'top gap available' : 'no gap data'} color="violet" />
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
         <MetricCard icon="database" label="Coverage" value={stats?.coverage_pct == null ? '-' : `${stats.coverage_pct}%`} sub={`${fmt(stats?.scanned)} of ${fmt(stats?.total_seeds)} scanned`} color="indigo" />
-        <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} sub={topOpportunity ? `Top: ${topOpportunity.seed_keywords?.join(', ') || 'Unnamed'} ${formatScore(topOpportunity.opportunity_score)}` : 'No reports yet'} color="emerald" />
+        <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} sub={topOpportunity ? `Top: ${topOpportunity.title} ${formatScore(topOpportunity.opportunityScore)}` : 'No data yet'} color="emerald" />
         <MetricCard icon="zap" label="Total Scans" value={fmt(stats?.total_scans)} sub="lifetime DB total" color="amber" />
         <MetricCard icon="activity" label="Avg Gap Score" value={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} sub={topGap?.keyword ? `Top: ${topGap.keyword} ${formatScore(topGap.gap_score)}` : 'No gap data yet'} color="violet" />
       </div>
@@ -61,23 +69,23 @@ export default function Dashboard() {
         <div className="panel overflow-hidden">
           {opportunities.length > 0 ? opportunities.map((r, i) => (
             <div
-              key={r.report_id}
+              key={r.id}
               className="flex items-center gap-3 px-4 py-3 border-b border-surface-600/35 last:border-b-0"
             >
               <RankBadge rank={i + 1} />
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold text-surface-50 truncate">{r.seed_keywords?.join(', ') || 'Unnamed'}</div>
-                <div className="text-[10px] text-surface-300 mt-0.5">{fmtDate(r.generated_at)}</div>
+                <div className="text-[13px] font-semibold text-surface-50 truncate">{r.title}</div>
+                <div className="text-[10px] text-surface-300 mt-0.5">{r.generatedAt ? fmtDate(r.generatedAt) : 'keyword scan'}</div>
               </div>
               <div className="flex items-center gap-2">
                 <div className="progress-track w-12 hidden sm:block">
-                  {r.opportunity_score != null && <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, r.opportunity_score)}%` }} />}
+                  {r.opportunityScore != null && <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, r.opportunityScore)}%` }} />}
                 </div>
-                <span className={`text-[13px] font-bold tabular-nums ${r.opportunity_score == null ? 'text-surface-400' : scoreColor(r.opportunity_score)}`}>{formatScore(r.opportunity_score)}</span>
+                <span className={`text-[13px] font-bold tabular-nums ${r.opportunityScore == null ? 'text-surface-400' : scoreColor(r.opportunityScore)}`}>{formatScore(r.opportunityScore)}</span>
               </div>
             </div>
           )) : (
-            <div className="px-4 py-10 text-center text-sm text-surface-300">No reports yet.</div>
+            <div className="px-4 py-10 text-center text-sm text-surface-300">No opportunity data yet.</div>
           )}
         </div>
       </Section>
@@ -156,6 +164,27 @@ function Section({ title, subtitle, link, linkLabel, icon, children }: { title: 
 
 function numericScore(value: number | null | undefined): number {
   return Number.isFinite(value) ? Number(value) : -1
+}
+
+function normalizeDashboardOpportunities(reports?: ReportListItem[], keywordOpportunities?: Record<string, unknown>[]): DashboardOpportunity[] {
+  const reportItems = (reports || []).map((report) => ({
+    id: report.report_id,
+    title: report.seed_keywords?.join(', ') || 'Unnamed',
+    generatedAt: report.generated_at,
+    opportunityScore: Number.isFinite(report.opportunity_score) ? Number(report.opportunity_score) : null,
+  }))
+  const source = reportItems.length > 0
+    ? reportItems
+    : (keywordOpportunities || []).map((keyword, index) => ({
+      id: String(keyword.keyword || keyword.report_id || `keyword-${index}`),
+      title: String(keyword.keyword || keyword.seed_keywords || 'Unnamed'),
+      generatedAt: typeof keyword.scanned_at === 'string' ? keyword.scanned_at : null,
+      opportunityScore: Number.isFinite(Number(keyword.opportunity_score)) ? Number(keyword.opportunity_score) : null,
+    }))
+
+  return source
+    .sort((a, b) => numericScore(b.opportunityScore) - numericScore(a.opportunityScore))
+    .slice(0, 8)
 }
 
 function formatScore(value: number | null | undefined): string {

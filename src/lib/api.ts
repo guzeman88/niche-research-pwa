@@ -30,6 +30,7 @@ function parseApiUrls(value: string): string[] {
 
 // Static CDN data paths — instant, no backend needed for reads
 const STATIC_MAP: Record<string, string> = {
+  '/api/stats': '/data/stats.json',
   '/api/keywords/opportunities': '/data/opportunities.json',
   '/api/store-ideas/profitable': '/data/store-ideas.json',
   '/api/gaps': '/data/gaps.json',
@@ -39,9 +40,7 @@ const STATIC_MAP: Record<string, string> = {
   '/api/keywords/breakouts': '/data/breakouts.json',
 };
 
-const LIVE_ONLY_GET_PATHS = new Set([
-  '/api/stats',
-]);
+const LIVE_ONLY_GET_PATHS = new Set<string>();
 
 // Try loading from static CDN JSON first (instant), fall back to API
 async function fetchStatic(path: string): Promise<any | null> {
