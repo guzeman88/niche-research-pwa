@@ -136,7 +136,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const staticData = await fetchStatic(path.split('?')[0]);
     if (staticData) return staticData as T;
   }
-  const res = await fetchApi(path, options, 8000);
+  const res = await fetchApi(path, options, path === '/api/designs/generate' ? 140000 : 8000);
   if (!res) {
     throw new Error(`Network error: backend unreachable for ${path}`);
   }
@@ -225,6 +225,44 @@ export function getGapReport(keyword: string): Promise<GapReport> {
 
 export function getProfitableStoreIdeas(limit = 12): Promise<StoreIdea[]> {
   return request(`/api/store-ideas/profitable?limit=${limit}`);
+}
+
+// Design Providers
+
+export interface DesignProviderInfo {
+  id: string;
+  label: string;
+  configured: boolean;
+  available: boolean;
+  status: 'ready' | 'needs_key' | 'manual' | 'unsupported';
+  detail: string;
+  env_vars: string[];
+}
+
+export interface GeneratedDesignAsset {
+  provider: string;
+  title: string;
+  prompt: string;
+  asset_url: string;
+  content_type: string;
+  type: 'image';
+  meta: Record<string, unknown>;
+}
+
+export function getDesignProviders(): Promise<DesignProviderInfo[]> {
+  return request('/api/designs/providers');
+}
+
+export function generateDesignAsset(payload: {
+  provider: string;
+  prompt: string;
+  product_type?: string;
+  aspect_ratio?: string;
+}): Promise<GeneratedDesignAsset> {
+  return request('/api/designs/generate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 // ── Stats ───────────────────────────────────────────────────────────────

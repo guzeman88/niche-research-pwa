@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getStores } from '../lib/api'
-import type { StoreItem } from '../lib/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { generateDesignAsset, getDesignProviders, getStores } from '../lib/api'
+import type { DesignProviderInfo, GeneratedDesignAsset, StoreItem } from '../lib/api'
 import Icon from '../components/Icon'
 import PullToRefresh from '../components/PullToRefresh'
 import { StoresSkeleton } from '../components/Skeleton'
@@ -33,22 +33,31 @@ const TABS = [
   { id: 'listings', label: 'Listing Manager', shortLabel: 'Listings', icon: 'file-text' },
 ] as const
 const DESIGN_PROVIDERS = [
-  { id: 'ideogram', label: 'Ideogram', fit: 'Text', status: 'needs_key' },
-  { id: 'recraft', label: 'Recraft', fit: 'Vector', status: 'needs_key' },
-  { id: 'krea', label: 'Krea', fit: 'Style', status: 'needs_key' },
-  { id: 'openai', label: 'OpenAI', fit: 'General', status: 'needs_key' },
-  { id: 'firefly', label: 'Firefly', fit: 'Safe', status: 'needs_key' },
-  { id: 'stability', label: 'Stability', fit: 'Art', status: 'needs_key' },
-  { id: 'midjourney', label: 'Midjourney', fit: 'Manual', status: 'manual' },
-  { id: 'local_svg', label: 'Built-in', fit: 'Test', status: 'ready' },
+  { id: 'ideogram', label: 'Ideogram', fit: 'Text' },
+  { id: 'recraft', label: 'Recraft', fit: 'Vector' },
+  { id: 'krea', label: 'Krea', fit: 'Style' },
+  { id: 'openai', label: 'OpenAI', fit: 'General' },
+  { id: 'firefly', label: 'Firefly', fit: 'Safe' },
+  { id: 'stability', label: 'Stability', fit: 'Art' },
+  { id: 'fal', label: 'fal', fit: 'Fast' },
+  { id: 'replicate', label: 'Replicate', fit: 'Models' },
+  { id: 'bfl', label: 'BFL', fit: 'Flux' },
+  { id: 'gemini', label: 'Gemini', fit: 'Smart' },
+  { id: 'luma', label: 'Luma', fit: 'Photo' },
+  { id: 'magnific', label: 'Magnific', fit: 'Detail' },
+  { id: 'leonardo', label: 'Leonardo', fit: 'Styles' },
+  { id: 'midjourney', label: 'Midjourney', fit: 'Manual' },
+  { id: 'local_svg', label: 'Built-in', fit: 'Test' },
 ] as const
 
 type WorkspaceTab = typeof TABS[number]['id']
 type DesignProviderId = typeof DESIGN_PROVIDERS[number]['id']
+type ProviderStatus = 'ready' | 'needs_key' | 'manual' | 'unsupported'
 
 export default function Stores() {
   const qc = useQueryClient()
   const { data: rawStores, isLoading, isError } = useQuery<StoreItem[]>({ queryKey: ['stores'], queryFn: getStores })
+  const { data: designProviders } = useQuery<DesignProviderInfo[]>({ queryKey: ['design-providers'], queryFn: getDesignProviders })
   const stores = rawStores || []
   const [selected, setSelected] = useState<string>('')
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('dashboard')
@@ -157,6 +166,7 @@ export default function Stores() {
       onSaveListing={(listing) => saveListing(current, listing)}
       onUpdateListing={(listingId, patch) => updateListing(current, listingId, patch)}
       onSendProductToListings={(product) => sendProductToListings(current, product)}
+      designProviders={designProviders || []}
     />
   )
 
@@ -199,6 +209,7 @@ function StoreWorkspaceView({
   onSaveListing,
   onUpdateListing,
   onSendProductToListings,
+  designProviders,
 }: {
   store: StoreItem
   workspace: StoreWorkspace
@@ -210,6 +221,7 @@ function StoreWorkspaceView({
   onSaveListing: (listing: StoreListingDraft) => void
   onUpdateListing: (listingId: string, patch: Partial<StoreListingDraft>) => void
   onSendProductToListings: (product: StoreProductIdea) => void
+  designProviders: DesignProviderInfo[]
 }) {
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -266,6 +278,7 @@ function StoreWorkspaceView({
             onSaveProduct={onSaveProduct}
             onUpdateProduct={onUpdateProduct}
             onSendProductToListings={onSendProductToListings}
+            designProviders={designProviders}
           />
         )}
         {activeTab === 'listings' && (
@@ -384,12 +397,14 @@ function ProductCreator({
   onSaveProduct,
   onUpdateProduct,
   onSendProductToListings,
+  designProviders,
 }: {
   store: StoreItem
   workspace: StoreWorkspace
   onSaveProduct: (product: StoreProductIdea) => void
   onUpdateProduct: (productId: string, patch: Partial<StoreProductIdea>) => void
   onSendProductToListings: (product: StoreProductIdea) => void
+  designProviders: DesignProviderInfo[]
 }) {
   const keywords = extractStoreKeywords(store)
   const [activeKeywordName, setActiveKeywordName] = useState('')
@@ -421,6 +436,7 @@ function ProductCreator({
       onSaveProduct={onSaveProduct}
       onUpdateProduct={onUpdateProduct}
       onSendProductToListings={onSendProductToListings}
+      designProviders={designProviders}
     />
   )
 }
@@ -470,6 +486,7 @@ function KeywordProductCreationPage({
   onSaveProduct,
   onUpdateProduct,
   onSendProductToListings,
+  designProviders,
 }: {
   store: StoreItem
   keyword: StoreKeywordCandidate
@@ -478,6 +495,7 @@ function KeywordProductCreationPage({
   onSaveProduct: (product: StoreProductIdea) => void
   onUpdateProduct: (productId: string, patch: Partial<StoreProductIdea>) => void
   onSendProductToListings: (product: StoreProductIdea) => void
+  designProviders: DesignProviderInfo[]
 }) {
   const productTypes = productTypeOptionsFor(store, keyword)
   const [selectedType, setSelectedType] = useState(productTypes[0]?.value || '')
@@ -485,7 +503,17 @@ function KeywordProductCreationPage({
   const [showDesign, setShowDesign] = useState(false)
   const [designVariant, setDesignVariant] = useState(0)
   const [selectedProvider, setSelectedProvider] = useState<DesignProviderId>('local_svg')
+  const [generatedDesign, setGeneratedDesign] = useState<GeneratedDesignAsset | null>(null)
   const designPanelRef = useRef<HTMLDivElement>(null)
+  const generateMutation = useMutation({
+    mutationFn: (payload: { provider: DesignProviderId; prompt: string; productType: string }) => generateDesignAsset({
+      provider: payload.provider,
+      prompt: payload.prompt,
+      product_type: payload.productType,
+      aspect_ratio: '1:1',
+    }),
+    onSuccess: (asset) => setGeneratedDesign(asset),
+  })
   const activeType = productTypes.find((type) => type.value === selectedType) || productTypes[0]
   const ideas = activeType ? productIdeasForType(store, keyword, activeType.value) : []
   const selectedIdea = ideas.find((idea) => idea.id === selectedIdeaId) || null
@@ -505,6 +533,7 @@ function KeywordProductCreationPage({
     setSelectedIdeaId('')
     setShowDesign(false)
     setDesignVariant(0)
+    setGeneratedDesign(null)
   }
 
   const startDesign = (idea: StoreProductIdea) => {
@@ -512,13 +541,30 @@ function KeywordProductCreationPage({
     setSelectedIdeaId(idea.id)
     setShowDesign(true)
     setDesignVariant(0)
+    setGeneratedDesign(null)
     if (!existingProduct) onSaveProduct(idea)
     window.requestAnimationFrame(() => designPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
   }
 
+  const generateDesign = () => {
+    if (!activeProduct || !designSpec) return
+    if (selectedProvider === 'local_svg') {
+      setDesignVariant((value) => value + 1)
+      setGeneratedDesign(null)
+      return
+    }
+    generateMutation.mutate({
+      provider: selectedProvider,
+      prompt: createDesignPrompt(activeProduct, selectedProvider),
+      productType: activeProduct.productType,
+    })
+  }
+
   const approveDesign = () => {
     if (!savedProduct || !designSpec) return
-    const asset = createDesignAsset(savedProduct, designSpec, selectedProvider)
+    const asset = generatedDesign
+      ? createProviderDesignAsset(savedProduct, generatedDesign, selectedProvider)
+      : createDesignAsset(savedProduct, designSpec, selectedProvider)
     onUpdateProduct(savedProduct.id, {
       approvedDesign: asset,
       designProvider: selectedProvider,
@@ -638,9 +684,17 @@ function KeywordProductCreationPage({
                     spec={designSpec}
                     product={activeProduct}
                     provider={selectedProvider}
+                    providerStatuses={designProviders}
+                    generatedDesign={generatedDesign}
+                    isGenerating={generateMutation.isPending}
+                    generationError={generateMutation.error instanceof Error ? generateMutation.error.message : ''}
                     approvedDesign={approvedDesign}
-                    onProviderChange={setSelectedProvider}
-                    onVariant={() => setDesignVariant((value) => value + 1)}
+                    onProviderChange={(provider) => {
+                      setSelectedProvider(provider)
+                      setGeneratedDesign(null)
+                      generateMutation.reset()
+                    }}
+                    onGenerate={generateDesign}
                     onApprove={approveDesign}
                   />
                 )}
@@ -677,30 +731,39 @@ function GeneratedDesignPanel({
   spec,
   product,
   provider,
+  providerStatuses,
+  generatedDesign,
+  isGenerating,
+  generationError,
   approvedDesign,
   onProviderChange,
-  onVariant,
+  onGenerate,
   onApprove,
 }: {
   spec: DesignSpec
   product: StoreProductIdea
   provider: DesignProviderId
+  providerStatuses: DesignProviderInfo[]
+  generatedDesign: GeneratedDesignAsset | null
+  isGenerating: boolean
+  generationError: string
   approvedDesign?: StoreProductDesignAsset
   onProviderChange: (provider: DesignProviderId) => void
-  onVariant: () => void
+  onGenerate: () => void
   onApprove: () => void
 }) {
   const svg = designSvgMarkup(spec)
-  const providerInfo = designProviderInfo(provider)
+  const providerInfo = designProviderInfo(provider, providerStatuses)
   const canGenerate = providerInfo.status === 'ready'
   const prompt = createDesignPrompt(product, provider)
+  const activeAssetUrl = generatedDesign?.asset_url
   return (
     <div className="overflow-hidden rounded-md border border-surface-600/45 bg-surface-950/25">
       <div className="border-b border-surface-600/35 px-3 py-2">
         <div className="flex items-center justify-between gap-2">
           <div className="section-label">Generator</div>
           <span className={`rounded-md border px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider ${providerStatusClass(providerInfo.status)}`}>
-            {providerInfo.status === 'ready' ? 'Ready' : providerInfo.status === 'manual' ? 'Manual' : 'Needs key'}
+            {providerStatusLabel(providerInfo.status)}
           </span>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4 xl:grid-cols-2">
@@ -728,12 +791,22 @@ function GeneratedDesignPanel({
       <div className="space-y-3 bg-surface-950/30 p-3">
         {canGenerate ? (
           <div className="mx-auto aspect-square max-h-64 overflow-hidden rounded-md border border-surface-600/35 bg-surface-50">
-            <GeneratedDesignSvg spec={spec} />
+            {activeAssetUrl ? (
+              <img src={activeAssetUrl} alt={`${product.title} generated design`} className="h-full w-full object-cover" />
+            ) : (
+              <GeneratedDesignSvg spec={spec} />
+            )}
           </div>
         ) : (
           <div className="rounded-md border border-surface-600/45 bg-surface-900/30 p-3">
             <div className="text-[12px] font-extrabold text-surface-100">{providerInfo.title}</div>
             <div className="mt-1 text-[11px] leading-relaxed text-surface-300">{providerInfo.detail}</div>
+          </div>
+        )}
+
+        {generationError && (
+          <div className="rounded-md border border-accent-amber/30 bg-accent-amber/10 p-2.5 text-[11px] font-semibold leading-relaxed text-accent-amber">
+            {generationError}
           </div>
         )}
 
@@ -746,18 +819,26 @@ function GeneratedDesignPanel({
           <button
             type="button"
             className="btn-secondary min-h-9 px-2.5 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={onVariant}
-            disabled={!canGenerate}
+            onClick={onGenerate}
+            disabled={!canGenerate || isGenerating}
           >
-            <Icon name="refresh-cw" size={13} /> Generate
+            <Icon name={isGenerating ? 'loader' : 'refresh-cw'} size={13} className={isGenerating ? 'animate-spin' : ''} /> {isGenerating ? 'Working' : 'Generate'}
           </button>
-          {canGenerate ? (
+          {canGenerate && !activeAssetUrl ? (
             <a
               className="btn-secondary min-h-9 px-2.5 py-2 text-[11px]"
               href={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
               download={`${slugifyLocal(product.title)}-design.svg`}
             >
               <Icon name="download" size={13} /> SVG
+            </a>
+          ) : canGenerate && activeAssetUrl ? (
+            <a
+              className="btn-secondary min-h-9 px-2.5 py-2 text-[11px]"
+              href={activeAssetUrl}
+              download={`${slugifyLocal(product.title)}-${provider}-design.png`}
+            >
+              <Icon name="download" size={13} /> Image
             </a>
           ) : (
             <button type="button" className="btn-secondary min-h-9 px-2.5 py-2 text-[11px] opacity-50" disabled>
@@ -773,7 +854,7 @@ function GeneratedDesignPanel({
               ? 'border-accent-green/35 bg-accent-green/10 text-accent-green'
               : 'border-primary-300/35 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25 disabled:cursor-not-allowed disabled:opacity-50'
           }`}
-          disabled={!canGenerate}
+          disabled={!canGenerate || isGenerating || (provider !== 'local_svg' && !generatedDesign)}
           onClick={onApprove}
         >
           <Icon name={approvedDesign?.prompt === prompt ? 'check-circle' : 'plus-circle'} size={14} />
@@ -900,33 +981,57 @@ function DesignMotif({ spec }: { spec: DesignSpec }) {
   )
 }
 
-function designProviderInfo(provider: DesignProviderId): { status: typeof DESIGN_PROVIDERS[number]['status']; title: string; detail: string } {
+function designProviderInfo(provider: DesignProviderId, providerStatuses: DesignProviderInfo[]): { status: ProviderStatus; title: string; detail: string } {
   const option = DESIGN_PROVIDERS.find((item) => item.id === provider) || DESIGN_PROVIDERS[0]
-  if (option.status === 'ready') {
+  if (provider === 'local_svg') {
     return {
-      status: option.status,
+      status: 'ready',
       title: `${option.label} is ready`,
       detail: 'Built-in generation is available now for testing the approval workflow.',
     }
   }
-  if (option.status === 'manual') {
+  const backendStatus = providerStatuses.find((item) => item.id === provider)
+  if (backendStatus?.status === 'ready') {
     return {
-      status: option.status,
+      status: 'ready',
+      title: `${option.label} is connected`,
+      detail: backendStatus.detail,
+    }
+  }
+  if (backendStatus?.status === 'manual' || provider === 'midjourney') {
+    return {
+      status: 'manual',
       title: `${option.label} is manual`,
       detail: 'Use this as a benchmark provider. Save the prompt, generate manually, then connect a supported API path when available.',
     }
   }
+  if (backendStatus?.status === 'unsupported') {
+    return {
+      status: 'unsupported',
+      title: `${option.label} needs more setup`,
+      detail: backendStatus.detail,
+    }
+  }
+  const envVars = backendStatus?.env_vars?.join(', ') || providerEnvVars(provider).join(', ')
   return {
-    status: option.status,
+    status: 'needs_key',
     title: `${option.label} needs an API key`,
-    detail: 'Add the provider key on the backend before this generator can create real design assets.',
+    detail: `Set ${envVars} on the backend before this generator can create real design assets.`,
   }
 }
 
-function providerStatusClass(status: typeof DESIGN_PROVIDERS[number]['status']): string {
+function providerStatusClass(status: ProviderStatus): string {
   if (status === 'ready') return 'border-accent-green/25 bg-accent-green/10 text-accent-green'
   if (status === 'manual') return 'border-accent-amber/25 bg-accent-amber/10 text-accent-amber'
+  if (status === 'unsupported') return 'border-accent-amber/25 bg-accent-amber/10 text-accent-amber'
   return 'border-surface-500/45 bg-surface-800/45 text-surface-300'
+}
+
+function providerStatusLabel(status: ProviderStatus): string {
+  if (status === 'ready') return 'Ready'
+  if (status === 'manual') return 'Manual'
+  if (status === 'unsupported') return 'Setup'
+  return 'Needs key'
 }
 
 function createDesignAsset(product: StoreProductIdea, spec: DesignSpec, provider: DesignProviderId): StoreProductDesignAsset {
@@ -943,6 +1048,35 @@ function createDesignAsset(product: StoreProductIdea, spec: DesignSpec, provider
   }
 }
 
+function createProviderDesignAsset(product: StoreProductIdea, generated: GeneratedDesignAsset, provider: DesignProviderId): StoreProductDesignAsset {
+  return {
+    id: `design-${product.id}-${provider}-${Date.now()}`,
+    provider,
+    type: 'image',
+    title: generated.title,
+    prompt: generated.prompt,
+    assetUrl: generated.asset_url,
+    approvedAt: new Date().toISOString(),
+  }
+}
+
+function providerEnvVars(provider: DesignProviderId): string[] {
+  if (provider === 'ideogram') return ['IDEOGRAM_API_KEY']
+  if (provider === 'recraft') return ['RECRAFT_API_TOKEN']
+  if (provider === 'krea') return ['KREA_API_KEY']
+  if (provider === 'openai') return ['OPENAI_API_KEY']
+  if (provider === 'stability') return ['STABILITY_API_KEY']
+  if (provider === 'firefly') return ['FIREFLY_SERVICES_CLIENT_ID', 'FIREFLY_SERVICES_CLIENT_SECRET']
+  if (provider === 'fal') return ['FAL_KEY']
+  if (provider === 'replicate') return ['REPLICATE_API_TOKEN']
+  if (provider === 'bfl') return ['BFL_API_KEY']
+  if (provider === 'gemini') return ['GEMINI_API_KEY']
+  if (provider === 'luma') return ['LUMA_API_KEY']
+  if (provider === 'magnific') return ['MAGNIFIC_API_KEY']
+  if (provider === 'leonardo') return ['LEONARDO_API_KEY']
+  return []
+}
+
 function createDesignPrompt(product: StoreProductIdea, provider: DesignProviderId): string {
   const providerHint = {
     ideogram: 'typography-first merch design with accurate readable text',
@@ -951,6 +1085,13 @@ function createDesignPrompt(product: StoreProductIdea, provider: DesignProviderI
     openai: 'balanced commercial product design concept',
     firefly: 'commercially safe graphic design asset',
     stability: 'illustrative high-impact product graphic',
+    fal: 'fast model test for production-quality concepts',
+    replicate: 'model marketplace benchmark with practical output',
+    bfl: 'premium Flux prompt-following design asset',
+    gemini: 'reasoned product graphic with strong composition',
+    luma: 'polished campaign-ready visual direction',
+    magnific: 'high-detail creative product artwork',
+    leonardo: 'commercial design style with print-ready polish',
     midjourney: 'high-taste artistic benchmark concept',
     local_svg: 'simple deterministic approval-test design',
   } satisfies Record<DesignProviderId, string>
