@@ -38,7 +38,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             <button
               onClick={() => {
                 this.setState({ hasError: false, error: null })
-                window.location.replace(`/?v=15&manual_refresh=${Date.now()}`)
+                window.location.replace(`/?v=16&manual_refresh=${Date.now()}`)
               }}
               className="btn-primary"
             >

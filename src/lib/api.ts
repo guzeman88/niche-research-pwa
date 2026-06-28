@@ -19,6 +19,7 @@ const API_URLS = [PRIMARY_API_URL, ...BACKUP_API_URLS]
 const BASE_URL = API_URLS[0] || '';
 const USE_STATIC_DATA = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
 const WAKE_BACKEND = import.meta.env.VITE_WAKE_BACKEND === '1';
+const MIN_SCORED_STATIC_ROWS = 1000;
 let lastBackendWake = 0;
 
 function parseApiUrls(value: string): string[] {
@@ -111,6 +112,28 @@ async function fetchApi(path: string, options?: RequestInit, timeoutMs = 8000): 
   return null;
 }
 
+function scoredRowCount(data: unknown): number {
+  if (!Array.isArray(data)) return 0;
+  return data.filter((item) => {
+    if (!item || typeof item !== 'object') return false;
+    const row = item as Record<string, unknown>;
+    return Number(row.opportunity_score) > 0 || Number(row.gap_score) > 0;
+  }).length;
+}
+
+function needsStaticFallback(path: string, data: unknown): boolean {
+  if (path === '/api/stats') {
+    return !data || typeof data !== 'object' || Number((data as Record<string, unknown>).avg_opportunity || 0) <= 0;
+  }
+  if (path === '/api/keywords/opportunities') {
+    return !Array.isArray(data) || data.length === 0;
+  }
+  if (path === '/api/keywords') {
+    return Array.isArray(data) && scoredRowCount(data) < MIN_SCORED_STATIC_ROWS;
+  }
+  return false;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const isGet = !options?.method || options.method === 'GET';
   const pathOnly = path.split('?')[0];
@@ -122,10 +145,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const res = await fetchApi(path, options);
     if (res?.ok) {
       const ct = res.headers.get('content-type') || '';
-      if (ct.includes('application/json')) return res.json() as Promise<T>;
+      if (ct.includes('application/json')) {
+        const data = await res.json();
+        if (!needsStaticFallback(pathOnly, data)) return data as T;
+      }
     }
 
-    // Backend unreachable or returned non-JSON HTML — fall back to static CDN.
+    // Backend unreachable, returned non-JSON HTML, or returned low-signal data.
     if (!liveOnly && !import.meta.env.DEV) {
       const staticData = await fetchStatic(pathOnly);
       if (staticData) {

@@ -1,4 +1,4 @@
-const ASSET_REFRESH_VERSION = 'etsy-niches-assets-v15'
+const ASSET_REFRESH_VERSION = 'etsy-niches-assets-v16'
 const ASSET_REFRESH_KEY = 'etsy-niches-asset-refresh-version'
 
 const CHUNK_ERROR_PATTERNS = [
@@ -32,7 +32,7 @@ export function refreshForCurrentAssets(error: unknown) {
   window.sessionStorage.setItem(ASSET_REFRESH_KEY, ASSET_REFRESH_VERSION)
   clearBrowserAppState()
     .finally(() => {
-      window.location.replace(`/?v=15&asset_refresh=${Date.now()}`)
+      window.location.replace(`/?v=16&asset_refresh=${Date.now()}`)
     })
 
   return true
