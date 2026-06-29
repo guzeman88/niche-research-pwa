@@ -10,6 +10,7 @@ const Keywords = lazy(() => import('./pages/Keywords'))
 const StoreGenerator = lazy(() => import('./pages/StoreGenerator'))
 const Stores = lazy(() => import('./pages/Stores'))
 const EtsyAuth = lazy(() => import('./pages/EtsyAuth'))
+const ApiApplicationLanding = lazy(() => import('./pages/ApiApplicationLanding'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 function PageFallback() {
@@ -41,6 +42,7 @@ function AppRoutes() {
 
   return (
     <Routes>
+      <Route path="/api-application" element={page(<ApiApplicationLanding />)} />
       <Route path="/auth/etsy" element={page(<EtsyAuth />)} />
       <Route element={<Layout />}>
         <Route index element={page(<Dashboard />)} />
