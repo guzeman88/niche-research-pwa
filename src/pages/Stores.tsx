@@ -7,6 +7,7 @@ import PullToRefresh from '../components/PullToRefresh'
 import { StoresSkeleton } from '../components/Skeleton'
 import {
   createListingFromProduct,
+  createSpecificProductIdeas,
   emptyWorkspace,
   extractKeywordClusters,
   extractStoreKeywords,
@@ -670,9 +671,12 @@ function KeywordProductCreationPage({
                     <button
                       type="button"
                       onClick={() => startDesign(idea)}
-                      className="min-w-0 truncate text-left text-[13px] font-extrabold"
+                      className="min-w-0 text-left"
                     >
-                      {idea.title}
+                      <span className="block break-words text-[13px] font-extrabold leading-snug">{idea.title}</span>
+                      {idea.creativeBrief?.exactPhrase && (
+                        <span className="mt-0.5 block truncate text-[11px] font-semibold text-surface-400">"{idea.creativeBrief.exactPhrase}"</span>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -884,6 +888,8 @@ function GeneratedDesignPanel({
           </div>
         )}
 
+        <CreativeBriefPanel product={product} />
+
         <div className="rounded-md border border-surface-600/35 bg-surface-900/25 p-2.5">
           <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-surface-400">Prompt</div>
           <div className="line-clamp-3 break-words text-[11px] leading-relaxed text-surface-200">{prompt}</div>
@@ -981,6 +987,31 @@ function GeneratedDesignPanel({
         </button>
       </div>
     </div>
+  )
+}
+
+function CreativeBriefPanel({ product }: { product: StoreProductIdea }) {
+  const brief = product.creativeBrief
+  if (!brief) return null
+  const rows = [
+    ['Words', brief.exactPhrase || 'No text'],
+    ['Artwork', brief.visualSubject],
+    ['Style', `${brief.styleDirection}. ${brief.palette}.`],
+    ['Avoid', brief.avoid.slice(0, 4).join(', ')],
+    ['SEO', [brief.seoSource.primaryKeyword, ...brief.seoSource.supportingKeywords.slice(0, 3)].join(', ')],
+  ]
+  return (
+    <details className="rounded-md border border-surface-600/35 bg-surface-900/25 p-2.5" open>
+      <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-wider text-surface-400">Brief</summary>
+      <div className="mt-2 space-y-1.5">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-2 text-[11px] leading-relaxed">
+            <span className="font-bold text-surface-500">{label}</span>
+            <span className="break-words font-semibold text-surface-200">{value}</span>
+          </div>
+        ))}
+      </div>
+    </details>
   )
 }
 
@@ -1240,6 +1271,23 @@ function createDesignPrompt(product: StoreProductIdea, provider: DesignProviderI
     midjourney: 'high-taste artistic benchmark concept',
     local_svg: 'simple deterministic approval-test design',
   } satisfies Record<DesignProviderId, string>
+  const brief = product.creativeBrief
+  if (brief) {
+    return [
+      `Create a flat printable design asset for ${formatProductType(product.productType)}.`,
+      `Exact words to render: "${brief.exactPhrase || 'no text'}".`,
+      `Artwork: ${brief.visualSubject}`,
+      `Composition: ${brief.composition}`,
+      `Palette: ${brief.palette}.`,
+      `Typography: ${brief.typography}`,
+      `Style: ${brief.styleDirection}.`,
+      `Primary Etsy keyword: ${brief.seoSource.primaryKeyword}.`,
+      `Supporting keywords: ${brief.seoSource.supportingKeywords.slice(0, 5).join(', ') || 'none'}.`,
+      `Avoid: ${brief.avoid.join(', ')}.`,
+      `Provider target: ${providerHint[provider]}.`,
+      'Do not make a product mockup; output only the design artwork.',
+    ].join(' ')
+  }
   return [
     `${product.title} for ${formatProductType(product.productType)}.`,
     `Primary keyword: ${product.keyword}.`,
@@ -1251,6 +1299,14 @@ function createDesignPrompt(product: StoreProductIdea, provider: DesignProviderI
 }
 
 function createMockupPrompt(product: StoreProductIdea, design: StoreProductDesignAsset): string {
+  if (product.creativeBrief) {
+    return [
+      product.creativeBrief.mockupDirection,
+      `Product: ${product.title}.`,
+      `Use the approved ${design.provider} design asset as the only artwork source.`,
+      `Keep the first Etsy image realistic, clean, and focused on ${formatProductType(product.productType)}.`,
+    ].join(' ')
+  }
   return [
     `Mock up "${product.title}" as a ${formatProductType(product.productType)}.`,
     `Use the approved ${design.provider} design asset as the only artwork source.`,
@@ -1267,9 +1323,10 @@ function createDesignSpec(store: StoreItem, product: StoreProductIdea, variant: 
     { bg: '#eee3e0', paper: '#fff8f2', ink: '#342a2f', accent: '#c86f7a', secondary: '#a9c88f' },
   ]
   const palette = palettes[(hashString(product.keyword + product.title) + variant) % palettes.length]
+  const displayTitle = product.creativeBrief?.exactPhrase || product.title
   return {
     ...palette,
-    title: titleCase(product.title).slice(0, 28),
+    title: titleCase(displayTitle).slice(0, 28),
     subtitle: titleCase(product.keyword).slice(0, 32),
     motif: designMotifFor(context),
     variant,
@@ -1554,68 +1611,7 @@ function productTypeOptionsFor(store: StoreItem, keyword: StoreKeywordCandidate)
 }
 
 function productIdeasForType(store: StoreItem, keyword: StoreKeywordCandidate, productType: string): StoreProductIdea[] {
-  const now = new Date().toISOString()
-  const supportingKeywords = relatedKeywordNames(store, keyword)
-  return productIdeaTitles(productType, store, keyword).map((title) => {
-    const productLabel = productTypeLabel(productType)
-    return {
-      id: `candidate-${store.slug}-${slugifyLocal(keyword.keyword)}-${slugifyLocal(productType)}-${slugifyLocal(title)}`,
-      storeSlug: store.slug,
-      keyword: keyword.keyword,
-      title,
-      productType,
-      targetBuyer: store.target_audience || '',
-      designBrief: `${title}. ${keyword.keyword}. ${productLabel}.`,
-      mockupPrompt: `${title}. ${keyword.keyword}. ${productLabel}. Use generated design as source. Clean Etsy thumbnail.`,
-      supportingKeywords,
-      evidence: {
-        strength: keyword.strength,
-        opportunity: keyword.opportunity,
-        gap: keyword.gap,
-        buyerIntent: keyword.buyerIntent,
-      },
-      status: 'idea',
-      createdAt: now,
-      updatedAt: now,
-    }
-  })
-}
-
-function productIdeaTitles(productType: string, store: StoreItem, keyword: StoreKeywordCandidate): string[] {
-  const type = normalizeProductType(productType)
-  const context = `${store.niche} ${keyword.keyword} ${store.target_audience}`.toLowerCase()
-  const isPet = /\b(pet|dog|cat|puppy|kitten|rescue|breed)\b/.test(context)
-  if (type.includes('wall') || type.includes('art') || type.includes('print')) {
-    return isPet ? ['Pet Name Print', 'Rescue Quote Print', 'Breed Line Art', 'Adoption Poster'] : ['Quote Print', 'Line Art', 'Poster Set', 'Name Print']
-  }
-  if (type.includes('digital') || type.includes('download') || type.includes('template')) {
-    return isPet ? ['Care Checklist', 'Travel Planner', 'Adoption Guide', 'Sitter Sheet'] : ['Planner Sheet', 'Checklist', 'Guide', 'Template']
-  }
-  if (type.includes('mug') || type.includes('cup')) {
-    return isPet ? ['Dog Mom Mug', 'Cat Dad Mug', 'Rescue Mug', 'Custom Mug'] : ['Quote Mug', 'Name Mug', 'Gift Mug', 'Minimal Mug']
-  }
-  if (type.includes('sticker') || type.includes('decal')) {
-    return isPet ? ['Breed Set', 'Rescue Sticker', 'Pet Icons', 'Phone Decal'] : ['Sticker Set', 'Icon Pack', 'Quote Sticker', 'Decal']
-  }
-  if (type.includes('apparel') || type.includes('shirt') || type.includes('tee') || type.includes('hoodie')) {
-    return isPet ? ['Dog Walk Tee', 'Rescue Hoodie', 'Breed Sweatshirt', 'Pet Parent Hat'] : ['Graphic Tee', 'Quote Hoodie', 'Logo Sweatshirt', 'Dad Hat']
-  }
-  if (type.includes('tote') || type.includes('bag')) {
-    return isPet ? ['Rescue Tote', 'Dog Walk Bag', 'Pet Parent Tote', 'Adoption Tote'] : ['Market Tote', 'Quote Tote', 'Gift Bag', 'Canvas Tote']
-  }
-  return ['Starter Set', 'Gift Set', 'Mini Pack', 'Custom Design']
-}
-
-function relatedKeywordNames(store: StoreItem, keyword: StoreKeywordCandidate): string[] {
-  const keywordWords = meaningfulWords(keyword.keyword)
-  const candidates = extractStoreKeywords(store)
-    .filter((item) => item.keyword.toLowerCase() !== keyword.keyword.toLowerCase())
-  const related = candidates.filter((item) => meaningfulWords(item.keyword).some((word) => keywordWords.includes(word)))
-  return uniqueStrings([...related, ...candidates].map((item) => item.keyword)).slice(0, 6)
-}
-
-function meaningfulWords(value: string): string[] {
-  return value.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 2)
+  return createSpecificProductIdeas(store, keyword, productType, 6)
 }
 
 function normalizeProductType(value: string): string {
