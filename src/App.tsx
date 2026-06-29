@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import useScannerHeartbeat from './hooks/useScannerHeartbeat'
+import { AppModeProvider, useAppMode } from './lib/appMode'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Keywords = lazy(() => import('./pages/Keywords'))
@@ -27,7 +28,16 @@ function page(element: ReactNode) {
 }
 
 export default function App() {
-  useScannerHeartbeat()
+  return (
+    <AppModeProvider>
+      <AppRoutes />
+    </AppModeProvider>
+  )
+}
+
+function AppRoutes() {
+  const { mode } = useAppMode()
+  useScannerHeartbeat(mode === 'developer')
 
   return (
     <Routes>

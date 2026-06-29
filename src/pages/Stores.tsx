@@ -33,6 +33,7 @@ import {
   type StoreWorkspace,
 } from '../lib/storeWorkspace'
 import { fmtPrice, scoreColor } from '../lib/utils'
+import { useAppMode, type AppMode } from '../lib/appMode'
 
 const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
 const TABS = [
@@ -81,9 +82,10 @@ interface ManualDesignAsset {
 
 export default function Stores() {
   const qc = useQueryClient()
+  const { mode } = useAppMode()
   const { data: rawStores, isLoading, isError } = useQuery<StoreItem[]>({ queryKey: ['stores'], queryFn: getStores })
   const { data: designProviders } = useQuery<DesignProviderInfo[]>({ queryKey: ['design-providers'], queryFn: getDesignProviders })
-  const stores = rawStores || []
+  const stores = useMemo(() => (rawStores || []).filter((store) => storeMatchesMode(store, mode)), [rawStores, mode])
   const [selected, setSelected] = useState<string>('')
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('dashboard')
   const [workspaceVersion, setWorkspaceVersion] = useState(0)
@@ -1945,4 +1947,9 @@ function titleCase(value: string): string {
 
 function splitTags(value: string): string[] {
   return value.split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 13)
+}
+
+function storeMatchesMode(store: StoreItem, mode: AppMode): boolean {
+  const storeMode = String(store.research_snapshot?.app_mode || 'developer')
+  return mode === 'user' ? storeMode === 'user' : storeMode !== 'user'
 }

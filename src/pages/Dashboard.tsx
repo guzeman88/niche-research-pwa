@@ -10,6 +10,8 @@ import { DashboardSkeleton } from '../components/Skeleton'
 import { fmt, fmtDate, scoreColor } from '../lib/utils'
 import type { StatsResponse } from '../types/api'
 import type { ReportListItem } from '../types/research'
+import { useAppMode } from '../lib/appMode'
+import { getUserOpportunities, getUserStats } from '../lib/userData'
 
 interface DashboardOpportunity {
   id: string
@@ -20,9 +22,21 @@ interface DashboardOpportunity {
 
 export default function Dashboard() {
   const qc = useQueryClient()
-  const { data: stats } = useQuery<StatsResponse>({ queryKey: ['stats'], queryFn: getStats, refetchInterval: 15_000 })
-  const { data: reports } = useQuery<ReportListItem[]>({ queryKey: ['reports'], queryFn: () => listReports('__global__', 12) })
-  const { data: keywordOpportunities } = useQuery<Record<string, unknown>[]>({ queryKey: ['opportunities', 'dashboard'], queryFn: () => getOpportunities(undefined, 12) })
+  const { mode, isUserMode, userDataVersion } = useAppMode()
+  const { data: stats } = useQuery<StatsResponse>({
+    queryKey: ['stats', mode, userDataVersion],
+    queryFn: () => isUserMode ? getUserStats() : getStats(),
+    refetchInterval: isUserMode ? false : 15_000,
+  })
+  const { data: reports } = useQuery<ReportListItem[]>({
+    queryKey: ['reports', mode],
+    queryFn: () => listReports('__global__', 12),
+    enabled: !isUserMode,
+  })
+  const { data: keywordOpportunities } = useQuery<Record<string, unknown>[]>({
+    queryKey: ['opportunities', 'dashboard', mode, userDataVersion],
+    queryFn: () => isUserMode ? getUserOpportunities(12) : getOpportunities(undefined, 12),
+  })
   const refresh = () => qc.refetchQueries({ type: 'active' })
 
   const opportunities = normalizeDashboardOpportunities(reports, keywordOpportunities)
@@ -37,7 +51,7 @@ export default function Dashboard() {
     <div className="page">
       <div className="page-header">
         <div>
-          <p className="text-[12px] text-primary-100 font-semibold">Etsy intelligence</p>
+          <p className="text-[12px] text-primary-100 font-semibold">{isUserMode ? 'User scan workspace' : 'Etsy intelligence'}</p>
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Dashboard</h2>
         </div>
         <Link to="/store-generator" className="btn-primary text-[13px]">
@@ -47,9 +61,9 @@ export default function Dashboard() {
       </div>
 
       <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-        <Chip val={fmt(stats?.total_seeds)} label="Keywords" sub={stats?.total_seeds ? `${stats.total_seeds} seeds` : 'No data'} color="indigo" />
+        <Chip val={fmt(stats?.total_seeds)} label="Keywords" sub={stats?.total_seeds ? (isUserMode ? 'user scan rows' : `${stats.total_seeds} seeds`) : 'No data'} color="indigo" />
         <Chip val={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} label="Avg Opp" sub={topOpportunity ? 'real keywords' : 'No data'} color="emerald" />
-        <Chip val={fmt(stats?.breakout_count)} label="Breakouts" sub="rising fast" color="amber" />
+        <Chip val={fmt(stats?.breakout_count)} label="Breakouts" sub={isUserMode ? 'from imports' : 'rising fast'} color="amber" />
         <Chip val={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} label="Avg Gap" sub={topGap?.keyword ? 'top gap available' : 'no gap data'} color="violet" />
       </div>
 

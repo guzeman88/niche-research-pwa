@@ -5,11 +5,14 @@ import Icon from '../components/Icon'
 import PullToRefresh from '../components/PullToRefresh'
 import { fmtPrice, scoreColor } from '../lib/utils'
 import type { StoreIdea, StoreIdeaKeyword } from '../lib/storeIdeas'
+import { useAppMode, type AppMode } from '../lib/appMode'
+import { getUserStoreIdeas } from '../lib/userData'
 
 const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
 
 export default function StoreGenerator() {
   const queryClient = useQueryClient()
+  const { mode, isUserMode, userDataVersion } = useAppMode()
   const [savedConcepts, setSavedConcepts] = useState<Set<string>>(() => new Set())
   const [saveError, setSaveError] = useState<string>('')
   const [expandedConceptId, setExpandedConceptId] = useState<string | null>(null)
@@ -20,8 +23,8 @@ export default function StoreGenerator() {
     isLoading: profitableLoading,
     error: profitableError,
   } = useQuery({
-    queryKey: ['profitable-store-ideas', 12],
-    queryFn: () => getProfitableStoreIdeas(12),
+    queryKey: ['profitable-store-ideas', mode, userDataVersion, 12],
+    queryFn: () => isUserMode ? getUserStoreIdeas(12) : getProfitableStoreIdeas(12),
   })
 
   const concepts = useMemo(() => profitableIdeas || [], [profitableIdeas])
@@ -38,7 +41,7 @@ export default function StoreGenerator() {
     })
   }
   const saveStore = useMutation({
-    mutationFn: (concept: StoreIdea) => createStore(toStorePayload(concept)),
+    mutationFn: (concept: StoreIdea) => createStore(toStorePayload(concept, mode)),
     onMutate: () => setSaveError(''),
     onSuccess: (_store, concept) => {
       setSavedConcepts((current) => new Set(current).add(concept.id))
@@ -57,8 +60,8 @@ export default function StoreGenerator() {
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Store Idea Generator</h2>
           <p className="text-[13px] text-surface-200 mt-0.5">
             {concepts.length > 0
-              ? `${concepts.length} source-backed store concepts with keyword clusters and listing blueprints`
-              : 'Find storeable niches that can hold multiple related keywords'}
+              ? `${concepts.length} ${isUserMode ? 'user-scan' : 'source-backed'} store concepts with keyword clusters`
+              : isUserMode ? 'Import scored keyword scans before generating user store ideas' : 'Find storeable niches that can hold multiple related keywords'}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -79,7 +82,7 @@ export default function StoreGenerator() {
           <Icon name="wifi-off" size={48} className="text-surface-400 mx-auto mb-4" />
           <h3 className="text-[15px] font-bold text-surface-200 mb-2">Keyword data is unavailable</h3>
           <p className="text-[13px] text-surface-400 max-w-md mx-auto">
-            Connect the backend and run keyword scans before generating store ideas.
+            {isUserMode ? 'Import eRank, Semrush, or CSV rows with real keyword metrics first.' : 'Connect the backend and run keyword scans before generating store ideas.'}
           </p>
         </div>
       ) : isLoading ? (
@@ -291,7 +294,7 @@ export default function StoreGenerator() {
           <Icon name="layers" size={48} className="text-surface-400 mx-auto mb-4" />
           <h3 className="text-[15px] font-bold text-surface-200 mb-2">No store idea data yet</h3>
           <p className="text-[13px] text-surface-400 max-w-md mx-auto">
-            No source-backed store ideas are available from the current keyword data.
+            {isUserMode ? 'No user-scan store ideas are available yet.' : 'No source-backed store ideas are available from the current keyword data.'}
           </p>
         </div>
       )}
@@ -495,7 +498,7 @@ function bestNumber(a?: number | null, b?: number | null): number | undefined {
   return undefined
 }
 
-function toStorePayload(concept: StoreIdea) {
+function toStorePayload(concept: StoreIdea, mode: AppMode) {
   const keywordNames = concept.keywords.map((keyword) => keyword.keyword)
   const secondary = [
     concept.focus,
@@ -516,7 +519,8 @@ function toStorePayload(concept: StoreIdea) {
     pricing_strategy: profit && (profit >= 78 || (concept.estimatedGrossMargin || 0) >= 58) ? 'premium' : (concept.avgGap || 0) >= 60 ? 'competitive' : 'penetration',
     listing_target: profit && profit >= 78 ? 75 : 50,
     research_snapshot: {
-      source: 'source_backed_store_quality_engine',
+      app_mode: mode,
+      source: mode === 'user' ? 'user_keyword_scan' : 'source_backed_store_quality_engine',
       profit_score: concept.profitScore,
       recommendation_score: concept.recommendationScore,
       store_quality_score: concept.storeQualityScore,

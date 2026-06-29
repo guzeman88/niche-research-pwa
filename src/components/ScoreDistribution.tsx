@@ -3,6 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { useQuery } from '@tanstack/react-query'
 import { getOpportunities } from '../lib/api'
 import Icon from './Icon'
+import { useAppMode } from '../lib/appMode'
+import { getUserOpportunities } from '../lib/userData'
 
 const BUCKETS = [
   { min: 0, max: 45, label: '<45', color: '#bf616a' },
@@ -17,7 +19,11 @@ const BUCKETS = [
 ]
 
 export default function ScoreDistribution() {
-  const { data: opps } = useQuery({ queryKey: ['opportunities', 500], queryFn: () => getOpportunities(undefined, 500) })
+  const { mode, isUserMode, userDataVersion } = useAppMode()
+  const { data: opps } = useQuery({
+    queryKey: ['opportunities', 'distribution', mode, userDataVersion],
+    queryFn: () => isUserMode ? getUserOpportunities(500) : getOpportunities(undefined, 500),
+  })
 
   const chartData = useMemo(() => {
     const counts = BUCKETS.map(b => ({ ...b, count: 0 }))

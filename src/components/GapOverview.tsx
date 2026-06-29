@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { getTopGaps } from '../lib/api'
 import Icon from './Icon'
 import type { GapReport } from '../types/gaps'
+import { useAppMode } from '../lib/appMode'
+import { getUserGaps } from '../lib/userData'
 
 const GAP_CONFIG = [
   { key: 'volume_gap_score' as const, label: 'Volume Gap', desc: 'Supply/demand imbalance', color: '#5e81ac', icon: 'bar-chart' as const },
@@ -15,14 +17,18 @@ const GAP_CONFIG = [
 ]
 
 export default function GapOverview() {
-  const { data: gaps } = useQuery<GapReport[]>({ queryKey: ['gaps', 500], queryFn: () => getTopGaps(500) })
+  const { mode, isUserMode, userDataVersion } = useAppMode()
+  const { data: gaps } = useQuery<Array<Partial<GapReport> & { keyword: string }>>({
+    queryKey: ['gaps', 'overview', mode, userDataVersion],
+    queryFn: () => isUserMode ? getUserGaps(500) : getTopGaps(500),
+  })
 
   // Compute averages from all gaps
   const averages = GAP_CONFIG.map(config => {
     const allGaps = (gaps || [])
-    const values = allGaps.map(g => (g as any)[config.key] as number).filter(v => v != null && !isNaN(v))
-    const avg = values.length > 0 ? values.reduce((a: number, b: number) => a + b, 0) / values.length : 0
-    return { ...config, avg: Math.round(avg) }
+    const values = allGaps.map(g => (g as any)[config.key] as number).filter(v => Number.isFinite(v))
+    const avg = values.length > 0 ? Math.round(values.reduce((a: number, b: number) => a + b, 0) / values.length) : null
+    return { ...config, avg }
   })
 
   return (
@@ -35,10 +41,10 @@ export default function GapOverview() {
         {averages.map(g => (
           <div key={g.key} className="text-center">
             <Icon name={g.icon} size={16} className="mx-auto mb-1.5" />
-            <div className="text-lg font-extrabold tracking-tight" style={{ color: g.color }}>{g.avg}</div>
+            <div className="text-lg font-extrabold tracking-tight" style={{ color: g.avg == null ? undefined : g.color }}>{g.avg ?? '-'}</div>
             <div className="text-[9px] text-surface-300 uppercase font-semibold tracking-wide">{g.label}</div>
             <div className="progress-track mt-2 h-1">
-              <div className="h-full rounded-full transition-all" style={{ width: `${g.avg}%`, backgroundColor: g.color }} />
+              <div className="h-full rounded-full transition-all" style={{ width: `${g.avg ?? 0}%`, backgroundColor: g.color }} />
             </div>
           </div>
         ))}

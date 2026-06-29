@@ -9,7 +9,7 @@ export default function Layout() {
         <Sidebar />
       </aside>
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto pb-24 lg:pb-0">
+      <main className="flex-1 overflow-y-auto pb-32 lg:pb-0">
         <Outlet />
       </main>
       {/* Mobile bottom nav */}

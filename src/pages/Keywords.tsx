@@ -6,6 +6,17 @@ import PullToRefresh from '../components/PullToRefresh'
 import { KeywordsSkeleton } from '../components/Skeleton'
 import { fmtDate } from '../lib/utils'
 import type { KeywordItem } from '../types/api'
+import { useAppMode } from '../lib/appMode'
+import {
+  clearUserKeywordData,
+  getUserDomains,
+  getUserScanBatches,
+  importUserScan,
+  listUserKeywords,
+  type UserImportResult,
+  type UserScanBatch,
+  type UserScanSource,
+} from '../lib/userData'
 
 type SortKey = 'keyword' | 'domain' | 'status' | 'opportunity' | 'gap' | 'trajectory'
 type SortDir = 'asc' | 'desc'
@@ -23,17 +34,22 @@ const PAGE_SIZE = 100
 
 export default function Keywords() {
   const queryClient = useQueryClient()
+  const { mode, isUserMode, userDataVersion, refreshUserData } = useAppMode()
   const [search, setSearch] = useState('')
   const [domain, setDomain] = useState('')
   const [sortBy, setSortBy] = useState<SortKey>('gap')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
 
-  const { data: apiDomains } = useQuery<string[]>({ queryKey: ['domains'], queryFn: getDomains })
-  const { data: keywords, isLoading } = useQuery<KeywordItem[]>({
-    queryKey: ['keywords'],
-    queryFn: () => listKeywords(undefined, 15000),
+  const { data: apiDomains } = useQuery<string[]>({
+    queryKey: ['domains', mode, userDataVersion],
+    queryFn: () => isUserMode ? getUserDomains() : getDomains(),
   })
+  const { data: keywords, isLoading } = useQuery<KeywordItem[]>({
+    queryKey: ['keywords', mode, userDataVersion],
+    queryFn: () => isUserMode ? listUserKeywords(15000) : listKeywords(undefined, 15000),
+  })
+  const scanBatches = isUserMode ? getUserScanBatches() : []
 
   const domains = useMemo(() => {
     const fromKeywords = Array.from(new Set((keywords || []).map(kw => kw.domain).filter(Boolean))).sort()
@@ -106,6 +122,14 @@ export default function Keywords() {
   }
 
   const refresh = () => queryClient.refetchQueries({ type: 'active' })
+  const refreshUserQueries = () => {
+    refreshUserData()
+    queryClient.invalidateQueries({ queryKey: ['keywords'] })
+    queryClient.invalidateQueries({ queryKey: ['stats'] })
+    queryClient.invalidateQueries({ queryKey: ['opportunities'] })
+    queryClient.invalidateQueries({ queryKey: ['gaps'] })
+    queryClient.invalidateQueries({ queryKey: ['profitable-store-ideas'] })
+  }
 
   if (!keywords && !isLoading) return <KeywordsSkeleton />
   if (isLoading && !keywords) return <KeywordsSkeleton />
@@ -116,22 +140,39 @@ export default function Keywords() {
         <div className="page-header">
           <div>
             <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Keywords</h2>
-            <p className="text-[13px] text-surface-200 mt-0.5">{keywords ? `${sorted.length} keywords` : 'Loading...'}</p>
+            <p className="text-[13px] text-surface-200 mt-0.5">
+              {keywords ? `${sorted.length} ${isUserMode ? 'user keywords' : 'keywords'}` : 'Loading...'}
+            </p>
           </div>
-          <button
-            onClick={() => discoverMutation.mutate({})}
-            disabled={discoverMutation.isPending}
-            className="btn-primary text-[13px]"
-          >
-            <Icon name="plus-circle" size={16} />
-            {discoverMutation.isPending ? 'Discovering...' : 'Discover'}
-          </button>
+          {isUserMode ? (
+            <span className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-primary-300/25 bg-primary-400/10 px-3 text-[12px] font-extrabold text-primary-100">
+              <Icon name="users" size={15} />
+              User data
+            </span>
+          ) : (
+            <button
+              onClick={() => discoverMutation.mutate({})}
+              disabled={discoverMutation.isPending}
+              className="btn-primary text-[13px]"
+            >
+              <Icon name="plus-circle" size={16} />
+              {discoverMutation.isPending ? 'Discovering...' : 'Discover'}
+            </button>
+          )}
         </div>
+
+        {isUserMode && (
+          <UserScanImporter
+            batches={scanBatches}
+            hasKeywords={Boolean(keywords?.length)}
+            onChanged={refreshUserQueries}
+          />
+        )}
 
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-300" />
-            <input type="text" className="input pl-9 text-[13px] font-medium" placeholder="Search keywords..." value={search} onChange={e => { setSearch(e.target.value); setDomain('') }} />
+            <input type="text" className="input pl-9 text-[13px] font-medium" placeholder={isUserMode ? 'Search your scan...' : 'Search keywords...'} value={search} onChange={e => { setSearch(e.target.value); setDomain('') }} />
           </div>
           <select className="input w-auto min-w-36 text-[13px] font-medium" value={domain} onChange={e => { setDomain(e.target.value); setSearch('') }}>
             <option value="">All domains</option>
@@ -237,4 +278,138 @@ export default function Keywords() {
 
 function finiteScore(value: number | null | undefined): number | null {
   return Number.isFinite(value) ? Number(value) : null
+}
+
+function UserScanImporter({
+  batches,
+  hasKeywords,
+  onChanged,
+}: {
+  batches: UserScanBatch[]
+  hasKeywords: boolean
+  onChanged: () => void
+}) {
+  const [source, setSource] = useState<UserScanSource>('erank')
+  const [name, setName] = useState('')
+  const [text, setText] = useState('')
+  const [result, setResult] = useState<UserImportResult | null>(null)
+  const [error, setError] = useState('')
+
+  const submit = () => {
+    setError('')
+    setResult(null)
+    if (!text.trim()) {
+      setError('Paste or upload a scan first.')
+      return
+    }
+    const next = importUserScan({ source, name, text })
+    if (next.imported === 0) {
+      setError('No keyword rows found.')
+      return
+    }
+    setResult(next)
+    setText('')
+    onChanged()
+  }
+
+  const loadFile = (file?: File) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setText(typeof reader.result === 'string' ? reader.result : '')
+    reader.readAsText(file)
+  }
+
+  const clear = () => {
+    if (!hasKeywords) return
+    if (!window.confirm('Clear user keyword scans from this browser?')) return
+    clearUserKeywordData()
+    setResult(null)
+    setError('')
+    onChanged()
+  }
+
+  return (
+    <div className="panel overflow-hidden">
+      <div className="grid gap-3 border-b border-surface-600/45 p-3 lg:grid-cols-[10rem_minmax(10rem,14rem)_minmax(0,1fr)_auto] lg:items-end">
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-300">Source</span>
+          <select className="input min-h-10 py-2 text-[12px]" value={source} onChange={(event) => setSource(event.target.value as UserScanSource)}>
+            <option value="erank">eRank</option>
+            <option value="semrush">Semrush</option>
+            <option value="csv">CSV</option>
+            <option value="manual">Manual</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-300">Scan Name</span>
+          <input className="input min-h-10 py-2 text-[12px]" value={name} onChange={(event) => setName(event.target.value)} placeholder="June scan" />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-300">Upload</span>
+          <input
+            className="input min-h-10 py-2 text-[12px]"
+            type="file"
+            accept=".csv,.tsv,.txt"
+            onChange={(event) => {
+              loadFile(event.target.files?.[0])
+              event.currentTarget.value = ''
+            }}
+          />
+        </label>
+
+        <div className="flex gap-2">
+          <button type="button" className="btn-primary min-h-10 px-3 py-2 text-[12px]" onClick={submit}>
+            <Icon name="download" size={14} />
+            Import
+          </button>
+          <button type="button" className="btn-secondary min-h-10 px-3 py-2 text-[12px]" onClick={clear} disabled={!hasKeywords}>
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_16rem]">
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-300">Paste Scan</span>
+          <textarea
+            className="input min-h-32 resize-y text-[12px] leading-5"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder="keyword, volume, competition, cpc"
+          />
+        </label>
+
+        <div className="rounded-md border border-surface-600/45 bg-surface-900/25 p-3">
+          <div className="section-label">User Dataset</div>
+          <div className="mt-3 space-y-2">
+            {result && (
+              <div className="rounded-md border border-accent-green/25 bg-accent-green/10 p-2 text-[12px] font-bold text-accent-green">
+                {result.imported} imported / {result.totalKeywords} total
+              </div>
+            )}
+            {error && (
+              <div className="rounded-md border border-accent-amber/25 bg-accent-amber/10 p-2 text-[12px] font-bold text-accent-amber">
+                {error}
+              </div>
+            )}
+            {batches.slice(0, 3).map((batch) => (
+              <div key={batch.id} className="rounded-md border border-surface-600/35 bg-surface-950/20 p-2">
+                <div className="truncate text-[12px] font-extrabold text-surface-100">{batch.name}</div>
+                <div className="mt-0.5 text-[10px] font-semibold text-surface-400">
+                  {batch.source} / {batch.keyword_count} rows / {batch.scored_count} scored
+                </div>
+              </div>
+            ))}
+            {!batches.length && (
+              <div className="rounded-md border border-surface-600/35 bg-surface-950/20 p-3 text-[12px] text-surface-300">
+                Import eRank, Semrush, CSV, or keyword rows.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }

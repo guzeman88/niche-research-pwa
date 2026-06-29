@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import Icon from './Icon'
 import type { IconName } from './Icon'
+import { useAppMode, type AppMode } from '../lib/appMode'
 
 const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconName }[] = [
   { to: '/', label: 'Dashboard', icon: 'home' },
@@ -10,44 +11,48 @@ const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconNam
 ]
 
 export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
+  const { mode, setMode } = useAppMode()
   const fastDataReady = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0'
   const statusOk = fastDataReady || import.meta.env.DEV
 
   if (mobile) {
     return (
-      <div className="grid grid-cols-4 gap-1 p-1.5">
-        {NAV_ITEMS.map(({ to, label, shortLabel, icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              `group relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-[10px] font-semibold leading-none transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-400/45 ${
-                isActive
-                  ? 'bg-surface-700/80 text-surface-50 shadow-[0_10px_22px_rgba(7,10,14,0.24),inset_0_1px_0_rgba(255,255,255,0.06)]'
-                  : 'text-surface-300 hover:bg-surface-800/70 hover:text-surface-100'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-200 ${
-                    isActive
-                      ? 'bg-primary-400/18 text-primary-100 ring-1 ring-primary-300/25'
-                      : 'text-surface-300 group-hover:text-surface-100'
-                  }`}
-                >
-                  <Icon name={icon} size={17} />
-                </span>
-                <span className="max-w-full truncate">{shortLabel || label}</span>
-                {isActive && (
-                  <span className="absolute -bottom-1 h-0.5 w-6 rounded-full bg-primary-200 shadow-[0_0_10px_rgba(136,192,208,0.55)]" />
-                )}
-              </>
-            )}
-          </NavLink>
-        ))}
+      <div className="p-1.5">
+        <ModeSwitch mode={mode} onModeChange={setMode} compact />
+        <div className="mt-1 grid grid-cols-4 gap-1">
+          {NAV_ITEMS.map(({ to, label, shortLabel, icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                `group relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-[10px] font-semibold leading-none transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-400/45 ${
+                  isActive
+                    ? 'bg-surface-700/80 text-surface-50 shadow-[0_10px_22px_rgba(7,10,14,0.24),inset_0_1px_0_rgba(255,255,255,0.06)]'
+                    : 'text-surface-300 hover:bg-surface-800/70 hover:text-surface-100'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span
+                    className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-200 ${
+                      isActive
+                        ? 'bg-primary-400/18 text-primary-100 ring-1 ring-primary-300/25'
+                        : 'text-surface-300 group-hover:text-surface-100'
+                    }`}
+                  >
+                    <Icon name={icon} size={17} />
+                  </span>
+                  <span className="max-w-full truncate">{shortLabel || label}</span>
+                  {isActive && (
+                    <span className="absolute -bottom-1 h-0.5 w-6 rounded-full bg-primary-200 shadow-[0_0_10px_rgba(136,192,208,0.55)]" />
+                  )}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
       </div>
     )
   }
@@ -62,6 +67,10 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
           Etsy Pipeline
         </h1>
         <p className="text-[11px] text-surface-300 mt-1.5 font-medium">Research console</p>
+      </div>
+
+      <div className="mb-5">
+        <ModeSwitch mode={mode} onModeChange={setMode} />
       </div>
 
       <nav className="flex-1 space-y-1">
@@ -92,6 +101,44 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
           </span>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ModeSwitch({
+  mode,
+  onModeChange,
+  compact = false,
+}: {
+  mode: AppMode
+  onModeChange: (mode: AppMode) => void
+  compact?: boolean
+}) {
+  const options: Array<{ value: AppMode; label: string; icon: IconName }> = [
+    { value: 'developer', label: compact ? 'Dev' : 'Developer', icon: 'database' },
+    { value: 'user', label: 'User', icon: 'users' },
+  ]
+  return (
+    <div className={`grid grid-cols-2 gap-1 rounded-lg border border-surface-600/60 bg-surface-950/35 p-1 ${compact ? '' : 'shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'}`}>
+      {options.map((option) => {
+        const active = mode === option.value
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onModeChange(option.value)}
+            className={`inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 text-[11px] font-extrabold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-primary-400/40 ${
+              active
+                ? 'bg-primary-400/18 text-primary-100 ring-1 ring-primary-300/25'
+                : 'text-surface-300 hover:bg-surface-800/70 hover:text-surface-100'
+            }`}
+          >
+            <Icon name={option.icon} size={13} />
+            {option.label}
+          </button>
+        )
+      })}
     </div>
   )
 }

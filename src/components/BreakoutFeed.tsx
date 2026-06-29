@@ -1,12 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { getBreakouts } from '../lib/api'
 import Icon from './Icon'
+import { useAppMode } from '../lib/appMode'
+import { getUserBreakouts } from '../lib/userData'
 
 export default function BreakoutFeed() {
+  const { mode, isUserMode, userDataVersion } = useAppMode()
   const { data: breakouts } = useQuery<{ keyword: string }[]>({
-    queryKey: ['breakouts', 'feed'],
-    queryFn: () => getBreakouts(15),
-    refetchInterval: 30_000,
+    queryKey: ['breakouts', 'feed', mode, userDataVersion],
+    queryFn: () => isUserMode ? getUserBreakouts(15) : getBreakouts(15),
+    refetchInterval: isUserMode ? false : 30_000,
   })
 
   if (!breakouts || breakouts.length === 0) {
@@ -17,7 +20,9 @@ export default function BreakoutFeed() {
           <span className="section-label">Breakout Feed</span>
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-auto" />
         </div>
-        <p className="text-[12px] text-surface-300 text-center py-6">No breakouts yet — run more scans to detect velocity</p>
+        <p className="text-[12px] text-surface-300 text-center py-6">
+          {isUserMode ? 'No rising terms in imported scans yet' : 'No breakouts yet - run more scans to detect velocity'}
+        </p>
       </div>
     )
   }
@@ -36,7 +41,7 @@ export default function BreakoutFeed() {
             <span className="text-[10px] text-surface-400 w-5 flex-shrink-0 font-bold tabular-nums">{i + 1}</span>
             <Icon name="trending-up" size={12} className="text-accent-green flex-shrink-0" />
             <span className="text-[12px] text-surface-100 font-medium truncate flex-1">{b.keyword}</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-green/10 text-accent-green font-bold border border-accent-green/20 flex-shrink-0">↑ BREAKOUT</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-green/10 text-accent-green font-bold border border-accent-green/20 flex-shrink-0">BREAKOUT</span>
           </div>
         ))}
       </div>

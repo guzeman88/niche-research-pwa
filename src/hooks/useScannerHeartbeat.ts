@@ -3,8 +3,9 @@ import { ensureScannerRunning, hasConfiguredBackend } from '../lib/api'
 
 const HEARTBEAT_MS = 60_000
 
-export default function useScannerHeartbeat() {
+export default function useScannerHeartbeat(enabled = true) {
   useEffect(() => {
+    if (!enabled) return
     if (window.location.pathname.startsWith('/auth/')) return
     if (!hasConfiguredBackend()) return
 
@@ -29,5 +30,5 @@ export default function useScannerHeartbeat() {
       window.clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [])
+  }, [enabled])
 }
