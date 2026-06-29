@@ -130,6 +130,7 @@ def run(
     adapter_names: list[str] | None = None,
     skip_scraper: bool = False,
     include_seasonality: bool = True,
+    allow_llm_synthesis: bool = True,
 ) -> NicheReport:
     """
     Full niche research pipeline.
@@ -199,10 +200,14 @@ def run(
         avg_comp_quality = sum(k.competition_quality_score for k in keyword_search_data) / len(keyword_search_data)
 
     # ── Step 6: LLM synthesis ─────────────────────────────────────────────────
-    synthesis = _llm_synthesis(
-        seed_keywords, all_signals, keyword_search_data,
-        seasonality, store_config, _log
-    )
+    if allow_llm_synthesis:
+        synthesis = _llm_synthesis(
+            seed_keywords, all_signals, keyword_search_data,
+            seasonality, store_config, _log
+        )
+    else:
+        _log("[niche_research] LLM synthesis skipped for background scanner")
+        synthesis = _fallback_synthesis()
 
     report = NicheReport(
         store_slug=store_slug,

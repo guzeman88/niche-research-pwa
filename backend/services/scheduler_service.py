@@ -4,14 +4,15 @@ Scheduler service — wraps AutonomousScheduler as a managed background service.
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Callable
 
 from services.research_service import _emit
 
 _scheduler = None
-DEFAULT_SCHEDULER_MODE = "performance"
-DEFAULT_BATCH_SIZE = 5
+DEFAULT_SCHEDULER_MODE = os.environ.get("SCHEDULER_MODE", "burst")
+DEFAULT_BATCH_SIZE = int(os.environ.get("SCHEDULER_BATCH_SIZE", os.environ.get("SCHEDULER_BATCH", "20")))
 
 
 def _scheduler_log(msg: str) -> None:

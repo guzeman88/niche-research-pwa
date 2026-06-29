@@ -41,7 +41,7 @@ RATES = {
 }
 
 # How often (in keywords scanned) to run full seed discovery
-DISCOVER_EVERY_N_SCANS = max(25, int(os.environ.get("DISCOVER_EVERY_N_SCANS", "200")))
+DISCOVER_EVERY_N_SCANS = max(25, int(os.environ.get("DISCOVER_EVERY_N_SCANS", "100")))
 
 # Max expansion depth — don't expand keywords that are already 3 levels deep
 MAX_EXPANSION_DEPTH = max(1, int(os.environ.get("MAX_EXPANSION_DEPTH", "2")))
@@ -252,6 +252,7 @@ class AutonomousScheduler:
         self._log(f"[scheduler] Scanning: {keyword}")
         adapter_names = _scheduler_research_adapters()
         include_seasonality = os.environ.get("SCHEDULER_INCLUDE_SEASONALITY", "0").strip().lower() in {"1", "true", "yes"}
+        allow_llm_synthesis = os.environ.get("SCHEDULER_ALLOW_LLM_SYNTHESIS", "0").strip().lower() in {"1", "true", "yes"}
         report = research_run(
             seed_keywords=[keyword],
             store_slug=self._store_slug,
@@ -259,6 +260,7 @@ class AutonomousScheduler:
             adapter_names=adapter_names,
             skip_scraper=self._skip_scraper,
             include_seasonality=include_seasonality,
+            allow_llm_synthesis=allow_llm_synthesis,
         )
         has_market_data = _report_has_market_data(report)
         if not has_market_data:
@@ -305,13 +307,18 @@ class AutonomousScheduler:
             from adapters.research.google_suggest import GoogleSuggestAdapter
             gs = GoogleSuggestAdapter()
             sigs = gs.search(keyword)
+            keyword_quality = kdb.score_keyword_scan_priority(
+                keyword,
+                domain="discovered",
+                source="scheduler_expansion",
+            )
             gs_kws = self._rank_expansion_candidates(
                 [s.keyword for s in sigs if s.keyword != keyword.lower()],
-                min_quality=MIN_EXPANSION_QUALITY if has_market_data else MIN_EXPANSION_QUALITY + 8,
+                min_quality=MIN_EXPANSION_QUALITY if has_market_data else max(56.0, MIN_EXPANSION_QUALITY - 4),
                 source="expand_google_suggest",
             )
-            expansion_limit = 14 if has_market_data else 2
-            if not has_market_data and kdb.score_keyword_buyer_intent(keyword) < 45:
+            expansion_limit = 14 if has_market_data else (6 if keyword_quality >= 72 else 4)
+            if not has_market_data and keyword_quality < 56:
                 gs_kws = []
             if gs_kws:
                 added = kdb.record_expansion(keyword, gs_kws[:expansion_limit], "google_suggest", depth + 1)

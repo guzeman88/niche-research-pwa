@@ -21,7 +21,8 @@ _PRICING = {
     "gemini-3-flash-preview":        {"input": 0.50,  "output": 3.00},
     "gemini-3.1-flash-lite-preview": {"input": 0.25,  "output": 1.50},
 }
-_DEFAULT_MODEL = "gemini-2.0-flash-lite"
+# Gemini 2.0 Flash-Lite is retired; allow env override for future model moves.
+_DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 
 class GeminiAdapter(BaseLLMAdapter):

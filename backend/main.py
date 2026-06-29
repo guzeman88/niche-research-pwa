@@ -55,8 +55,8 @@ async def _scheduler_watchdog() -> None:
     import os
 
     interval_s = max(15, int(os.environ.get("SCHEDULER_WATCHDOG_INTERVAL", "60")))
-    mode = os.environ.get("SCHEDULER_MODE", "performance")
-    batch_size = int(os.environ.get("SCHEDULER_BATCH_SIZE", "5"))
+    mode = os.environ.get("SCHEDULER_MODE", "burst")
+    batch_size = int(os.environ.get("SCHEDULER_BATCH_SIZE", "20"))
     while True:
         await asyncio.sleep(interval_s)
         try:
@@ -141,8 +141,8 @@ async def startup():
     if auto_start_scheduler:
         try:
             from services.scheduler_service import start_scheduler
-            mode = os.environ.get("SCHEDULER_MODE", "performance")
-            batch_size = int(os.environ.get("SCHEDULER_BATCH_SIZE", "5"))
+            mode = os.environ.get("SCHEDULER_MODE", "burst")
+            batch_size = int(os.environ.get("SCHEDULER_BATCH_SIZE", "20"))
             result = start_scheduler(mode=mode, batch_size=batch_size)
             print(f"[startup] Scheduler auto-start result: {result}")
             if not hasattr(app.state, "scheduler_watchdog_task"):

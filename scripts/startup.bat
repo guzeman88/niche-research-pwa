@@ -8,6 +8,6 @@ start /B "backend" python -m uvicorn main:app --host 127.0.0.1 --port %PORT%
 timeout /t 10 /nobreak > nul
 
 echo [%date% %time%] Starting scheduler...
-curl -s -X POST http://localhost:%PORT%/api/scheduler/start -H "Content-Type: application/json" -d "{\"mode\":\"performance\",\"batch_size\":5}"
+curl -s -X POST http://localhost:%PORT%/api/scheduler/start -H "Content-Type: application/json" -d "{\"mode\":\"burst\",\"batch_size\":20}"
 
 echo [%date% %time%] Scanner is running.

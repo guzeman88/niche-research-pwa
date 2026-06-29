@@ -440,35 +440,76 @@ _BUYER_INTENT_TERMS = {
     "gifts": 15,
     "personalized": 15,
     "custom": 14,
+    "editable": 13,
     "printable": 12,
     "template": 11,
+    "download": 11,
+    "digital": 10,
+    "instant": 9,
     "svg": 10,
     "bundle": 9,
     "set": 8,
     "for": 7,
     "appreciation": 7,
+    "memorial": 10,
+    "retirement": 9,
+    "graduation": 9,
+    "bachelorette": 8,
+    "bridesmaid": 8,
+    "shower": 7,
+    "party": 7,
 }
 
 _PRODUCT_TERMS = {
     "shirt",
+    "t-shirt",
+    "tee",
+    "tank",
     "sweatshirt",
     "hoodie",
+    "apparel",
+    "hat",
+    "cap",
+    "socks",
     "mug",
     "tumbler",
+    "glass",
+    "cup",
     "sticker",
     "stickers",
     "wall art",
     "poster",
+    "canvas",
+    "portrait",
     "print",
     "prints",
     "tote",
     "bag",
     "ornament",
     "planner",
+    "journal",
+    "binder",
+    "worksheet",
+    "calendar",
     "invitation",
+    "invite",
+    "card",
+    "label",
+    "tag",
+    "game",
     "sign",
     "decor",
+    "doormat",
+    "pillow",
+    "blanket",
+    "candle",
     "keychain",
+    "badge reel",
+    "phone case",
+    "case",
+    "clipart",
+    "png",
+    "svg",
 }
 
 _PASSION_TERMS = {
@@ -489,10 +530,25 @@ _PASSION_TERMS = {
     "reader",
     "coffee",
     "wine",
+    "pickleball",
+    "golf",
+    "dance",
+    "dancer",
+    "runner",
     "yoga",
     "hiking",
+    "camping",
+    "fishing",
+    "gardening",
     "plant",
     "zodiac",
+    "librarian",
+    "counselor",
+    "therapist",
+    "realtor",
+    "coach",
+    "grandma",
+    "grandpa",
 }
 
 _RETAILER_NOISE_TERMS = {
@@ -504,6 +560,29 @@ _RETAILER_NOISE_TERMS = {
     "shein",
     "costco",
     "etsy.com",
+}
+
+_IP_RISK_TERMS = {
+    "disney",
+    "marvel",
+    "star wars",
+    "harry potter",
+    "pokemon",
+    "nintendo",
+    "lego",
+    "hello kitty",
+    "snoopy",
+    "nike",
+    "stanley",
+    "barbie",
+    "taylor swift",
+    "swiftie",
+    "nfl",
+    "nba",
+    "mlb",
+    "nhl",
+    "fortnite",
+    "minecraft",
 }
 
 _LOCAL_NOISE_TERMS = {
@@ -524,12 +603,61 @@ _LOW_BUYER_INTENT_PHRASES = {
     "pinterest",
 }
 
+_LOW_VALUE_WORDS = {
+    "free",
+    "cheap",
+}
+
+_STYLE_TERMS = {
+    "aesthetic",
+    "vintage",
+    "retro",
+    "minimalist",
+    "boho",
+    "western",
+    "coquette",
+    "cottagecore",
+    "dark academia",
+    "gothic",
+    "botanical",
+    "celestial",
+    "coastal",
+    "rustic",
+    "funny",
+    "sarcastic",
+    "cute",
+    "spooky",
+}
+
+_OCCASION_TERMS = {
+    "birthday",
+    "wedding",
+    "graduation",
+    "retirement",
+    "christmas",
+    "halloween",
+    "valentine",
+    "mother's day",
+    "father's day",
+    "teacher appreciation",
+    "housewarming",
+    "memorial",
+    "anniversary",
+    "baby shower",
+    "bridal shower",
+    "first christmas",
+}
+
 _SOURCE_QUALITY_BOOST = {
     "expand_google_suggest": 8.0,
     "expand_competitor_terms": 9.0,
     "expand_trends_related": 6.0,
     "expand_etsy_autocomplete": 7.0,
     "google_suggest_bootstrap": 8.0,
+    "google_suggest_proven": 9.0,
+    "google_suggest_adjacent": 8.0,
+    "google_suggest_trend": 7.0,
+    "google_suggest_wild": 4.0,
     "etsy_autocomplete_bootstrap": 7.0,
     "etsy_trending_page": 10.0,
     "library": 3.0,
@@ -548,6 +676,13 @@ _DOMAIN_PRIORITY_BOOST = {
     "discovered": 5,
 }
 
+_SCAN_LANE_ALLOCATION = {
+    "proven": 0.50,
+    "adjacent": 0.25,
+    "trend": 0.15,
+    "wild": 0.10,
+}
+
 
 def _clamp_score(value: float) -> float:
     return round(max(0.0, min(100.0, value)), 1)
@@ -564,6 +699,8 @@ def score_keyword_buyer_intent(keyword: str) -> float:
     score += min(25.0, sum(points for term, points in _BUYER_INTENT_TERMS.items() if term in words or term in kw))
     score += 18.0 if any(term in kw for term in _PRODUCT_TERMS) else 0.0
     score += min(16.0, sum(4.0 for term in _PASSION_TERMS if term in words or term in kw))
+    score += min(10.0, sum(3.0 for term in _STYLE_TERMS if term in words or term in kw))
+    score += min(10.0, sum(4.0 for term in _OCCASION_TERMS if term in kw))
 
     word_count = len(words)
     if 2 <= word_count <= 5:
@@ -589,6 +726,50 @@ def _contains_any_phrase(keyword: str, phrases: set[str]) -> bool:
     return any(phrase in keyword for phrase in phrases)
 
 
+def _source_quality_boost(source_key: str) -> float:
+    if source_key in _SOURCE_QUALITY_BOOST:
+        return _SOURCE_QUALITY_BOOST[source_key]
+    if source_key.startswith("google_suggest_"):
+        return 7.0
+    if source_key.startswith("compound_"):
+        return 4.0
+    if source_key.startswith("expand_"):
+        return -4.0
+    return 0.0
+
+
+def _keyword_signal_flags(keyword: str) -> dict[str, bool]:
+    kw = " ".join(keyword.lower().split())
+    words = set(kw.split())
+    return {
+        "product": any(term in kw for term in _PRODUCT_TERMS),
+        "intent": any(term in words or term in kw for term in _BUYER_INTENT_TERMS),
+        "passion": any(term in words or term in kw for term in _PASSION_TERMS),
+        "style": any(term in words or term in kw for term in _STYLE_TERMS),
+        "occasion": any(term in kw for term in _OCCASION_TERMS),
+    }
+
+
+def keyword_scan_lane(keyword: str, domain: str | None = None, source: str | None = None) -> str:
+    """Classify a seed into a scanner portfolio lane."""
+    kw = " ".join(keyword.lower().split())
+    source_key = (source or "").lower()
+    domain_key = (domain or "").lower()
+    flags = _keyword_signal_flags(kw)
+    signal_count = sum(1 for value in flags.values() if value)
+    word_count = len(kw.split())
+
+    if source_key.startswith("expand_") or source_key.startswith("compound_") or domain_key == "compound":
+        return "adjacent"
+    if "trend" in source_key or "trend" in domain_key or domain_key in {"aesthetics", "nature_themes"}:
+        return "trend"
+    if source_key.endswith("_wild") or (word_count >= 4 and flags["product"] and signal_count >= 2 and score_keyword_buyer_intent(kw) < 72):
+        return "wild"
+    if flags["product"] and (flags["intent"] or flags["passion"] or flags["occasion"]) and score_keyword_buyer_intent(kw) >= 58:
+        return "proven"
+    return "wild" if word_count >= 3 else "proven"
+
+
 def score_keyword_scan_priority(
     keyword: str,
     domain: str | None = None,
@@ -607,10 +788,14 @@ def score_keyword_scan_priority(
 
     if _contains_any_phrase(kw, _RETAILER_NOISE_TERMS):
         score -= 42.0
+    if _contains_any_phrase(kw, _IP_RISK_TERMS):
+        score -= 55.0
     if _contains_any_phrase(kw, _LOCAL_NOISE_TERMS):
         score -= 38.0
     if _contains_any_phrase(kw, _LOW_BUYER_INTENT_PHRASES):
         score -= 28.0
+    if any(word in _LOW_VALUE_WORDS for word in words):
+        score -= 36.0
     if ":" in kw:
         score -= 18.0
 
@@ -628,13 +813,20 @@ def score_keyword_scan_priority(
         score += 7.0
     if any(term in kw for term in _PASSION_TERMS):
         score += 5.0
+    if any(term in kw for term in _STYLE_TERMS):
+        score += 4.0
+    if any(term in kw for term in _OCCASION_TERMS):
+        score += 5.0
+
+    flags = _keyword_signal_flags(kw)
+    signal_count = sum(1 for value in flags.values() if value)
+    if flags["product"] and signal_count >= 2:
+        score += 9.0
+    elif signal_count == 0:
+        score -= 12.0
 
     source_key = (source or "").lower()
-    score += _SOURCE_QUALITY_BOOST.get(source_key, 0.0)
-    if source_key.startswith("compound_"):
-        score += 4.0
-    if source_key.startswith("expand_") and source_key not in _SOURCE_QUALITY_BOOST:
-        score -= 4.0
+    score += _source_quality_boost(source_key)
 
     return _clamp_score(score)
 
@@ -652,6 +844,10 @@ def is_scanworthy_seed(
     if _contains_any_phrase(kw, _LOCAL_NOISE_TERMS):
         return False
     if _contains_any_phrase(kw, _RETAILER_NOISE_TERMS):
+        return False
+    if _contains_any_phrase(kw, _IP_RISK_TERMS):
+        return False
+    if any(word in _LOW_VALUE_WORDS for word in kw.split()):
         return False
     return score_keyword_scan_priority(kw, domain, priority, source) >= min_score
 
@@ -1040,38 +1236,104 @@ def rebuild_gap_scores() -> int:
 
 # ── Queue / batch selection ───────────────────────────────────────────────────
 
-def get_unscanned(limit: int = 20, domain: Optional[str] = None, min_quality: float = 58.0) -> list[str]:
+def _unscanned_candidate_rows(domain: Optional[str], candidate_limit: int) -> list[sqlite3.Row]:
     with _conn() as con:
-        candidate_limit = max(limit * 50, 500)
         if domain:
-            rows = con.execute("""
+            return con.execute("""
                 SELECT s.keyword, s.domain, s.source, s.priority, s.added_at FROM seeds s
                 WHERE s.domain=?
                   AND NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
                 ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
             """, (domain, candidate_limit)).fetchall()
-        else:
-            rows = con.execute("""
-                SELECT s.keyword, s.domain, s.source, s.priority, s.added_at FROM seeds s
-                WHERE NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
-                ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
-            """, (candidate_limit,)).fetchall()
-        scored = [
-            (
-                score_keyword_scan_priority(r["keyword"], r["domain"], r["priority"], r["source"]),
-                r,
-            )
-            for r in rows
-        ]
-        ranked = sorted(scored, key=lambda item: (item[0], item[1]["added_at"] or ""), reverse=True)
-        qualified = [r["keyword"] for score, r in ranked if score >= min_quality]
-        if len(qualified) >= limit:
-            return qualified[:limit]
+        return con.execute("""
+            SELECT s.keyword, s.domain, s.source, s.priority, s.added_at FROM seeds s
+            WHERE NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
+            ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
+        """, (candidate_limit,)).fetchall()
 
-        # Do not starve the scanner if the queue is temporarily weak; fill the
-        # tail with the best remaining candidates after the strong ones.
-        fallback = [r["keyword"] for score, r in ranked if score < min_quality]
-        return (qualified + fallback)[:limit]
+
+def _rank_seed_rows(rows: list[sqlite3.Row]) -> list[tuple[float, str, sqlite3.Row]]:
+    ranked = [
+        (
+            score_keyword_scan_priority(r["keyword"], r["domain"], r["priority"], r["source"]),
+            keyword_scan_lane(r["keyword"], r["domain"], r["source"]),
+            r,
+        )
+        for r in rows
+    ]
+    return sorted(ranked, key=lambda item: (item[0], item[2]["added_at"] or ""), reverse=True)
+
+
+def _lane_quotas(limit: int) -> dict[str, int]:
+    if limit <= 0:
+        return {lane: 0 for lane in _SCAN_LANE_ALLOCATION}
+
+    lanes = list(_SCAN_LANE_ALLOCATION.keys())
+    quotas = {lane: int(limit * _SCAN_LANE_ALLOCATION[lane]) for lane in lanes}
+    quotas["proven"] += limit - sum(quotas.values())
+
+    if limit >= len(lanes):
+        for lane in lanes:
+            if quotas[lane] == 0:
+                donor = max(lanes, key=lambda key: quotas[key])
+                if quotas[donor] > 1:
+                    quotas[donor] -= 1
+                    quotas[lane] = 1
+    return quotas
+
+
+def get_unscanned_portfolio(limit: int = 20, domain: Optional[str] = None, min_quality: float = 58.0) -> list[str]:
+    """Return unscanned seeds from proven/adjacent/trend/wild lanes."""
+    candidate_limit = max(limit * 120, 1000)
+    ranked = _rank_seed_rows(_unscanned_candidate_rows(domain, candidate_limit))
+    quotas = _lane_quotas(limit)
+    lane_min = {
+        "proven": min_quality,
+        "adjacent": max(52.0, min_quality - 2.0),
+        "trend": max(50.0, min_quality - 4.0),
+        "wild": max(50.0, min_quality - 6.0),
+    }
+    buckets: dict[str, list[tuple[float, sqlite3.Row]]] = {lane: [] for lane in _SCAN_LANE_ALLOCATION}
+    for score, lane, row in ranked:
+        buckets.setdefault(lane, []).append((score, row))
+
+    result: list[str] = []
+    seen: set[str] = set()
+
+    def _add_keyword(keyword: str) -> None:
+        if keyword not in seen and len(result) < limit:
+            result.append(keyword)
+            seen.add(keyword)
+
+    for lane, quota in quotas.items():
+        added = 0
+        for score, row in buckets.get(lane, []):
+            if added >= quota:
+                break
+            if score < lane_min.get(lane, min_quality):
+                continue
+            _add_keyword(row["keyword"])
+            added += 1
+
+    for score, _lane, row in ranked:
+        if len(result) >= limit:
+            break
+        if score >= max(50.0, min_quality - 8.0):
+            _add_keyword(row["keyword"])
+
+    return result[:limit]
+
+
+def get_unscanned(limit: int = 20, domain: Optional[str] = None, min_quality: float = 58.0) -> list[str]:
+    ranked = _rank_seed_rows(_unscanned_candidate_rows(domain, max(limit * 80, 800)))
+    qualified = [r["keyword"] for score, _lane, r in ranked if score >= min_quality]
+    if len(qualified) >= limit:
+        return qualified[:limit]
+
+    # Do not starve the scanner if the queue is temporarily weak; fill the
+    # tail with the best remaining candidates after the strong ones.
+    fallback = [r["keyword"] for score, _lane, r in ranked if score < min_quality and score >= 45.0]
+    return (qualified + fallback)[:limit]
 
 
 def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> list[str]:
@@ -1109,7 +1371,7 @@ def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> 
                 LIMIT ?
             """,
                                (cutoff, limit)).fetchall()
-        return [r["keyword"] for r in rows]
+        return [r["keyword"] for r in rows if is_scanworthy_seed(r["keyword"], min_score=45.0)]
 
 
 def get_breakouts(limit: int = 20) -> list[str]:
@@ -1120,7 +1382,7 @@ def get_breakouts(limit: int = 20) -> list[str]:
             WHERE breakout_flag=1
             ORDER BY score_delta DESC LIMIT ?
         """, (limit,)).fetchall()
-        return [r[0] for r in rows]
+        return [r[0] for r in rows if is_scanworthy_seed(r[0], min_score=45.0)]
 
 
 def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[str]:
@@ -1156,11 +1418,11 @@ def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[s
               sc.scanned_at ASC
             LIMIT ?
         """, (cutoff, limit)).fetchall()
-        return [r[0] for r in rows]
+        return [r[0] for r in rows if is_scanworthy_seed(r[0], min_score=45.0)]
 
 
 def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
-    """Smart batch: breakouts, profit evidence gaps, unscanned, then stale."""
+    """Smart batch: evidence refresh plus protected new-niche discovery lanes."""
     result: list[str] = []
     seen: set[str] = set()
 
@@ -1170,9 +1432,20 @@ def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
                 result.append(kw)
                 seen.add(kw)
 
-    _add(get_breakouts(limit=count))
-    _add(get_profit_evidence_gaps(limit=count))
-    _add(get_unscanned(limit=count, min_quality=62.0))
+    breakout_budget = max(1, min(count, count // 5 or 1))
+    evidence_budget = max(1, min(count, count // 4 or 1))
+
+    _add(get_breakouts(limit=breakout_budget))
+    _add(get_profit_evidence_gaps(limit=evidence_budget))
+
+    remaining = count - len(result)
+    if remaining > 0:
+        _add(get_unscanned_portfolio(limit=remaining, min_quality=58.0))
+
+    remaining = count - len(result)
+    if remaining > 0:
+        _add(get_unscanned(limit=remaining, min_quality=54.0))
+
     _add(get_stale(days=stale_days, limit=count))
     return result[:count]
 

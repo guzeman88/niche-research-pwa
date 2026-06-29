@@ -142,7 +142,12 @@ def get_llm_seeds(count: int = 30, log_fn=None) -> list[dict]:
         seeds = []
         for item in raw:
             kw = item.get("keyword", "").strip().lower()
-            if len(kw) > 3:
+            if len(kw) > 3 and kdb.is_scanworthy_seed(
+                kw,
+                domain=item.get("domain", "trending_micro_niches"),
+                source="llm_brainstorm",
+                min_score=54,
+            ):
                 seeds.append({
                     "keyword": kw,
                     "domain": item.get("domain", "trending_micro_niches"),
@@ -215,6 +220,135 @@ _BUYER_INTENT_ROOTS = [
     "adhd planner",
 ]
 
+_ADJACENT_DISCOVERY_ROOTS = [
+    "teacher retirement",
+    "school counselor gift",
+    "principal appreciation",
+    "nurse graduation",
+    "occupational therapist gift",
+    "speech therapist gift",
+    "realtor closing gift",
+    "pickleball mom",
+    "book club gift",
+    "dog memorial",
+    "cat memorial",
+    "lake house decor",
+    "cabin guest book",
+    "family recipe",
+    "bridal shower game",
+    "bachelorette itinerary",
+    "first christmas married",
+    "new home ornament",
+    "small business thank you",
+    "coach appreciation",
+]
+
+_TREND_DISCOVERY_ROOTS = [
+    "coquette",
+    "dark academia",
+    "western",
+    "coastal grandma",
+    "cottagecore",
+    "gothic",
+    "botanical",
+    "celestial",
+    "pickleball",
+    "booktok",
+    "romantasy",
+    "cowgirl bachelorette",
+    "dorm decor",
+    "teacher era",
+    "retro mascot",
+    "grandmillennial",
+    "dopamine decor",
+    "minimalist nursery",
+    "spooky cute",
+    "farmhouse christmas",
+]
+
+_WILD_DISCOVERY_ROOTS = [
+    "ferret memorial",
+    "librarian gothic",
+    "line dancing bachelorette",
+    "anxious dog mom",
+    "left handed artist",
+    "deaf teacher",
+    "night shift nurse",
+    "plant dad",
+    "bird mom",
+    "chicken lady",
+    "sourdough mom",
+    "pickleball grandma",
+    "garden club",
+    "therapy office decor",
+    "school psychologist",
+    "marching band mom",
+    "robotics teacher",
+    "choir director",
+    "camp counselor",
+    "library card",
+]
+
+_GOOGLE_SUGGEST_DISCOVERY_LANES = {
+    "proven": {
+        "roots": _BUYER_INTENT_ROOTS,
+        "source": "google_suggest_proven",
+        "domain": "discovered",
+        "priority": 8,
+        "min_score": 60,
+        "share": 0.50,
+    },
+    "adjacent": {
+        "roots": _ADJACENT_DISCOVERY_ROOTS,
+        "source": "google_suggest_adjacent",
+        "domain": "discovered",
+        "priority": 7,
+        "min_score": 58,
+        "share": 0.25,
+    },
+    "trend": {
+        "roots": _TREND_DISCOVERY_ROOTS,
+        "source": "google_suggest_trend",
+        "domain": "trending_micro_niches",
+        "priority": 7,
+        "min_score": 56,
+        "share": 0.15,
+    },
+    "wild": {
+        "roots": _WILD_DISCOVERY_ROOTS,
+        "source": "google_suggest_wild",
+        "domain": "trending_micro_niches",
+        "priority": 6,
+        "min_score": 54,
+        "share": 0.10,
+    },
+}
+
+
+def _daily_rotated_roots(roots: list[str], limit: int, lane: str) -> list[str]:
+    if not roots or limit <= 0:
+        return []
+    offset = (datetime.utcnow().toordinal() + len(lane) * 7) % len(roots)
+    rotated = roots[offset:] + roots[:offset]
+    return rotated[:min(limit, len(rotated))]
+
+
+def _lane_root_limits(total_limit: int) -> dict[str, int]:
+    lanes = list(_GOOGLE_SUGGEST_DISCOVERY_LANES.keys())
+    limits = {
+        lane: int(total_limit * float(cfg["share"]))
+        for lane, cfg in _GOOGLE_SUGGEST_DISCOVERY_LANES.items()
+    }
+    limits["proven"] += total_limit - sum(limits.values())
+    if total_limit >= len(lanes):
+        for lane in lanes:
+            if limits[lane] == 0:
+                donor = max(lanes, key=lambda key: limits[key])
+                if limits[donor] > 1:
+                    limits[donor] -= 1
+                    limits[lane] = 1
+    return limits
+
 
 def get_autocomplete_seeds(log_fn=None) -> list[dict]:
     """
@@ -237,7 +371,17 @@ def get_autocomplete_seeds(log_fn=None) -> list[dict]:
             signals = adapter.search(term)
             for sig in signals:
                 kw = sig.keyword.strip().lower()
-                if len(kw) > 5 and kw != term and kw not in discovered:
+                if (
+                    len(kw) > 5
+                    and kw != term
+                    and kw not in discovered
+                    and kdb.is_scanworthy_seed(
+                        kw,
+                        domain="discovered",
+                        source="etsy_autocomplete_bootstrap",
+                        min_score=54,
+                    )
+                ):
                     discovered[kw] = {
                         "keyword": kw,
                         "domain": "discovered",
@@ -268,35 +412,63 @@ def get_google_suggest_bootstrap_seeds(log_fn=None) -> list[dict]:
 
     discovered: dict[str, dict] = {}
     try:
-        max_roots = max(5, int(os.environ.get("GOOGLE_SUGGEST_BOOTSTRAP_ROOT_LIMIT", "20")))
+        max_roots = max(12, int(os.environ.get("GOOGLE_SUGGEST_BOOTSTRAP_ROOT_LIMIT", "64")))
     except ValueError:
-        max_roots = 20
-    for root in _BUYER_INTENT_ROOTS[:max_roots]:
-        try:
-            signals = adapter.search(root)
-            for sig in signals:
-                kw = sig.keyword.strip().lower()
-                if not kw or kw == root:
-                    continue
-                if not kdb.is_scanworthy_seed(
-                    kw,
-                    domain="discovered",
-                    source="google_suggest_bootstrap",
-                    min_score=62,
-                ):
-                    continue
-                if kw not in discovered:
-                    discovered[kw] = {
-                        "keyword": kw,
-                        "domain": "discovered",
-                        "source": "google_suggest_bootstrap",
-                        "priority": 7,
-                    }
-        except Exception:
-            continue
+        max_roots = 64
 
-    _log(f"[seed_discovery] Google Suggest buyer roots: {len(discovered)} new candidate seeds")
+    lane_limits = _lane_root_limits(max_roots)
+    for lane, cfg in _GOOGLE_SUGGEST_DISCOVERY_LANES.items():
+        roots = _daily_rotated_roots(cfg["roots"], lane_limits.get(lane, 0), lane)
+        if lane == "adjacent":
+            roots.extend(get_high_value_adjacent_roots(limit=max(4, lane_limits.get(lane, 0) // 2)))
+        for root in roots:
+            try:
+                signals = adapter.search(root)
+                for sig in signals:
+                    kw = sig.keyword.strip().lower()
+                    if not kw or kw == root:
+                        continue
+                    if not kdb.is_scanworthy_seed(
+                        kw,
+                        domain=str(cfg["domain"]),
+                        source=str(cfg["source"]),
+                        min_score=float(cfg["min_score"]),
+                    ):
+                        continue
+                    if kw not in discovered:
+                        discovered[kw] = {
+                            "keyword": kw,
+                            "domain": cfg["domain"],
+                            "source": cfg["source"],
+                            "priority": cfg["priority"],
+                        }
+            except Exception:
+                continue
+
+    _log(f"[seed_discovery] Google Suggest portfolio roots: {len(discovered)} new candidate seeds")
     return list(discovered.values())
+
+
+def get_high_value_adjacent_roots(limit: int = 20) -> list[str]:
+    """
+    Turn the current best real-scored keywords back into suggestion roots.
+    This keeps discovery following winners without locking into the seed library.
+    """
+    roots: list[str] = []
+    seen: set[str] = set()
+    try:
+        rows = kdb.get_store_idea_signals(limit=limit * 2)
+    except Exception:
+        rows = []
+    for row in rows:
+        kw = str(row.get("keyword") or "").strip().lower()
+        if not kw or kw in seen:
+            continue
+        seen.add(kw)
+        roots.append(kw)
+        if len(roots) >= limit:
+            break
+    return roots
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +571,12 @@ def get_etsy_trending_seeds(log_fn=None) -> list[dict]:
                 continue
             labels = _extract_trend_labels(resp.text)
             for kw in labels:
-                if kw not in collected:
+                if kw not in collected and kdb.is_scanworthy_seed(
+                    kw,
+                    domain="trending_micro_niches",
+                    source="etsy_trending_page",
+                    min_score=54,
+                ):
                     collected[kw] = {
                         "keyword": kw,
                         "domain": "trending_micro_niches",
@@ -431,6 +608,7 @@ class SeedDiscovery:
     def run_all(
         self,
         seasonal: bool = True,
+        compound: bool = True,
         llm: bool = True,
         google_suggest: bool = True,
         autocomplete: bool = True,
@@ -455,6 +633,16 @@ class SeedDiscovery:
             total_added += added
             sources_run.append("seasonal")
 
+        if compound:
+            self._log("[seed_discovery] Running structured compound generation...")
+            try:
+                max_per_pair = max(10, int(os.environ.get("COMPOUND_DISCOVERY_MAX_PER_PAIR", "40")))
+            except ValueError:
+                max_per_pair = 40
+            added = generate_compound_keywords(max_per_pair=max_per_pair, log_fn=self._log)
+            total_added += added
+            sources_run.append("compound")
+
         if llm:
             self._log("[seed_discovery] Running LLM brainstorm...")
             seeds = get_llm_seeds(count=llm_count, log_fn=self._log)
@@ -467,7 +655,7 @@ class SeedDiscovery:
             self._log("[seed_discovery] Running Google Suggest buyer-root expansion...")
             seeds = get_google_suggest_bootstrap_seeds(log_fn=self._log)
             added = self._persist(seeds)
-            self._log(f"[seed_discovery] Google Suggest buyer roots: +{added} new seeds")
+            self._log(f"[seed_discovery] Google Suggest portfolio roots: +{added} new seeds")
             total_added += added
             sources_run.append("google_suggest_bootstrap")
 
@@ -812,7 +1000,16 @@ def generate_compound_keywords(
             for b in b_kws:
                 b_core = b.replace("gifts for ", "").strip()
                 compound = f"{a_core} {b_core}"
-                if 8 < len(compound) < 55 and compound not in compounds:
+                if (
+                    8 < len(compound) < 55
+                    and compound not in compounds
+                    and kdb.is_scanworthy_seed(
+                        compound,
+                        domain="compound",
+                        source=f"compound_{domain_a}x{domain_b}",
+                        min_score=54,
+                    )
+                ):
                     compounds.append(compound)
                 if len(compounds) >= max_per_pair:
                     break
