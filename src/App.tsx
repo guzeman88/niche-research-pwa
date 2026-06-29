@@ -8,6 +8,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Keywords = lazy(() => import('./pages/Keywords'))
 const StoreGenerator = lazy(() => import('./pages/StoreGenerator'))
 const Stores = lazy(() => import('./pages/Stores'))
+const EtsyAuth = lazy(() => import('./pages/EtsyAuth'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 function PageFallback() {
@@ -30,6 +31,7 @@ export default function App() {
 
   return (
     <Routes>
+      <Route path="/auth/etsy" element={page(<EtsyAuth />)} />
       <Route element={<Layout />}>
         <Route index element={page(<Dashboard />)} />
         <Route path="/keywords" element={page(<Keywords />)} />

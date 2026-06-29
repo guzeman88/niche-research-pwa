@@ -5,6 +5,7 @@ const HEARTBEAT_MS = 60_000
 
 export default function useScannerHeartbeat() {
   useEffect(() => {
+    if (window.location.pathname.startsWith('/auth/')) return
     if (!hasConfiguredBackend()) return
 
     let cancelled = false
