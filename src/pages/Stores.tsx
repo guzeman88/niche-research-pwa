@@ -8,24 +8,31 @@ import { StoresSkeleton } from '../components/Skeleton'
 import {
   createListingFromProduct,
   createSpecificProductIdeas,
+  designQualityChecklist,
   emptyWorkspace,
+  evaluateDesignQuality,
   extractKeywordClusters,
   extractStoreKeywords,
   readStoreWorkspace,
   saveListingDraft,
   saveProductIdea,
+  scoreListingDraft,
+  scoreProductTypeFit,
   updateListingDraft,
   updateProductIdea,
   validationItems,
+  workspaceExport,
   type ListingStatus,
   type ProductStatus,
+  type ProductTypeFit,
   type StoreProductDesignAsset,
   type StoreKeywordCandidate,
   type StoreListingDraft,
+  type StoreListingPerformance,
   type StoreProductIdea,
   type StoreWorkspace,
 } from '../lib/storeWorkspace'
-import { scoreColor } from '../lib/utils'
+import { fmtPrice, scoreColor } from '../lib/utils'
 
 const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
 const TABS = [
@@ -320,6 +327,7 @@ function StoreDashboard({ store, workspace, onTabChange }: { store: StoreItem; w
   const clusters = extractKeywordClusters(store)
   const validation = validationItems(store, workspace)
   const completeCount = validation.filter((item) => item.complete).length
+  const performance = workspacePerformance(workspace)
 
   return (
     <div className="space-y-4">
@@ -359,8 +367,14 @@ function StoreDashboard({ store, workspace, onTabChange }: { store: StoreItem; w
         </div>
 
         <div className="space-y-4">
-          <NoDataPanel icon="dollar-sign" title="Sales" text="No Etsy sales data connected for this store yet." />
-          <NoDataPanel icon="activity" title="Traffic" text="No Etsy traffic data connected for this store yet." />
+          {performance.hasData ? (
+            <PerformanceSummaryPanel performance={performance} />
+          ) : (
+            <>
+              <NoDataPanel icon="dollar-sign" title="Sales" text="No Etsy sales data connected for this store yet." />
+              <NoDataPanel icon="activity" title="Traffic" text="No Etsy traffic data connected for this store yet." />
+            </>
+          )}
         </div>
       </div>
 
@@ -524,6 +538,7 @@ function KeywordProductCreationPage({
   const [manualSource, setManualSource] = useState<PromptLauncherId>('ideogram_web')
   const [manualDesign, setManualDesign] = useState<ManualDesignAsset | null>(null)
   const [generatedDesign, setGeneratedDesign] = useState<GeneratedDesignAsset | null>(null)
+  const [qualityChecks, setQualityChecks] = useState<Record<string, boolean>>({})
   const designPanelRef = useRef<HTMLDivElement>(null)
   const generateMutation = useMutation({
     mutationFn: (payload: { provider: DesignProviderId; prompt: string; productType: string }) => generateDesignAsset({
@@ -542,6 +557,7 @@ function KeywordProductCreationPage({
     : null
   const activeProduct = savedProduct || selectedIdea
   const designSpec = activeProduct ? createDesignSpec(store, activeProduct, designVariant) : null
+  const qualityReview = activeProduct ? evaluateDesignQuality(activeProduct, qualityChecks) : null
   const approvedDesign = savedProduct?.approvedDesign
   const mockupReady = savedProduct?.status === 'mockup_selected' || savedProduct?.status === 'sent_to_listing'
   const listingExists = savedProduct
@@ -555,6 +571,7 @@ function KeywordProductCreationPage({
     setDesignVariant(0)
     setManualDesign(null)
     setGeneratedDesign(null)
+    setQualityChecks({})
   }
 
   const startDesign = (idea: StoreProductIdea) => {
@@ -564,9 +581,18 @@ function KeywordProductCreationPage({
     setDesignVariant(0)
     setManualDesign(null)
     setGeneratedDesign(null)
+    setQualityChecks(existingProduct?.designQuality?.checks || {})
     if (!existingProduct) onSaveProduct(idea)
     window.requestAnimationFrame(() => designPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
   }
+
+  useEffect(() => {
+    if (!productTypes.some((type) => type.value === selectedType)) {
+      setSelectedType(productTypes[0]?.value || '')
+      setSelectedIdeaId('')
+      setShowDesign(false)
+    }
+  }, [keyword.keyword, productTypes, selectedType])
 
   const generateDesign = () => {
     if (!activeProduct || !designSpec) return
@@ -603,7 +629,7 @@ function KeywordProductCreationPage({
   }
 
   const approveDesign = () => {
-    if (!savedProduct || !designSpec) return
+    if (!savedProduct || !designSpec || !qualityReview?.passed) return
     const asset = manualDesign
       ? createManualDesignAsset(savedProduct, manualDesign, manualSource)
       : generatedDesign
@@ -614,6 +640,7 @@ function KeywordProductCreationPage({
       designProvider: manualDesign ? `web:${manualSource}` : selectedProvider,
       designPrompt: asset.prompt,
       mockupPrompt: createMockupPrompt(savedProduct, asset),
+      designQuality: qualityReview,
       status: 'design_approved',
     })
   }
@@ -647,10 +674,16 @@ function KeywordProductCreationPage({
                       : 'border-surface-600/60 bg-surface-900/25 text-surface-100 hover:bg-surface-700/35'
                   }`}
                 >
-                  {type.label}
+                  <span>{type.label}</span>
+                  <span className={`ml-2 tabular-nums ${scoreClass(type.fit.score)}`}>{formatMetric(type.fit.score)}</span>
                 </button>
               ))}
             </div>
+            {activeType && (
+              <div className="mt-2 line-clamp-2 break-words text-[11px] font-semibold text-surface-400">
+                {activeType.fit.reasons.slice(0, 3).join(' / ')}
+              </div>
+            )}
           </div>
 
           <div className="p-3">
@@ -677,6 +710,10 @@ function KeywordProductCreationPage({
                       {idea.creativeBrief?.exactPhrase && (
                         <span className="mt-0.5 block truncate text-[11px] font-semibold text-surface-400">"{idea.creativeBrief.exactPhrase}"</span>
                       )}
+                      <span className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] font-bold uppercase tracking-wider text-surface-500">
+                        <span>Fit {formatMetric(idea.productTypeFit?.score)}</span>
+                        <span>Gap {formatMetric(idea.gapEvidence?.score)}</span>
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -738,6 +775,9 @@ function KeywordProductCreationPage({
                     isGenerating={generateMutation.isPending}
                     generationError={generateMutation.error instanceof Error ? generateMutation.error.message : ''}
                     approvedDesign={approvedDesign}
+                    qualityChecks={qualityChecks}
+                    qualityReview={qualityReview}
+                    onQualityCheckChange={(id, checked) => setQualityChecks((current) => ({ ...current, [id]: checked }))}
                     onProviderChange={(provider) => {
                       setSelectedProvider(provider)
                       setManualDesign(null)
@@ -793,6 +833,9 @@ function GeneratedDesignPanel({
   isGenerating,
   generationError,
   approvedDesign,
+  qualityChecks,
+  qualityReview,
+  onQualityCheckChange,
   onProviderChange,
   onManualSourceChange,
   onAttachManualDesign,
@@ -809,6 +852,9 @@ function GeneratedDesignPanel({
   isGenerating: boolean
   generationError: string
   approvedDesign?: StoreProductDesignAsset
+  qualityChecks: Record<string, boolean>
+  qualityReview: ReturnType<typeof evaluateDesignQuality> | null
+  onQualityCheckChange: (id: string, checked: boolean) => void
   onProviderChange: (provider: DesignProviderId) => void
   onManualSourceChange: (source: PromptLauncherId) => void
   onAttachManualDesign: (file: File) => void
@@ -826,6 +872,7 @@ function GeneratedDesignPanel({
   const hasApiAsset = !!generatedDesign?.asset_url
   const canApprove = provider === 'local_svg' || hasApiAsset || !!manualDesign
   const isApproved = approvedDesign?.prompt === prompt || approvedDesign?.prompt === launcherPrompt
+  const qualityPassed = !!qualityReview?.passed
   const copyPrompt = async () => {
     try {
       await navigator.clipboard.writeText(launcherPrompt)
@@ -893,6 +940,31 @@ function GeneratedDesignPanel({
         <div className="rounded-md border border-surface-600/35 bg-surface-900/25 p-2.5">
           <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-surface-400">Prompt</div>
           <div className="line-clamp-3 break-words text-[11px] leading-relaxed text-surface-200">{prompt}</div>
+        </div>
+
+        <div className="rounded-md border border-surface-600/35 bg-surface-900/25 p-2.5">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-surface-400">Quality gate</div>
+            <span className={`text-[10px] font-extrabold tabular-nums ${qualityPassed ? 'text-accent-green' : 'text-accent-amber'}`}>
+              {qualityReview ? `${qualityReview.score}%` : 'n/a'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {designQualityChecklist(product).map((item) => (
+              <label key={item.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md border border-surface-600/35 bg-surface-950/25 px-2 py-1.5 text-[11px] font-bold text-surface-200">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 flex-shrink-0 accent-sky-400"
+                  checked={!!qualityChecks[item.id]}
+                  onChange={(event) => onQualityCheckChange(item.id, event.target.checked)}
+                />
+                <span className="min-w-0 truncate">{item.label}</span>
+              </label>
+            ))}
+          </div>
+          {qualityReview?.failureReason && (
+            <div className="mt-2 break-words text-[11px] font-semibold text-accent-amber">{qualityReview.failureReason}</div>
+          )}
         </div>
 
         <div className="rounded-md border border-surface-600/35 bg-surface-900/25 p-2.5">
@@ -979,7 +1051,7 @@ function GeneratedDesignPanel({
               ? 'border-accent-green/35 bg-accent-green/10 text-accent-green'
               : 'border-primary-300/35 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25 disabled:cursor-not-allowed disabled:opacity-50'
           }`}
-          disabled={isGenerating || !canApprove}
+          disabled={isGenerating || !canApprove || !qualityPassed}
           onClick={onApprove}
         >
           <Icon name={isApproved ? 'check-circle' : 'plus-circle'} size={14} />
@@ -994,6 +1066,8 @@ function CreativeBriefPanel({ product }: { product: StoreProductIdea }) {
   const brief = product.creativeBrief
   if (!brief) return null
   const rows = [
+    ['Fit', `${formatMetric(product.productTypeFit?.score)} ${product.productTypeFit?.reasons.slice(0, 2).join(' / ') || ''}`.trim()],
+    ['Gap', `${formatMetric(product.gapEvidence?.score)} ${product.gapEvidence?.reasons.slice(0, 2).join(' / ') || product.gapEvidence?.level || ''}`.trim()],
     ['Words', brief.exactPhrase || 'No text'],
     ['Artwork', brief.visualSubject],
     ['Style', `${brief.styleDirection}. ${brief.palette}.`],
@@ -1417,13 +1491,30 @@ function ListingManager({
             <div className="section-label">Listing drafts</div>
             <p className="mt-0.5 text-[12px] text-surface-300">Create and manage listing details before anything goes to Etsy.</p>
           </div>
+          <div className="flex flex-shrink-0 gap-2">
+            <button type="button" className="btn-secondary min-h-9 px-3 py-2 text-[12px]" onClick={() => downloadWorkspaceExport(store, workspace, 'json')}>
+              <Icon name="download" size={14} /> JSON
+            </button>
+            <button type="button" className="btn-secondary min-h-9 px-3 py-2 text-[12px]" onClick={() => downloadWorkspaceExport(store, workspace, 'csv')}>
+              <Icon name="download" size={14} /> CSV
+            </button>
+          </div>
         </div>
 
         {workspace.listings.length ? (
           <div className="space-y-4">
-            {workspace.listings.map((listing) => (
-              <ListingDraftEditor key={listing.id} listing={listing} onUpdate={(patch) => onUpdateListing(listing.id, patch)} />
-            ))}
+            {workspace.listings.map((listing) => {
+              const product = workspace.products.find((item) => item.id === listing.productId)
+              return (
+                <ListingDraftEditor
+                  key={listing.id}
+                  store={store}
+                  product={product}
+                  listing={listing}
+                  onUpdate={(patch) => onUpdateListing(listing.id, patch)}
+                />
+              )
+            })}
           </div>
         ) : (
           <EmptyState icon="file-text" title="No listing drafts yet" text="Send a selected product idea here from Product Creator." />
@@ -1455,7 +1546,18 @@ function ListingManager({
   )
 }
 
-function ListingDraftEditor({ listing, onUpdate }: { listing: StoreListingDraft; onUpdate: (patch: Partial<StoreListingDraft>) => void }) {
+function ListingDraftEditor({
+  store,
+  product,
+  listing,
+  onUpdate,
+}: {
+  store: StoreItem
+  product?: StoreProductIdea
+  listing: StoreListingDraft
+  onUpdate: (patch: Partial<StoreListingDraft>) => void
+}) {
+  const quality = scoreListingDraft(store, listing, product)
   return (
     <div className="rounded-md border border-surface-600/50 bg-surface-900/25 p-3">
       <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
@@ -1463,16 +1565,21 @@ function ListingDraftEditor({ listing, onUpdate }: { listing: StoreListingDraft;
           <div className="break-words text-[13px] font-extrabold text-surface-50">{listing.title}</div>
           <div className="mt-0.5 break-words text-[11px] text-surface-300">{listing.primaryKeyword} / {formatProductType(listing.productType)}</div>
         </div>
-        <select
-          className="input min-h-9 w-auto px-3 py-1.5 text-[12px]"
-          value={listing.status}
-          onChange={(event) => onUpdate({ status: event.target.value as ListingStatus })}
-          aria-label="Listing status"
-        >
-          <option value="draft">Draft</option>
-          <option value="needs_review">Needs review</option>
-          <option value="ready">Ready</option>
-        </select>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <span className={`rounded-md border px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider ${quality.score !== null && quality.score >= 80 ? 'border-accent-green/25 bg-accent-green/10 text-accent-green' : 'border-accent-amber/25 bg-accent-amber/10 text-accent-amber'}`}>
+            {quality.grade} {quality.score !== null ? quality.score : 'n/a'}
+          </span>
+          <select
+            className="input min-h-9 w-auto px-3 py-1.5 text-[12px]"
+            value={listing.status}
+            onChange={(event) => onUpdate({ status: event.target.value as ListingStatus, quality })}
+            aria-label="Listing status"
+          >
+            <option value="draft">Draft</option>
+            <option value="needs_review">Needs review</option>
+            <option value="ready">Ready</option>
+          </select>
+        </div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_11rem]">
@@ -1484,6 +1591,15 @@ function ListingDraftEditor({ listing, onUpdate }: { listing: StoreListingDraft;
           <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-300">Price</span>
           <input className="input text-[12px]" value={listing.price} onChange={(event) => onUpdate({ price: event.target.value })} />
         </label>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        {quality.checks.map((check) => (
+          <div key={check.label} className="rounded-md border border-surface-600/35 bg-surface-950/20 p-2">
+            <div className={`text-[10px] font-extrabold uppercase tracking-wider ${check.complete ? 'text-accent-green' : 'text-accent-amber'}`}>{check.label}</div>
+            <div className="mt-1 break-words text-[11px] text-surface-300">{check.detail}</div>
+          </div>
+        ))}
       </div>
 
       <label className="mt-3 block">
@@ -1508,6 +1624,179 @@ function ListingDraftEditor({ listing, onUpdate }: { listing: StoreListingDraft;
           </div>
         </div>
       </div>
+
+      <div className="mt-3 rounded-md border border-surface-600/40 bg-surface-950/20 p-3">
+        <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-surface-300">Performance</div>
+        <div className="grid gap-2 sm:grid-cols-4">
+          <PerformanceInput label="Views" value={listing.performance?.views} onChange={(value) => onUpdate({ performance: updatePerformance(listing.performance, 'views', value) })} />
+          <PerformanceInput label="Favorites" value={listing.performance?.favorites} onChange={(value) => onUpdate({ performance: updatePerformance(listing.performance, 'favorites', value) })} />
+          <PerformanceInput label="Orders" value={listing.performance?.orders} onChange={(value) => onUpdate({ performance: updatePerformance(listing.performance, 'orders', value) })} />
+          <PerformanceInput label="Revenue" value={listing.performance?.revenue} onChange={(value) => onUpdate({ performance: updatePerformance(listing.performance, 'revenue', value) })} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PerformanceInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value?: number | null
+  onChange: (value: number | null) => void
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-surface-400">{label}</span>
+      <input
+        className="input min-h-9 text-[12px]"
+        type="number"
+        min="0"
+        inputMode="decimal"
+        value={value ?? ''}
+        onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
+      />
+    </label>
+  )
+}
+
+function updatePerformance(
+  current: StoreListingPerformance | undefined,
+  field: keyof Omit<StoreListingPerformance, 'updatedAt'>,
+  value: number | null,
+): StoreListingPerformance {
+  return {
+    ...current,
+    [field]: Number.isFinite(value) ? value : null,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+function downloadWorkspaceExport(store: StoreItem, workspace: StoreWorkspace, format: 'json' | 'csv'): void {
+  const payload = workspaceExport(store, workspace)
+  const content = format === 'json'
+    ? JSON.stringify(payload, null, 2)
+    : workspaceExportCsv(payload)
+  const type = format === 'json' ? 'application/json' : 'text/csv'
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `${slugifyLocal(store.name)}-workspace.${format}`
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+function workspaceExportCsv(payload: Record<string, unknown>): string {
+  const products = Array.isArray(payload.products) ? payload.products as Array<Record<string, unknown>> : []
+  const listings = Array.isArray(payload.listings) ? payload.listings as Array<Record<string, unknown>> : []
+  const rows = [
+    ['type', 'title', 'keyword', 'product_type', 'status', 'fit_score', 'gap_score', 'quality_score', 'views', 'favorites', 'orders', 'revenue', 'supporting_keywords'],
+    ...products.map((product) => [
+      'product',
+      stringCell(product.title),
+      stringCell(product.keyword),
+      stringCell(product.productType),
+      stringCell(product.status),
+      nestedMetric(product, ['productTypeFit', 'score']),
+      nestedMetric(product, ['gapEvidence', 'score']),
+      nestedMetric(product, ['designQuality', 'score']),
+      '',
+      '',
+      '',
+      '',
+      arrayCell(product.supportingKeywords),
+    ]),
+    ...listings.map((listing) => [
+      'listing',
+      stringCell(listing.title),
+      stringCell(listing.primaryKeyword),
+      stringCell(listing.productType),
+      stringCell(listing.status),
+      '',
+      '',
+      nestedMetric(listing, ['quality', 'score']),
+      nestedMetric(listing, ['performance', 'views']),
+      nestedMetric(listing, ['performance', 'favorites']),
+      nestedMetric(listing, ['performance', 'orders']),
+      nestedMetric(listing, ['performance', 'revenue']),
+      arrayCell(listing.supportingKeywords),
+    ]),
+  ]
+  return rows.map((row) => row.map(csvCell).join(',')).join('\n')
+}
+
+function nestedMetric(value: Record<string, unknown>, path: string[]): string {
+  let current: unknown = value
+  for (const key of path) {
+    if (!current || typeof current !== 'object') return ''
+    current = (current as Record<string, unknown>)[key]
+  }
+  return Number.isFinite(current) ? String(current) : ''
+}
+
+function stringCell(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function arrayCell(value: unknown): string {
+  return Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean).join('; ') : ''
+}
+
+function csvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`
+}
+
+interface WorkspacePerformanceSummary {
+  hasData: boolean
+  views: number
+  favorites: number
+  orders: number
+  revenue: number
+  tracked: number
+}
+
+function workspacePerformance(workspace: StoreWorkspace): WorkspacePerformanceSummary {
+  const initial: WorkspacePerformanceSummary = { hasData: false, views: 0, favorites: 0, orders: 0, revenue: 0, tracked: 0 }
+  return workspace.listings.reduce<WorkspacePerformanceSummary>((summary, listing) => {
+    const perf = listing.performance
+    const hasData = !!perf && [perf.views, perf.favorites, perf.orders, perf.revenue].some((value) => Number.isFinite(value))
+    if (!hasData) return summary
+    return {
+      hasData: true,
+      tracked: summary.tracked + 1,
+      views: summary.views + Number(perf?.views || 0),
+      favorites: summary.favorites + Number(perf?.favorites || 0),
+      orders: summary.orders + Number(perf?.orders || 0),
+      revenue: summary.revenue + Number(perf?.revenue || 0),
+    }
+  }, initial)
+}
+
+function PerformanceSummaryPanel({ performance }: { performance: WorkspacePerformanceSummary }) {
+  return (
+    <div className="panel-soft p-4">
+      <div className="section-label mb-3">Performance</div>
+      <div className="grid grid-cols-2 gap-2">
+        <MiniMetric label="Views" value={`${performance.views}`} />
+        <MiniMetric label="Favorites" value={`${performance.favorites}`} />
+        <MiniMetric label="Orders" value={`${performance.orders}`} />
+        <MiniMetric label="Revenue" value={performance.revenue ? fmtPrice(performance.revenue) : '0'} />
+      </div>
+      <div className="mt-2 text-[11px] font-semibold text-surface-400">{performance.tracked} listings tracked</div>
+    </div>
+  )
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-surface-600/35 bg-surface-950/20 p-2">
+      <div className="text-[13px] font-extrabold tabular-nums text-surface-50">{value}</div>
+      <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-surface-400">{label}</div>
     </div>
   )
 }
@@ -1599,6 +1888,7 @@ function NoDataPanel({ icon, title, text }: { icon: Parameters<typeof Icon>[0]['
 interface ProductTypeOption {
   value: string
   label: string
+  fit: ProductTypeFit
 }
 
 function productTypeOptionsFor(store: StoreItem, keyword: StoreKeywordCandidate): ProductTypeOption[] {
@@ -1607,7 +1897,9 @@ function productTypeOptionsFor(store: StoreItem, keyword: StoreKeywordCandidate)
     keyword.product,
   ].map(normalizeProductType).filter(Boolean))
   const productTypes = values.length ? values : ['digital_download']
-  return productTypes.map((value) => ({ value, label: productTypeLabel(value) }))
+  return productTypes
+    .map((value) => ({ value, label: productTypeLabel(value), fit: scoreProductTypeFit(store, keyword, value) }))
+    .sort((a, b) => (b.fit.score ?? -1) - (a.fit.score ?? -1))
 }
 
 function productIdeasForType(store: StoreItem, keyword: StoreKeywordCandidate, productType: string): StoreProductIdea[] {

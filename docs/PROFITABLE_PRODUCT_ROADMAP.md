@@ -52,6 +52,8 @@ Suggested fields:
 - expectedProductionCostBand
 - expectedMarginBand
 
+Status: implemented. Product types are scored and sorted from keyword wording, source product match, store product mix, and any available buyer intent, price, or margin evidence. Missing evidence is stored as missing instead of filled with fallback numbers.
+
 ## Phase 3: Competitive Gap Evidence
 
 Goal: explain why a concept might win without needing Etsy API access for every listing.
@@ -71,6 +73,8 @@ Useful checks:
 - repeated motif penalty
 - price/margin plausibility
 
+Status: implemented. Product ideas now store gap evidence with score, level, reasons, cautions, and missing inputs. The score uses available keyword metrics and keyword specificity only; absent marketplace metrics remain absent.
+
 ## Phase 4: Design Quality Gate
 
 Goal: stop weak designs before they become listings.
@@ -89,6 +93,8 @@ Suggested statuses:
 - mockup_ready
 - listing_ready
 
+Status: implemented. Product Creator now requires a design quality checklist before approval. The saved product stores the quality checks, score, pass/fail state, and review timestamp.
+
 ## Phase 5: Listing Optimizer
 
 Goal: convert accepted products into Etsy-ready listing drafts.
@@ -99,6 +105,8 @@ Goal: convert accepted products into Etsy-ready listing drafts.
 - Add a listing quality score based on title coverage, tag diversity, phrase readability, and evidence completeness.
 - Flag missing data rather than inventing estimates.
 
+Status: implemented. Listing drafts are scored from title keyword coverage, supporting keyword coverage, tag count, product brief coverage, and stored gap evidence. Missing supporting keywords or gap evidence remain visible.
+
 ## Phase 6: Export and Publishing Workflow
 
 Goal: move from planning to production without rewriting work by hand.
@@ -107,6 +115,8 @@ Goal: move from planning to production without rewriting work by hand.
 - Add Printify or other production-provider integration only after credentials and product templates are settled.
 - Add Etsy draft publishing only after valid API access exists.
 - Keep all publish actions explicit and reversible.
+
+Status: partially implemented. JSON and CSV export are implemented for products, creative briefs, design prompts, listing drafts, quality scores, and performance data. Etsy publishing and Printify product creation are intentionally blocked until valid credentials and product templates exist.
 
 ## Phase 7: Learning Loop
 
@@ -117,10 +127,12 @@ Goal: improve recommendations from actual performance.
 - Promote patterns that produce approved designs and sales.
 - Penalize patterns that repeatedly fail design quality, listing quality, or buyer response.
 
+Status: implemented as a local feedback loop. Listing drafts now accept manually entered views, favorites, orders, and revenue. Dashboard summaries and exports use those actual entered values. Automatic Etsy analytics import still depends on Etsy credentials.
+
 ## Immediate Next Steps
 
-1. Add product-type fit scoring and sort product type options by best opportunity.
-2. Add a design quality checklist before a design can become mockup-ready.
-3. Add listing quality scoring that uses only stored keyword and product brief data.
-4. Add export for product briefs and listing drafts.
-5. Add real performance tracking once Etsy or shop analytics access is available.
+1. Connect Etsy analytics once credentials are available.
+2. Connect Printify or another production provider once product templates and credentials are available.
+3. Add provider-level design win-rate reporting after enough approved/rejected design outcomes exist.
+4. Add automatic performance import so manual views, favorites, orders, and revenue are no longer required.
+5. Add listing draft publishing only after the app can create a reversible Etsy draft safely.

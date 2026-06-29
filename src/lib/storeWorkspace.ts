@@ -16,12 +16,15 @@ export interface StoreProductIdea {
   title: string
   productType: string
   targetBuyer: string
+  productTypeFit?: ProductTypeFit
+  gapEvidence?: ProductGapEvidence
   creativeBrief?: StoreProductCreativeBrief
   designBrief: string
   mockupPrompt: string
   designProvider?: string
   designPrompt?: string
   approvedDesign?: StoreProductDesignAsset
+  designQuality?: StoreDesignQuality
   supportingKeywords: string[]
   evidence: {
     strength?: number | null
@@ -32,6 +35,22 @@ export interface StoreProductIdea {
   status: ProductStatus
   createdAt: string
   updatedAt: string
+}
+
+export interface ProductTypeFit {
+  score: number | null
+  reasons: string[]
+  expectedPriceBand?: { min?: number | null; max?: number | null; avg?: number | null } | null
+  expectedMargin?: number | null
+  missing: string[]
+}
+
+export interface ProductGapEvidence {
+  score: number | null
+  level: 'thin' | 'developing' | 'solid' | 'deep'
+  reasons: string[]
+  cautions: string[]
+  missing: string[]
 }
 
 export interface StoreProductCreativeBrief {
@@ -51,6 +70,14 @@ export interface StoreProductCreativeBrief {
     supportingKeywords: string[]
     productType: string
   }
+}
+
+export interface StoreDesignQuality {
+  checks: Record<string, boolean>
+  score: number
+  passed: boolean
+  reviewedAt: string
+  failureReason?: string
 }
 
 export interface StoreProductDesignAsset {
@@ -76,8 +103,25 @@ export interface StoreListingDraft {
   description: string
   price: string
   status: ListingStatus
+  quality?: StoreListingQuality
+  performance?: StoreListingPerformance
   createdAt: string
   updatedAt: string
+}
+
+export interface StoreListingQuality {
+  score: number | null
+  grade: 'A' | 'B' | 'C' | 'Needs work' | 'No data'
+  checks: Array<{ label: string; complete: boolean; detail: string }>
+  missing: string[]
+}
+
+export interface StoreListingPerformance {
+  views?: number | null
+  favorites?: number | null
+  orders?: number | null
+  revenue?: number | null
+  updatedAt?: string
 }
 
 export interface StoreWorkspace {
@@ -181,6 +225,8 @@ export function createProductIdeas(store: StoreItem, keyword: StoreKeywordCandid
     ]).filter((term) => term.toLowerCase() !== keyword.keyword.toLowerCase()).slice(0, 8)
     const targetBuyer = store.target_audience || `Etsy buyers searching for ${keyword.keyword}`
     const productLabel = productType.replace(/_/g, ' ')
+    const productTypeFit = scoreProductTypeFit(store, keyword, productType)
+    const gapEvidence = scoreProductGap(keyword, productType, supportingKeywords, title)
     return {
       id: `candidate-${store.slug}-${slugify(keyword.keyword)}-${index}`,
       storeSlug: store.slug,
@@ -188,6 +234,8 @@ export function createProductIdeas(store: StoreItem, keyword: StoreKeywordCandid
       title,
       productType,
       targetBuyer,
+      productTypeFit,
+      gapEvidence,
       designBrief: `Create a ${productLabel} concept for "${keyword.keyword}" that matches ${store.aesthetic || store.niche}. Keep the design specific enough to stand apart from broad generic Etsy listings.`,
       mockupPrompt: `Mock up "${title}" as a ${productLabel}. Use the store aesthetic (${store.aesthetic || 'cohesive Etsy-ready style'}) and make the primary keyword visually obvious without clutter.`,
       supportingKeywords,
@@ -208,8 +256,14 @@ export function createSpecificProductIdeas(store: StoreItem, keyword: StoreKeywo
   const now = new Date().toISOString()
   const supportingKeywords = relatedKeywordNames(store, keyword, 8)
   const productLabel = titleCase(productType.replace(/_/g, ' '))
+  const productTypeFit = scoreProductTypeFit(store, keyword, productType)
   return Array.from({ length: count }, (_, index) => {
     const creativeBrief = createCreativeBrief(store, keyword, productType, supportingKeywords, index)
+    const gapEvidenceBase = scoreProductGap(keyword, productType, supportingKeywords, creativeBrief.productName)
+    const gapEvidence = {
+      ...gapEvidenceBase,
+      cautions: dedupe([...gapEvidenceBase.cautions, ...creativeBrief.avoid.slice(0, 2)]),
+    }
     return {
       id: `candidate-${store.slug}-${slugify(keyword.keyword)}-${slugify(productType)}-${index}`,
       storeSlug: store.slug,
@@ -217,6 +271,8 @@ export function createSpecificProductIdeas(store: StoreItem, keyword: StoreKeywo
       title: creativeBrief.productName,
       productType,
       targetBuyer: creativeBrief.buyer,
+      productTypeFit,
+      gapEvidence,
       creativeBrief,
       designBrief: [
         `${creativeBrief.productName}.`,
@@ -250,7 +306,7 @@ export function createListingFromProduct(store: StoreItem, product: StoreProduct
     product.productType.replace(/_/g, ' '),
     store.niche,
   ]).slice(0, 13)
-  return {
+  const draft: StoreListingDraft = {
     id: `candidate-listing-${product.id}`,
     storeSlug: store.slug,
     productId: product.id,
@@ -265,6 +321,7 @@ export function createListingFromProduct(store: StoreItem, product: StoreProduct
     createdAt: now,
     updatedAt: now,
   }
+  return { ...draft, quality: scoreListingDraft(store, draft, product) }
 }
 
 export function extractStoreKeywords(store: StoreItem): StoreKeywordCandidate[] {
@@ -349,10 +406,202 @@ export function extractKeywordClusters(store: StoreItem): Array<{ id: string; la
   }))
 }
 
+export function scoreProductTypeFit(store: StoreItem, keyword: StoreKeywordCandidate, productType: string): ProductTypeFit {
+  const normalizedType = normalizeProductType(productType)
+  const keywordText = keyword.keyword.toLowerCase()
+  const declaredType = normalizeProductType(keyword.product || '')
+  const storeTypes = (store.product_types || []).map(normalizeProductType)
+  const reasons: string[] = []
+  const missing: string[] = []
+  const values: number[] = []
+
+  const textMatch = productTypeTerms(normalizedType).some((term) => keywordText.includes(term))
+  if (textMatch) {
+    values.push(92)
+    reasons.push('keyword names product type')
+  }
+  if (declaredType && declaredType === normalizedType) {
+    values.push(88)
+    reasons.push('source product match')
+  }
+  if (storeTypes.includes(normalizedType)) {
+    values.push(76)
+    reasons.push('fits store mix')
+  }
+
+  const buyerIntent = numberOrNull(keyword.buyerIntent)
+  if (buyerIntent !== null) {
+    values.push(clampScore(buyerIntent))
+    if (buyerIntent >= 70) reasons.push('strong buyer intent')
+  } else {
+    missing.push('buyer intent')
+  }
+
+  const margin = numberOrNull(keyword.margin)
+  if (margin !== null) {
+    values.push(clampScore(margin))
+    if (margin >= 65) reasons.push('margin signal')
+  } else {
+    missing.push('margin')
+  }
+
+  const avgPrice = numberOrNull(keyword.avgPrice)
+  const priceRange = keyword.priceRange || null
+  if (avgPrice !== null || priceRange) {
+    reasons.push('price evidence')
+  } else {
+    missing.push('price')
+  }
+
+  if (!textMatch && declaredType && declaredType !== normalizedType) {
+    values.push(45)
+    reasons.push(`source says ${titleCase(declaredType)}`)
+  }
+  if (normalizedType.includes('digital') && /mug|shirt|tee|tote|sticker|decal|apparel|wall art|poster|print/.test(keywordText)) {
+    values.push(42)
+    reasons.push('possible product mismatch')
+  }
+
+  const score = values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null
+  return {
+    score,
+    reasons: reasons.length ? dedupe(reasons).slice(0, 4) : ['no product fit signal'],
+    expectedPriceBand: priceRange || avgPrice !== null ? { min: priceRange?.min ?? null, max: priceRange?.max ?? null, avg: avgPrice } : null,
+    expectedMargin: margin,
+    missing: dedupe(missing),
+  }
+}
+
+export function designQualityChecklist(product: StoreProductIdea): Array<{ id: string; label: string }> {
+  const hasPhrase = !!product.creativeBrief?.exactPhrase
+  return [
+    { id: 'phrase', label: hasPhrase ? 'Exact words' : 'No extra words' },
+    { id: 'subject', label: 'Clear subject' },
+    { id: 'clean', label: 'Clean print' },
+    { id: 'safe', label: 'No trademark' },
+    { id: 'contrast', label: 'Strong contrast' },
+    { id: 'thumbnail', label: 'Thumbnail clear' },
+  ]
+}
+
+export function evaluateDesignQuality(product: StoreProductIdea, checks: Record<string, boolean>): StoreDesignQuality {
+  const items = designQualityChecklist(product)
+  const complete = items.filter((item) => checks[item.id]).length
+  const score = Math.round((complete / Math.max(1, items.length)) * 100)
+  const missing = items.filter((item) => !checks[item.id]).map((item) => item.label.toLowerCase())
+  return {
+    checks: Object.fromEntries(items.map((item) => [item.id, !!checks[item.id]])),
+    score,
+    passed: complete === items.length,
+    reviewedAt: new Date().toISOString(),
+    failureReason: missing.length ? `Needs ${missing.slice(0, 2).join(', ')}` : undefined,
+  }
+}
+
+export function scoreListingDraft(store: StoreItem, listing: StoreListingDraft, product?: StoreProductIdea): StoreListingQuality {
+  const checks: StoreListingQuality['checks'] = []
+  const missing: string[] = []
+  const storeContext = String(store.niche || store.name || '').toLowerCase()
+  const keyword = listing.primaryKeyword.toLowerCase()
+  const title = listing.title.toLowerCase()
+  const description = listing.description.toLowerCase()
+  const tags = listing.tags.map((tag) => tag.toLowerCase())
+  const supporting = listing.supportingKeywords.map((term) => term.toLowerCase())
+  const productEvidence = product?.gapEvidence || null
+
+  const titleHasKeyword = title.includes(keyword)
+  checks.push({
+    label: 'Title keyword',
+    complete: titleHasKeyword,
+    detail: titleHasKeyword ? 'Primary keyword is in title' : 'Primary keyword missing from title',
+  })
+
+  const supportCovered = supporting.length ? supporting.filter((term) => title.includes(term) || tags.includes(term)).length : 0
+  checks.push({
+    label: 'Support coverage',
+    complete: supportCovered >= Math.min(2, supporting.length || 2),
+    detail: supporting.length ? `${supportCovered}/${supporting.length} supporting keywords covered` : 'No supporting keywords saved',
+  })
+  if (!supporting.length) missing.push('supporting keywords')
+
+  checks.push({
+    label: 'Tag set',
+    complete: listing.tags.length >= 8 && listing.tags.length <= 13,
+    detail: `${listing.tags.length}/13 tags`,
+  })
+
+  const briefSignals = [
+    product?.creativeBrief?.visualSubject,
+    product?.creativeBrief?.exactPhrase,
+    product?.creativeBrief?.palette,
+  ].filter(Boolean).length
+  checks.push({
+    label: 'Brief coverage',
+    complete: briefSignals >= 2 && description.includes(keyword) && (!storeContext || description.includes(storeContext.split(/\s+/)[0] || storeContext)),
+    detail: briefSignals >= 2 ? 'Description uses product brief' : 'Product brief not available',
+  })
+
+  checks.push({
+    label: 'Evidence depth',
+    complete: productEvidence?.score !== null && productEvidence?.score !== undefined,
+    detail: productEvidence?.score !== null && productEvidence?.score !== undefined ? `${productEvidence.level} gap evidence` : 'No gap score available',
+  })
+  if (!productEvidence || productEvidence.score === null) missing.push('gap evidence')
+
+  const completeCount = checks.filter((check) => check.complete).length
+  const score = checks.length ? Math.round((completeCount / checks.length) * 100) : null
+  return {
+    score,
+    grade: listingQualityGrade(score),
+    checks,
+    missing: dedupe(missing),
+  }
+}
+
+export function workspaceExport(store: StoreItem, workspace: StoreWorkspace): Record<string, unknown> {
+  return {
+    exportedAt: new Date().toISOString(),
+    store: {
+      slug: store.slug,
+      name: store.name,
+      niche: store.niche,
+      targetAudience: store.target_audience,
+      productTypes: store.product_types,
+    },
+    products: workspace.products.map((product) => ({
+      id: product.id,
+      title: product.title,
+      keyword: product.keyword,
+      productType: product.productType,
+      status: product.status,
+      productTypeFit: product.productTypeFit,
+      gapEvidence: product.gapEvidence,
+      creativeBrief: product.creativeBrief,
+      designPrompt: product.designPrompt,
+      mockupPrompt: product.mockupPrompt,
+      designQuality: product.designQuality,
+      supportingKeywords: product.supportingKeywords,
+    })),
+    listings: workspace.listings.map((listing) => {
+      const product = workspace.products.find((item) => item.id === listing.productId)
+      return {
+        ...listing,
+        quality: scoreListingDraft(store, listing, product),
+      }
+    }),
+  }
+}
+
 export function validationItems(store: StoreItem, workspace: StoreWorkspace): Array<{ label: string; complete: boolean; detail: string }> {
   const keywords = extractStoreKeywords(store)
   const clusters = extractKeywordClusters(store)
   const topKeywordCount = keywords.filter((keyword) => (keyword.strength || 0) >= 70).length
+  const qualityProducts = workspace.products.filter((product) => product.designQuality?.passed)
+  const qualityListings = workspace.listings.filter((listing) => {
+    const product = workspace.products.find((item) => item.id === listing.productId)
+    return (scoreListingDraft(store, listing, product).score || 0) >= 80
+  })
+  const trackedListings = workspace.listings.filter((listing) => hasPerformanceData(listing.performance))
   return [
     {
       label: 'Keyword cluster selected',
@@ -371,10 +620,8 @@ export function validationItems(store: StoreItem, workspace: StoreWorkspace): Ar
     },
     {
       label: 'Design approved',
-      complete: workspace.products.some((product) => !!product.approvedDesign || product.status === 'design_approved' || product.status === 'mockup_selected' || product.status === 'sent_to_listing'),
-      detail: workspace.products.some((product) => !!product.approvedDesign || product.status === 'design_approved' || product.status === 'mockup_selected' || product.status === 'sent_to_listing')
-        ? 'At least one product has an approved design'
-        : 'No product has an approved design yet',
+      complete: qualityProducts.length > 0,
+      detail: qualityProducts.length ? `${qualityProducts.length} products passed design quality` : 'No product has passed the design quality gate yet',
     },
     {
       label: 'Mockup direction selected',
@@ -387,6 +634,16 @@ export function validationItems(store: StoreItem, workspace: StoreWorkspace): Ar
       label: 'Listing drafts created',
       complete: workspace.listings.length > 0,
       detail: `${workspace.listings.length} listing drafts created`,
+    },
+    {
+      label: 'Listing quality scored',
+      complete: qualityListings.length > 0,
+      detail: qualityListings.length ? `${qualityListings.length} listings score 80+` : 'No listing draft scores 80+ yet',
+    },
+    {
+      label: 'Performance tracked',
+      complete: trackedListings.length > 0,
+      detail: trackedListings.length ? `${trackedListings.length} listings have performance data` : 'No listing performance entered yet',
     },
   ]
 }
@@ -672,6 +929,111 @@ function relatedKeywordNames(store: StoreItem, keyword: StoreKeywordCandidate, l
     .filter((item) => item.keyword.toLowerCase() !== keyword.keyword.toLowerCase())
   const related = candidates.filter((item) => item.keyword.toLowerCase().split(/[^a-z0-9]+/).some((word) => keywordWords.includes(word)))
   return dedupe([...related, ...candidates].map((item) => item.keyword)).slice(0, limit)
+}
+
+function scoreProductGap(keyword: StoreKeywordCandidate, productType: string, supportingKeywords: string[], title: string): ProductGapEvidence {
+  const values: number[] = []
+  const reasons: string[] = []
+  const cautions: string[] = []
+  const missing: string[] = []
+  const sourceFields: Array<[keyof StoreKeywordCandidate, string]> = [
+    ['opportunity', 'opportunity'],
+    ['gap', 'gap'],
+    ['demand', 'demand'],
+    ['competitionEase', 'competition'],
+    ['buyerIntent', 'buyer intent'],
+    ['marketEvidenceScore', 'market evidence'],
+    ['profitabilityIndex', 'profitability'],
+    ['sourceStrength', 'source strength'],
+    ['specificityScore', 'specificity'],
+  ]
+
+  for (const [field, label] of sourceFields) {
+    const value = numberOrNull(keyword[field])
+    if (value === null) {
+      missing.push(label)
+      continue
+    }
+    values.push(clampScore(value))
+    if (value >= 70) reasons.push(`strong ${label}`)
+  }
+
+  const words = meaningfulWords(`${keyword.keyword} ${title}`).length
+  if (words >= 4) {
+    values.push(76)
+    reasons.push('specific phrase')
+  } else {
+    cautions.push('broad phrase')
+  }
+
+  if (supportingKeywords.length >= 4) reasons.push(`${supportingKeywords.length} related keywords`)
+  else missing.push('keyword depth')
+
+  const normalizedType = normalizeProductType(productType)
+  if (productTypeTerms(normalizedType).some((term) => keyword.keyword.toLowerCase().includes(term))) {
+    reasons.push('product match')
+  }
+
+  if (/\b(gift|custom|personalized|printable|template|shirt|mug|sticker|wall art|poster)\b/i.test(keyword.keyword)) {
+    reasons.push('buyer-format wording')
+  }
+  if (/^[a-z0-9 ]{1,15}$/i.test(keyword.keyword) && !/\b(for|with|custom|personalized|gift|mug|shirt|print|sticker|download)\b/i.test(keyword.keyword)) {
+    cautions.push('needs sharper buyer angle')
+  }
+
+  const score = values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null
+  return {
+    score,
+    level: evidenceLevel(score),
+    reasons: dedupe(reasons).slice(0, 5),
+    cautions: dedupe(cautions).slice(0, 5),
+    missing: dedupe(missing).slice(0, 6),
+  }
+}
+
+function productTypeTerms(productType: string): string[] {
+  const type = normalizeProductType(productType)
+  if (type.includes('wall') || type.includes('art') || type.includes('poster') || type.includes('print')) return ['wall art', 'print', 'poster', 'decor', 'frame']
+  if (type.includes('apparel') || type.includes('shirt') || type.includes('tee') || type.includes('hoodie')) return ['shirt', 'tshirt', 'tee', 'hoodie', 'sweatshirt', 'apparel']
+  if (type.includes('mug') || type.includes('cup')) return ['mug', 'cup', 'coffee cup']
+  if (type.includes('sticker') || type.includes('decal')) return ['sticker', 'stickers', 'decal', 'decals']
+  if (type.includes('digital') || type.includes('download') || type.includes('template')) return ['digital', 'download', 'printable', 'template', 'pdf']
+  if (type.includes('tote') || type.includes('bag')) return ['tote', 'bag', 'canvas bag']
+  if (type.includes('tumbler')) return ['tumbler', 'water bottle']
+  return type.split('_').filter(Boolean)
+}
+
+function normalizeProductType(value: string): string {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'digital_download'
+}
+
+function meaningfulWords(value: string): string[] {
+  return value.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 2 && !['and', 'for', 'the', 'with', 'gift', 'gifts', 'set'].includes(word))
+}
+
+function evidenceLevel(score: number | null): ProductGapEvidence['level'] {
+  if (score === null) return 'thin'
+  if (score >= 82) return 'deep'
+  if (score >= 70) return 'solid'
+  if (score >= 55) return 'developing'
+  return 'thin'
+}
+
+function listingQualityGrade(score: number | null): StoreListingQuality['grade'] {
+  if (score === null) return 'No data'
+  if (score >= 90) return 'A'
+  if (score >= 80) return 'B'
+  if (score >= 65) return 'C'
+  return 'Needs work'
+}
+
+function hasPerformanceData(performance?: StoreListingPerformance): boolean {
+  if (!performance) return false
+  return [performance.views, performance.favorites, performance.orders, performance.revenue].some((value) => Number.isFinite(value))
+}
+
+function clampScore(value: number): number {
+  return Math.round(Math.max(0, Math.min(100, value)))
 }
 
 function keywordStrength(keyword: Partial<StoreIdeaKeyword>): number | null {
