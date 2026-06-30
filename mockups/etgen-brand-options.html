@@ -3,321 +3,278 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EtGen Brand Options</title>
+<title>EtGen Logo + Wordmark Options</title>
 <style>
 :root{
-  --page-bg:hsl(214 22% 10%);
-  --page-ink:hsl(210 28% 96%);
-  --page-muted:hsl(214 16% 64%);
-  --page-dim:hsl(216 12% 46%);
-  --page-line:hsl(214 18% 24%);
+  --bg:#202631;
+  --surface-950:#202631;
+  --surface-900:#252d3a;
+  --surface-800:#303948;
+  --surface-700:#354052;
+  --surface-600:#465365;
+  --surface-500:#607893;
+  --surface-300:#9fb3ce;
+  --surface-200:#bcc9d8;
+  --surface-100:#d9e1ec;
+  --surface-50:#f3f6fb;
+  --primary-400:#6f96c8;
+  --primary-300:#9fb9dc;
+  --primary-200:#bed2ea;
+  --green:#a9c88f;
+  --amber:#f0cf89;
+  --violet:#c29ad4;
+  --red:#c86f7a;
   --radius:8px;
-  --space-1:4px;
-  --space-2:8px;
-  --space-3:12px;
-  --space-4:16px;
-  --space-5:24px;
-  --space-6:32px;
-  --space-7:48px;
-  --brand-bg:hsl(215 24% 9%);
-  --brand-panel:hsl(214 20% 14%);
-  --brand-panel-2:hsl(214 18% 18%);
-  --brand-line:hsl(214 16% 28%);
-  --brand-text:hsl(210 28% 96%);
-  --brand-muted:hsl(214 14% 66%);
-  --brand-primary:hsl(164 58% 58%);
-  --brand-secondary:hsl(39 65% 66%);
-  --brand-danger:hsl(350 64% 66%);
-  --brand-name:"Ledger Black";
 }
 *{box-sizing:border-box}
-html{min-height:100%;background:var(--page-bg);-webkit-tap-highlight-color:transparent}
+html{min-height:100%;background:var(--bg);-webkit-tap-highlight-color:transparent}
 body{
   margin:0;
   min-height:100vh;
-  color:var(--page-ink);
+  color:var(--surface-50);
   background:
-    linear-gradient(180deg,hsl(214 22% 12%),hsl(214 22% 9%) 44%,hsl(214 20% 7%));
-  font-family:Aptos,Segoe UI,system-ui,-apple-system,sans-serif;
+    radial-gradient(circle at top left,rgba(111,150,200,.12),transparent 34rem),
+    linear-gradient(135deg,#202631 0%,#252d3a 44%,#202631 100%);
+  font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;
   letter-spacing:0;
 }
 button{font:inherit;cursor:pointer}
-.shell{
-  min-height:100vh;
-  display:grid;
-  grid-template-columns:minmax(0,1fr);
-}
-.hero{
-  width:min(1180px,calc(100vw - 32px));
+.page{
+  width:min(1220px,calc(100vw - 32px));
   margin:0 auto;
-  padding:var(--space-7) 0 var(--space-5);
+  padding:32px 0 48px;
+}
+.header{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:24px;
+  align-items:end;
+  margin-bottom:18px;
 }
 .eyebrow{
-  margin:0 0 var(--space-3);
-  color:var(--page-muted);
+  margin:0 0 8px;
+  color:var(--primary-200);
   font-size:12px;
   font-weight:800;
-  text-transform:uppercase;
-  letter-spacing:.08em;
-}
-.hero-grid{
-  display:grid;
-  grid-template-columns:minmax(0,.82fr) minmax(320px,.58fr);
-  align-items:end;
-  gap:var(--space-6);
 }
 h1{
-  max-width:760px;
   margin:0;
-  color:hsl(210 30% 98%);
-  font-size:48px;
-  line-height:1;
+  color:var(--surface-50);
+  font-size:28px;
+  line-height:1.08;
   letter-spacing:0;
 }
 .intro{
-  max-width:620px;
-  margin:var(--space-4) 0 0;
-  color:var(--page-muted);
-  font-size:16px;
-  line-height:1.55;
+  max-width:680px;
+  margin:10px 0 0;
+  color:var(--surface-300);
+  font-size:14px;
+  line-height:1.5;
   font-weight:600;
 }
-.selected-panel{
-  border:1px solid var(--page-line);
+.choice-summary{
+  min-width:260px;
+  border:1px solid rgba(70,83,101,.7);
   border-radius:var(--radius);
-  background:hsl(214 18% 13% / .84);
-  padding:var(--space-4);
-  box-shadow:0 22px 55px hsl(215 30% 3% / .28);
+  background:rgba(48,57,72,.82);
+  padding:14px;
+  box-shadow:0 14px 34px rgba(7,10,14,.22);
 }
-.selected-kicker{
-  color:var(--page-dim);
-  font-size:11px;
+.summary-label{
+  color:var(--surface-300);
+  font-size:10px;
   font-weight:900;
   text-transform:uppercase;
   letter-spacing:.08em;
 }
-.selected-title{
-  margin-top:var(--space-2);
+.summary-lockup{
   display:flex;
   align-items:center;
-  gap:var(--space-3);
+  gap:10px;
+  margin-top:9px;
 }
-.selected-mark{
-  width:38px;
-  height:38px;
-  display:grid;
-  place-items:center;
-  border-radius:var(--radius);
-  background:var(--brand-primary);
-  color:var(--brand-bg);
+.summary-name{
+  color:var(--surface-50);
   font-size:14px;
-  font-weight:950;
+  font-weight:900;
 }
-.selected-title strong{
-  display:block;
-  color:var(--page-ink);
-  font-size:18px;
-}
-.selected-title span{
-  display:block;
+.summary-note{
   margin-top:2px;
-  color:var(--page-muted);
-  font-size:12px;
+  color:var(--surface-300);
+  font-size:11px;
   font-weight:700;
 }
-.token-row{
+.layout{
   display:grid;
-  grid-template-columns:repeat(5,1fr);
-  gap:var(--space-2);
-  margin-top:var(--space-4);
-}
-.token{
-  min-height:44px;
-  border-radius:7px;
-  border:1px solid hsl(0 0% 100% / .1);
-}
-.token.bg{background:var(--brand-bg)}
-.token.panel{background:var(--brand-panel)}
-.token.primary{background:var(--brand-primary)}
-.token.secondary{background:var(--brand-secondary)}
-.token.text{background:var(--brand-text)}
-.wrap{
-  width:min(1180px,calc(100vw - 32px));
-  margin:0 auto;
-  padding-bottom:var(--space-7);
-}
-.board{
-  display:grid;
-  grid-template-columns:360px minmax(0,1fr);
-  gap:var(--space-5);
+  grid-template-columns:320px minmax(0,1fr);
+  gap:18px;
   align-items:start;
 }
 .option-list{
   display:grid;
-  gap:var(--space-3);
+  gap:10px;
   position:sticky;
   top:16px;
 }
-.option-card{
+.option{
   width:100%;
   min-width:0;
   display:grid;
   grid-template-columns:auto minmax(0,1fr) auto;
   align-items:center;
-  gap:var(--space-3);
-  border:1px solid var(--page-line);
+  gap:10px;
+  border:1px solid rgba(70,83,101,.68);
   border-radius:var(--radius);
-  background:hsl(214 17% 13% / .82);
-  color:var(--page-ink);
+  background:rgba(48,57,72,.78);
+  color:var(--surface-50);
+  padding:11px;
   text-align:left;
-  padding:var(--space-3);
-  box-shadow:0 14px 32px hsl(215 28% 3% / .18);
-  transition:transform .16s ease,border-color .16s ease,background .16s ease;
+  transition:border-color .15s ease,background .15s ease,transform .15s ease;
 }
-.option-card:hover{transform:translateY(-1px);border-color:hsl(210 22% 40%)}
-.option-card.active{
-  border-color:var(--brand-primary);
-  background:hsl(214 18% 16% / .95);
-  box-shadow:0 0 0 1px color-mix(in srgb,var(--brand-primary) 32%,transparent),0 18px 42px hsl(215 28% 3% / .24);
+.option:hover{transform:translateY(-1px);border-color:rgba(159,185,220,.42)}
+.option.active{
+  border-color:rgba(111,150,200,.72);
+  background:rgba(53,64,82,.86);
+  box-shadow:inset 3px 0 0 rgba(111,150,200,.95),0 12px 28px rgba(7,10,14,.18);
 }
-.mini-mark{
-  width:38px;
-  height:38px;
-  display:grid;
-  place-items:center;
-  border-radius:var(--radius);
+.option-title{
+  min-width:0;
+}
+.option-title b{
+  display:block;
+  color:var(--surface-50);
   font-size:13px;
-  font-weight:950;
+  line-height:1.15;
 }
-.option-card h2{
-  min-width:0;
-  margin:0;
-  color:var(--page-ink);
-  font-size:15px;
-  line-height:1.2;
-}
-.option-card p{
-  min-width:0;
-  margin:3px 0 0;
-  color:var(--page-muted);
-  font-size:12px;
-  line-height:1.35;
+.option-title span{
+  display:block;
+  margin-top:4px;
+  color:var(--surface-300);
+  font-size:11px;
+  line-height:1.25;
   font-weight:700;
 }
 .option-code{
-  color:var(--page-dim);
+  color:var(--surface-500);
   font-size:11px;
   font-weight:900;
 }
-.preview-area{
+.work{
   min-width:0;
   display:grid;
-  gap:var(--space-5);
+  gap:18px;
 }
-.app-preview{
+.preview-shell{
   overflow:hidden;
-  border:1px solid color-mix(in srgb,var(--brand-line) 78%,transparent);
+  border:1px solid rgba(70,83,101,.7);
   border-radius:var(--radius);
-  background:var(--brand-bg);
-  color:var(--brand-text);
-  box-shadow:0 28px 75px hsl(215 35% 3% / .38);
+  background:rgba(48,57,72,.8);
+  box-shadow:0 18px 44px rgba(7,10,14,.26);
 }
 .app{
   display:grid;
-  grid-template-columns:184px minmax(0,1fr);
-  min-height:520px;
+  grid-template-columns:244px minmax(0,1fr);
+  min-height:510px;
+  background:
+    radial-gradient(circle at top left,rgba(111,150,200,.1),transparent 27rem),
+    linear-gradient(135deg,#202631,#252d3a 48%,#202631);
 }
 .rail{
-  border-right:1px solid var(--brand-line);
-  background:color-mix(in srgb,var(--brand-panel) 88%,black 12%);
-  padding:var(--space-4);
+  border-right:1px solid rgba(70,83,101,.72);
+  background:rgba(37,45,58,.95);
+  padding:16px;
 }
-.brand-lockup{
+.brand-card{
+  margin-bottom:20px;
+  border:1px solid rgba(70,83,101,.6);
+  border-radius:var(--radius);
+  background:rgba(48,57,72,.72);
+  padding:12px;
+}
+.brand-line{
   display:flex;
   align-items:center;
-  gap:var(--space-3);
-  margin-bottom:var(--space-6);
+  gap:10px;
 }
-.brand-symbol{
-  width:34px;
-  height:34px;
+.mark{
+  flex:0 0 auto;
+  width:32px;
+  height:32px;
   display:grid;
   place-items:center;
+  overflow:hidden;
+  border:1px solid rgba(111,150,200,.32);
   border-radius:var(--radius);
-  background:var(--brand-primary);
-  color:var(--brand-bg);
-  font-size:13px;
-  font-weight:950;
+  background:rgba(111,150,200,.1);
+  color:var(--primary-100,#dce8f5);
 }
-.brand-word{
+.wordmark{
   min-width:0;
-}
-.brand-word b{
-  display:block;
-  color:var(--brand-text);
+  color:var(--surface-50);
   font-size:15px;
   line-height:1;
+  font-weight:900;
+  letter-spacing:0;
 }
-.brand-word span{
-  display:block;
-  margin-top:4px;
-  color:var(--brand-muted);
-  font-size:10px;
-  font-weight:800;
-  text-transform:uppercase;
-  letter-spacing:.08em;
+.descriptor{
+  margin-top:7px;
+  color:var(--surface-300);
+  font-size:11px;
+  font-weight:700;
 }
 .nav{
   display:grid;
-  gap:var(--space-2);
+  gap:4px;
 }
 .nav a{
+  min-height:39px;
   display:flex;
   align-items:center;
-  gap:var(--space-2);
-  min-height:34px;
-  border-radius:7px;
-  color:var(--brand-muted);
+  gap:11px;
+  border-radius:var(--radius);
+  color:var(--surface-300);
+  padding:0 12px;
   text-decoration:none;
-  font-size:12px;
-  font-weight:850;
-  padding:0 var(--space-3);
+  font-size:13px;
+  font-weight:700;
 }
 .nav a.active{
-  color:var(--brand-text);
-  background:color-mix(in srgb,var(--brand-primary) 14%,transparent);
-  box-shadow:inset 3px 0 0 var(--brand-primary);
+  color:white;
+  background:rgba(111,150,200,.15);
+  border:1px solid rgba(111,150,200,.25);
+  box-shadow:inset 3px 0 0 rgba(111,150,200,.95);
 }
-.dot{
-  width:7px;
-  height:7px;
-  border-radius:99px;
-  background:currentColor;
-  opacity:.75;
+.nav-dot{
+  width:16px;
+  height:16px;
+  border-radius:5px;
+  display:grid;
+  place-items:center;
+  color:currentColor;
 }
-.main{
+.body{
   min-width:0;
   display:grid;
   grid-template-rows:auto minmax(0,1fr);
 }
 .top{
   display:flex;
-  align-items:center;
   justify-content:space-between;
-  gap:var(--space-4);
-  border-bottom:1px solid var(--brand-line);
-  background:color-mix(in srgb,var(--brand-panel) 76%,transparent);
-  padding:var(--space-4) var(--space-5);
+  align-items:center;
+  gap:16px;
+  border-bottom:1px solid rgba(70,83,101,.6);
+  background:rgba(48,57,72,.72);
+  padding:16px 20px;
 }
-.top h3{
+.top h2{
   margin:0;
-  color:var(--brand-text);
+  color:var(--surface-50);
   font-size:20px;
-  line-height:1.1;
+  line-height:1.15;
 }
 .top p{
-  margin:5px 0 0;
-  color:var(--brand-muted);
+  margin:4px 0 0;
+  color:var(--primary-200);
   font-size:12px;
   font-weight:700;
 }
@@ -325,636 +282,600 @@ h1{
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:4px;
-  min-width:170px;
-  border:1px solid var(--brand-line);
+  min-width:156px;
+  border:1px solid rgba(70,83,101,.6);
   border-radius:var(--radius);
-  background:color-mix(in srgb,var(--brand-bg) 70%,transparent);
+  background:rgba(32,38,49,.35);
   padding:4px;
 }
 .mode span{
   display:grid;
   place-items:center;
-  min-height:28px;
+  min-height:30px;
   border-radius:6px;
-  color:var(--brand-muted);
+  color:var(--surface-300);
   font-size:11px;
   font-weight:900;
 }
 .mode span:first-child{
-  color:var(--brand-text);
-  background:color-mix(in srgb,var(--brand-primary) 18%,transparent);
+  color:var(--primary-100,#dce8f5);
+  background:rgba(111,150,200,.18);
+  box-shadow:0 0 0 1px rgba(159,185,220,.25);
 }
 .content{
-  padding:var(--space-5);
+  padding:20px;
   min-width:0;
 }
-.metric-grid{
+.metrics{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:var(--space-3);
-  margin-bottom:var(--space-5);
+  gap:10px;
+  margin-bottom:16px;
 }
 .metric{
   min-width:0;
-  border:1px solid var(--brand-line);
+  border:1px solid rgba(70,83,101,.7);
   border-radius:var(--radius);
-  background:var(--brand-panel);
-  padding:var(--space-3);
+  background:linear-gradient(180deg,rgba(48,57,72,.95),rgba(53,64,82,.52));
+  padding:14px;
 }
 .metric strong{
   display:block;
-  color:var(--brand-primary);
-  font-size:22px;
+  color:var(--primary-300);
+  font-size:20px;
   line-height:1;
-  font-variant-numeric:tabular-nums;
+  font-weight:900;
 }
 .metric span{
   display:block;
   margin-top:7px;
-  color:var(--brand-muted);
+  color:var(--surface-300);
   font-size:10px;
-  font-weight:850;
+  font-weight:800;
   text-transform:uppercase;
-  letter-spacing:.06em;
+  letter-spacing:.05em;
 }
-.workspace{
+.panels{
   display:grid;
-  grid-template-columns:minmax(0,.9fr) minmax(280px,.58fr);
-  gap:var(--space-4);
+  grid-template-columns:minmax(0,.95fr) minmax(260px,.62fr);
+  gap:14px;
 }
 .panel{
   min-width:0;
-  border:1px solid var(--brand-line);
+  overflow:hidden;
+  border:1px solid rgba(70,83,101,.7);
   border-radius:var(--radius);
-  background:var(--brand-panel);
+  background:rgba(48,57,72,.9);
 }
 .panel-head{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:var(--space-3);
-  border-bottom:1px solid var(--brand-line);
-  padding:var(--space-3) var(--space-4);
+  gap:10px;
+  border-bottom:1px solid rgba(70,83,101,.48);
+  padding:12px 14px;
 }
 .panel-head b{
-  color:var(--brand-text);
-  font-size:12px;
+  color:var(--surface-200);
+  font-size:11px;
+  font-weight:900;
   text-transform:uppercase;
   letter-spacing:.08em;
 }
 .panel-head span{
-  color:var(--brand-muted);
-  font-size:11px;
+  color:var(--surface-300);
+  font-size:10px;
   font-weight:800;
 }
-.keyword-row{
+.row{
   display:grid;
-  grid-template-columns:auto minmax(0,1fr) auto;
+  grid-template-columns:24px minmax(0,1fr) 42px;
   align-items:center;
-  gap:var(--space-3);
-  min-height:46px;
-  border-bottom:1px solid color-mix(in srgb,var(--brand-line) 72%,transparent);
-  padding:0 var(--space-4);
+  gap:10px;
+  min-height:44px;
+  border-bottom:1px solid rgba(70,83,101,.38);
+  padding:0 14px;
 }
-.keyword-row:last-child{border-bottom:0}
+.row:last-child{border-bottom:0}
 .rank{
-  width:22px;
-  height:22px;
+  width:24px;
+  height:24px;
   display:grid;
   place-items:center;
-  border-radius:6px;
-  background:color-mix(in srgb,var(--brand-primary) 14%,transparent);
-  color:var(--brand-primary);
-  font-size:10px;
-  font-weight:950;
+  border-radius:7px;
+  color:var(--primary-200);
+  background:rgba(111,150,200,.12);
+  font-size:11px;
+  font-weight:900;
 }
-.keyword{
+.kw{
   min-width:0;
 }
-.keyword b{
+.kw b{
   display:block;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
-  color:var(--brand-text);
+  color:var(--surface-50);
   font-size:12px;
 }
-.keyword span{
+.kw span{
   display:block;
   margin-top:3px;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
-  color:var(--brand-muted);
+  color:var(--surface-300);
   font-size:10px;
-  font-weight:750;
+  font-weight:700;
 }
 .score{
-  color:var(--brand-secondary);
+  color:var(--green);
+  text-align:right;
   font-size:12px;
-  font-weight:950;
+  font-weight:900;
   font-variant-numeric:tabular-nums;
 }
-.generator{
-  padding:var(--space-4);
+.store{
+  padding:14px;
 }
-.generator-title{
-  color:var(--brand-muted);
+.store-label{
+  color:var(--surface-300);
   font-size:11px;
   font-weight:900;
   text-transform:uppercase;
   letter-spacing:.08em;
 }
 .store-name{
-  margin-top:var(--space-2);
-  color:var(--brand-text);
-  font-size:23px;
+  margin-top:8px;
+  color:var(--surface-50);
+  font-size:21px;
   line-height:1.1;
-  font-weight:950;
+  font-weight:900;
 }
-.keyword-pills{
+.pill-row{
   display:flex;
   flex-wrap:wrap;
-  gap:var(--space-2);
-  margin-top:var(--space-4);
+  gap:8px;
+  margin-top:14px;
 }
 .pill{
-  max-width:100%;
-  min-height:29px;
+  min-height:27px;
   display:inline-flex;
   align-items:center;
-  border:1px solid var(--brand-line);
+  max-width:100%;
+  border:1px solid rgba(70,83,101,.55);
   border-radius:7px;
-  color:var(--brand-muted);
-  background:color-mix(in srgb,var(--brand-bg) 46%,transparent);
-  padding:0 var(--space-3);
+  background:rgba(37,45,58,.45);
+  color:var(--surface-200);
+  padding:0 10px;
   font-size:11px;
-  font-weight:850;
+  font-weight:800;
 }
-.actions{
-  display:grid;
-  grid-template-columns:1fr auto;
-  gap:var(--space-2);
-  margin-top:var(--space-5);
-}
-.primary-btn,.icon-btn{
+.add{
+  width:100%;
   min-height:38px;
+  margin-top:18px;
   border:0;
   border-radius:7px;
-  background:var(--brand-primary);
-  color:var(--brand-bg);
-  font-size:12px;
-  font-weight:950;
+  background:#6f96c8;
+  color:white;
+  font-size:13px;
+  font-weight:900;
+  box-shadow:0 12px 28px rgba(111,150,200,.2);
 }
-.icon-btn{
-  width:38px;
-  background:color-mix(in srgb,var(--brand-primary) 16%,transparent);
-  color:var(--brand-primary);
-  border:1px solid color-mix(in srgb,var(--brand-primary) 36%,transparent);
-}
-.identity-notes{
+.applications{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:var(--space-3);
+  gap:12px;
 }
-.note{
-  min-width:0;
-  border:1px solid var(--page-line);
+.sample{
+  border:1px solid rgba(70,83,101,.65);
   border-radius:var(--radius);
-  background:hsl(214 17% 13% / .74);
-  padding:var(--space-4);
+  background:rgba(48,57,72,.78);
+  padding:14px;
 }
-.note b{
-  display:block;
-  color:var(--page-ink);
-  font-size:12px;
+.sample-label{
+  margin-bottom:11px;
+  color:var(--surface-300);
+  font-size:10px;
+  font-weight:900;
   text-transform:uppercase;
   letter-spacing:.08em;
 }
-.note p{
-  margin:var(--space-2) 0 0;
-  color:var(--page-muted);
-  font-size:13px;
-  line-height:1.45;
-  font-weight:650;
+.mobile-nav{
+  border:1px solid rgba(96,120,147,.45);
+  border-radius:var(--radius);
+  background:rgba(37,45,58,.9);
+  padding:6px;
+  box-shadow:0 18px 46px rgba(7,10,14,.42),inset 0 1px 0 rgba(255,255,255,.05);
+}
+.mobile-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:4px;
+}
+.mobile-item{
+  min-height:54px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  border-radius:var(--radius);
+  color:var(--surface-300);
+  font-size:10px;
+  font-weight:800;
+}
+.mobile-item.active{
+  color:var(--surface-50);
+  background:rgba(53,64,82,.8);
+}
+.tiny-mark{
+  width:27px;
+  height:27px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(111,150,200,.25);
+  border-radius:7px;
+  color:var(--primary-200);
+  background:rgba(111,150,200,.12);
+}
+.favicon-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.favicon-large{
+  width:60px;
+  height:60px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(111,150,200,.32);
+  border-radius:var(--radius);
+  background:rgba(111,150,200,.1);
+  color:var(--primary-100,#dce8f5);
+}
+.favicon-copy{
+  min-width:0;
+}
+.favicon-copy b{
+  display:block;
+  color:var(--surface-50);
+  font-size:14px;
+}
+.favicon-copy span{
+  display:block;
+  margin-top:4px;
+  color:var(--surface-300);
+  font-size:11px;
+  line-height:1.35;
+  font-weight:700;
 }
 .spec{
   overflow:hidden;
-  border:1px solid var(--page-line);
+  border:1px solid rgba(70,83,101,.65);
   border-radius:var(--radius);
-  background:hsl(214 17% 13% / .74);
+  background:rgba(48,57,72,.78);
 }
 .spec-row{
   display:grid;
-  grid-template-columns:140px minmax(0,1fr);
-  gap:var(--space-4);
-  border-bottom:1px solid var(--page-line);
-  padding:var(--space-3) var(--space-4);
+  grid-template-columns:132px minmax(0,1fr);
+  gap:14px;
+  border-bottom:1px solid rgba(70,83,101,.45);
+  padding:12px 14px;
 }
 .spec-row:last-child{border-bottom:0}
 .spec-row b{
-  color:var(--page-dim);
-  font-size:11px;
+  color:var(--surface-300);
+  font-size:10px;
+  font-weight:900;
   text-transform:uppercase;
   letter-spacing:.08em;
 }
 .spec-row span{
   min-width:0;
-  color:var(--page-muted);
-  font-size:13px;
+  color:var(--surface-200);
+  font-size:12px;
+  line-height:1.45;
   font-weight:700;
 }
-.option-ledger .mini-mark{background:hsl(164 58% 58%);color:hsl(215 24% 9%)}
-.option-studio .mini-mark{background:hsl(45 62% 63%);color:hsl(210 22% 11%)}
-.option-signal .mini-mark{background:hsl(194 78% 62%);color:hsl(220 33% 8%)}
-.option-foundry .mini-mark{background:hsl(19 76% 61%);color:hsl(214 20% 10%)}
-.option-clarity .mini-mark{background:hsl(155 46% 45%);color:hsl(48 45% 96%)}
-@media(max-width:980px){
-  .hero-grid,.board{grid-template-columns:1fr}
-  .option-list{position:static;grid-template-columns:repeat(2,minmax(0,1fr))}
-  .app{grid-template-columns:150px minmax(0,1fr)}
-  .metric-grid,.identity-notes{grid-template-columns:repeat(2,minmax(0,1fr))}
-  h1{font-size:40px}
+.mark svg,.favicon-large svg,.tiny-mark svg,.summary-mark svg{
+  width:100%;
+  height:100%;
+  display:block;
 }
-@media(max-width:720px){
-  .hero{padding-top:var(--space-6)}
-  h1{font-size:32px}
-  .intro{font-size:14px}
-  .selected-panel{padding:var(--space-3)}
-  .option-list,.metric-grid,.workspace,.identity-notes{grid-template-columns:1fr}
+.summary-mark{
+  width:34px;
+  height:34px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(111,150,200,.32);
+  border-radius:var(--radius);
+  background:rgba(111,150,200,.1);
+  color:var(--primary-100,#dce8f5);
+}
+.logo-a .mark,.logo-a .summary-mark,.logo-a .favicon-large,.logo-a .tiny-mark{background:rgba(111,150,200,.1)}
+.logo-b .wordmark,.logo-b .summary-name{letter-spacing:.01em}
+.logo-c .wordmark,.logo-c .summary-name{font-weight:950}
+.logo-d .wordmark,.logo-d .summary-name{letter-spacing:.015em}
+.logo-e .wordmark,.logo-e .summary-name{letter-spacing:0}
+@media(max-width:980px){
+  .header,.layout{grid-template-columns:1fr}
+  .choice-summary{min-width:0}
+  .option-list{position:static;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .app{grid-template-columns:210px minmax(0,1fr)}
+  .metrics,.applications{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .panels{grid-template-columns:1fr}
+}
+@media(max-width:680px){
+  .page{width:min(100vw - 24px,560px);padding-top:24px}
+  h1{font-size:24px}
+  .intro{font-size:13px}
+  .option-list,.metrics,.applications{grid-template-columns:1fr}
   .app{display:block;min-height:0}
   .rail{display:none}
-  .top{align-items:flex-start;flex-direction:column;padding:var(--space-4)}
+  .top{align-items:flex-start;flex-direction:column;padding:16px}
   .mode{width:100%}
-  .content{padding:var(--space-4)}
-  .spec-row{grid-template-columns:1fr;gap:var(--space-2)}
+  .content{padding:14px}
+  .spec-row{grid-template-columns:1fr;gap:6px}
 }
 </style>
 </head>
-<body>
-<main class="shell">
-  <section class="hero">
-    <p class="eyebrow">EtGen identity system</p>
-    <div class="hero-grid">
-      <div>
-        <h1>Pick the premium direction before we skin the app.</h1>
-        <p class="intro">Five brand systems for EtGen, designed around keyword intelligence, niche discovery, product creation, and a calmer high-value workflow.</p>
-      </div>
-      <aside class="selected-panel" aria-live="polite">
-        <div class="selected-kicker">Selected direction</div>
-        <div class="selected-title">
-          <span class="selected-mark" id="selectedMark">EG</span>
-          <div>
-            <strong id="selectedName">Ledger Black</strong>
-            <span id="selectedTone">Analyst-grade, quiet, profitable.</span>
-          </div>
-        </div>
-        <div class="token-row" aria-label="Selected color tokens">
-          <span class="token bg"></span>
-          <span class="token panel"></span>
-          <span class="token primary"></span>
-          <span class="token secondary"></span>
-          <span class="token text"></span>
-        </div>
-      </aside>
+<body class="logo-a">
+<main class="page">
+  <header class="header">
+    <div>
+      <p class="eyebrow">EtGen logo and wordmark</p>
+      <h1>Current app style, better brand mark.</h1>
+      <p class="intro">These keep the existing colors, font feel, compact layout, and premium dark UI. Pick the logo/wordmark treatment only; the app theme stays as-is.</p>
     </div>
-  </section>
-
-  <section class="wrap">
-    <div class="board">
-      <nav class="option-list" aria-label="Brand options">
-        <button class="option-card option-ledger active" data-option="ledger">
-          <span class="mini-mark">EG</span>
-          <span>
-            <h2>Ledger Black</h2>
-            <p>Premium research console.</p>
-          </span>
-          <span class="option-code">A</span>
-        </button>
-        <button class="option-card option-studio" data-option="studio">
-          <span class="mini-mark">Et</span>
-          <span>
-            <h2>Studio Brass</h2>
-            <p>Creator suite, polished.</p>
-          </span>
-          <span class="option-code">B</span>
-        </button>
-        <button class="option-card option-signal" data-option="signal">
-          <span class="mini-mark">G</span>
-          <span>
-            <h2>Signal Frost</h2>
-            <p>Scanner-first intelligence.</p>
-          </span>
-          <span class="option-code">C</span>
-        </button>
-        <button class="option-card option-foundry" data-option="foundry">
-          <span class="mini-mark">ET</span>
-          <span>
-            <h2>Foundry Ember</h2>
-            <p>Warm product workshop.</p>
-          </span>
-          <span class="option-code">D</span>
-        </button>
-        <button class="option-card option-clarity" data-option="clarity">
-          <span class="mini-mark">E</span>
-          <span>
-            <h2>Clarity Ivory</h2>
-            <p>Light, editorial, sharp.</p>
-          </span>
-          <span class="option-code">E</span>
-        </button>
-      </nav>
-
-      <div class="preview-area">
-        <section class="app-preview" aria-label="EtGen app preview">
-          <div class="app">
-            <aside class="rail">
-              <div class="brand-lockup">
-                <span class="brand-symbol" id="previewMark">EG</span>
-                <span class="brand-word">
-                  <b>EtGen</b>
-                  <span id="brandSubtitle">Profit engine</span>
-                </span>
-              </div>
-              <nav class="nav">
-                <a href="#"><span class="dot"></span>Dashboard</a>
-                <a href="#"><span class="dot"></span>Keywords</a>
-                <a href="#" class="active"><span class="dot"></span>Generator</a>
-                <a href="#"><span class="dot"></span>My Stores</a>
-              </nav>
-            </aside>
-            <section class="main">
-              <header class="top">
-                <div>
-                  <h3 id="previewTitle">Store Generator</h3>
-                  <p id="previewSub">Niche ideas from strongest keyword clusters</p>
-                </div>
-                <div class="mode" aria-label="Mode switch preview">
-                  <span>Dev</span>
-                  <span>User</span>
-                </div>
-              </header>
-              <div class="content">
-                <div class="metric-grid">
-                  <div class="metric"><strong>84</strong><span>Strength</span></div>
-                  <div class="metric"><strong>21</strong><span>Keywords</span></div>
-                  <div class="metric"><strong>7</strong><span>Products</span></div>
-                  <div class="metric"><strong>3</strong><span>Listings</span></div>
-                </div>
-                <div class="workspace">
-                  <div class="panel">
-                    <div class="panel-head">
-                      <b>Keyword stack</b>
-                      <span>Real data only</span>
-                    </div>
-                    <div class="keyword-row">
-                      <span class="rank">1</span>
-                      <span class="keyword">
-                        <b>book lover mug</b>
-                        <span>high intent gift phrase</span>
-                      </span>
-                      <span class="score">84</span>
-                    </div>
-                    <div class="keyword-row">
-                      <span class="rank">2</span>
-                      <span class="keyword">
-                        <b>dark academia print</b>
-                        <span>specific style signal</span>
-                      </span>
-                      <span class="score">81</span>
-                    </div>
-                    <div class="keyword-row">
-                      <span class="rank">3</span>
-                      <span class="keyword">
-                        <b>gothic library decor</b>
-                        <span>visual theme bridge</span>
-                      </span>
-                      <span class="score">78</span>
-                    </div>
-                    <div class="keyword-row">
-                      <span class="rank">4</span>
-                      <span class="keyword">
-                        <b>reader gift sticker</b>
-                        <span>low-friction product</span>
-                      </span>
-                      <span class="score">75</span>
-                    </div>
-                  </div>
-                  <aside class="panel generator">
-                    <div class="generator-title">Generated niche</div>
-                    <div class="store-name" id="storeName">Gothic Reader Studio</div>
-                    <div class="keyword-pills">
-                      <span class="pill">book mug</span>
-                      <span class="pill">library print</span>
-                      <span class="pill">reader sticker</span>
-                      <span class="pill">dark decor</span>
-                    </div>
-                    <div class="actions">
-                      <button class="primary-btn">Add Store</button>
-                      <button class="icon-btn" aria-label="Refresh">R</button>
-                    </div>
-                  </aside>
-                </div>
-              </div>
-            </section>
-          </div>
-        </section>
-
-        <section class="identity-notes" aria-label="Identity notes">
-          <div class="note">
-            <b>Tone</b>
-            <p id="toneNote">Analyst-grade, quiet, profitable. Best if EtGen should feel like a serious market tool.</p>
-          </div>
-          <div class="note">
-            <b>Logo</b>
-            <p id="logoNote">Compact EG monogram inside a square. Works well in the sidebar, PWA icon, and mobile nav.</p>
-          </div>
-          <div class="note">
-            <b>Best For</b>
-            <p id="bestNote">Dashboard, keywords, store generator, listing manager, and premium paid product positioning.</p>
-          </div>
-        </section>
-
-        <section class="spec" aria-label="Implementation spec">
-          <div class="spec-row"><b>Palette</b><span id="paletteSpec">Ink black, deep graphite, profit mint, muted gold, porcelain text.</span></div>
-          <div class="spec-row"><b>Typography</b><span id="typeSpec">Tight neutral sans for UI. Heavy compact wordmark. No oversized hero styling inside the app.</span></div>
-          <div class="spec-row"><b>UI Rules</b><span id="rulesSpec">Small radius, dense panels, strong active states, restrained color, short labels.</span></div>
-        </section>
+    <aside class="choice-summary" aria-live="polite">
+      <div class="summary-label">Selected</div>
+      <div class="summary-lockup">
+        <span class="summary-mark" id="summaryMark"></span>
+        <div>
+          <div class="summary-name" id="summaryName">EtGen</div>
+          <div class="summary-note" id="summaryNote">Scanner monogram</div>
+        </div>
       </div>
+    </aside>
+  </header>
+
+  <section class="layout">
+    <nav class="option-list" aria-label="Logo options">
+      <button class="option active" data-logo="a">
+        <span class="summary-mark" data-mark="a"></span>
+        <span class="option-title"><b>Scanner Monogram</b><span>EG with search orbit</span></span>
+        <span class="option-code">A</span>
+      </button>
+      <button class="option" data-logo="b">
+        <span class="summary-mark" data-mark="b"></span>
+        <span class="option-title"><b>Opportunity Grid</b><span>Signal blocks, cleanest icon</span></span>
+        <span class="option-code">B</span>
+      </button>
+      <button class="option" data-logo="c">
+        <span class="summary-mark" data-mark="c"></span>
+        <span class="option-title"><b>Profit Lens</b><span>Lens plus rising score line</span></span>
+        <span class="option-code">C</span>
+      </button>
+      <button class="option" data-logo="d">
+        <span class="summary-mark" data-mark="d"></span>
+        <span class="option-title"><b>Et Wordmark Tile</b><span>Most minimal and premium</span></span>
+        <span class="option-code">D</span>
+      </button>
+      <button class="option" data-logo="e">
+        <span class="summary-mark" data-mark="e"></span>
+        <span class="option-title"><b>Niche Stack</b><span>Layered keyword/store mark</span></span>
+        <span class="option-code">E</span>
+      </button>
+    </nav>
+
+    <div class="work">
+      <section class="preview-shell" aria-label="App preview">
+        <div class="app">
+          <aside class="rail">
+            <div class="brand-card">
+              <div class="brand-line">
+                <span class="mark" id="sideMark"></span>
+                <span class="wordmark" id="sideWordmark">EtGen</span>
+              </div>
+              <div class="descriptor" id="descriptor">Research console</div>
+            </div>
+            <nav class="nav">
+              <a href="#"><span class="nav-dot">⌂</span>Dashboard</a>
+              <a href="#"><span class="nav-dot">⌕</span>Keywords</a>
+              <a href="#" class="active"><span class="nav-dot">▱</span>Store Generator</a>
+              <a href="#"><span class="nav-dot">□</span>My Stores</a>
+            </nav>
+          </aside>
+          <section class="body">
+            <header class="top">
+              <div>
+                <p id="topKicker">EtGen intelligence</p>
+                <h2>Store Generator</h2>
+              </div>
+              <div class="mode"><span>Developer</span><span>User</span></div>
+            </header>
+            <div class="content">
+              <div class="metrics">
+                <div class="metric"><strong>13.8k</strong><span>Keywords</span></div>
+                <div class="metric"><strong>84</strong><span>Best Score</span></div>
+                <div class="metric"><strong>21</strong><span>Cluster</span></div>
+                <div class="metric"><strong>7</strong><span>Products</span></div>
+              </div>
+              <div class="panels">
+                <div class="panel">
+                  <div class="panel-head"><b>Keyword Stack</b><span>real data only</span></div>
+                  <div class="row"><span class="rank">1</span><span class="kw"><b>book lover mug</b><span>high-intent gift phrase</span></span><span class="score">84</span></div>
+                  <div class="row"><span class="rank">2</span><span class="kw"><b>dark academia print</b><span>specific style signal</span></span><span class="score">81</span></div>
+                  <div class="row"><span class="rank">3</span><span class="kw"><b>gothic library decor</b><span>visual theme bridge</span></span><span class="score">78</span></div>
+                  <div class="row"><span class="rank">4</span><span class="kw"><b>reader gift sticker</b><span>low-friction product</span></span><span class="score">75</span></div>
+                </div>
+                <aside class="panel store">
+                  <div class="store-label">Generated niche</div>
+                  <div class="store-name">Gothic Reader Studio</div>
+                  <div class="pill-row">
+                    <span class="pill">book mug</span>
+                    <span class="pill">library print</span>
+                    <span class="pill">reader sticker</span>
+                    <span class="pill">dark decor</span>
+                  </div>
+                  <button class="add">Add Store</button>
+                </aside>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="applications">
+        <div class="sample">
+          <div class="sample-label">Mobile nav scale</div>
+          <div class="mobile-nav">
+            <div class="mobile-grid">
+              <div class="mobile-item active"><span class="tiny-mark" id="mobileMark"></span><span>EtGen</span></div>
+              <div class="mobile-item"><span class="tiny-mark">⌕</span><span>Keywords</span></div>
+              <div class="mobile-item"><span class="tiny-mark">▱</span><span>Generator</span></div>
+              <div class="mobile-item"><span class="tiny-mark">□</span><span>Stores</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="sample">
+          <div class="sample-label">PWA icon scale</div>
+          <div class="favicon-row">
+            <span class="favicon-large" id="largeMark"></span>
+            <span class="favicon-copy"><b id="iconTitle">Scanner Monogram</b><span id="iconNote">Best balance of recognizable and current-app-native.</span></span>
+          </div>
+        </div>
+        <div class="sample">
+          <div class="sample-label">Collapsed rail</div>
+          <div class="favicon-row">
+            <span class="mark" id="collapsedMark"></span>
+            <span class="favicon-copy"><b id="collapsedTitle">EtGen</b><span>Works without the wordmark.</span></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="spec">
+        <div class="spec-row"><b>Recommendation</b><span id="recommendation">Use this if EtGen should feel like keyword research plus generation in one symbol.</span></div>
+        <div class="spec-row"><b>Wordmark</b><span id="wordmarkSpec">Plain EtGen, extra-bold, current app font stack, no new display font.</span></div>
+        <div class="spec-row"><b>Implementation</b><span id="implementationSpec">Replace Etsy Pipeline text with EtGen and use the mark in sidebar, PWA icons, auth page, and landing page.</span></div>
+      </section>
     </div>
   </section>
 </main>
 
 <script>
-const options = {
-  ledger:{
-    name:'Ledger Black',
-    mark:'EG',
-    subtitle:'Profit engine',
-    tone:'Analyst-grade, quiet, profitable.',
-    store:'Gothic Reader Studio',
-    vars:{
-      '--brand-bg':'hsl(215 24% 9%)',
-      '--brand-panel':'hsl(214 20% 14%)',
-      '--brand-panel-2':'hsl(214 18% 18%)',
-      '--brand-line':'hsl(214 16% 28%)',
-      '--brand-text':'hsl(210 28% 96%)',
-      '--brand-muted':'hsl(214 14% 66%)',
-      '--brand-primary':'hsl(164 58% 58%)',
-      '--brand-secondary':'hsl(39 65% 66%)',
-      '--brand-danger':'hsl(350 64% 66%)'
-    },
-    notes:{
-      tone:'Analyst-grade, quiet, profitable. Best if EtGen should feel like a serious market tool.',
-      logo:'Compact EG monogram inside a square. Works well in the sidebar, PWA icon, and mobile nav.',
-      best:'Dashboard, keywords, store generator, listing manager, and premium paid product positioning.',
-      palette:'Ink black, deep graphite, profit mint, muted gold, porcelain text.',
-      type:'Tight neutral sans for UI. Heavy compact wordmark. No oversized hero styling inside the app.',
-      rules:'Small radius, dense panels, strong active states, restrained color, short labels.'
-    }
+const marks = {
+  a:`<svg viewBox="0 0 32 32" aria-hidden="true">
+    <rect x="4.5" y="4.5" width="23" height="23" rx="7" fill="rgba(111,150,200,.13)" stroke="rgba(159,185,220,.45)"/>
+    <path d="M10 12.2h7.2M10 16h5.8M10 19.8h7.2" stroke="#dce8f5" stroke-width="1.7" stroke-linecap="round"/>
+    <circle cx="20.3" cy="17.1" r="3.6" fill="none" stroke="#9fb9dc" stroke-width="1.8"/>
+    <path d="m22.9 19.7 2.8 2.8" stroke="#a9c88f" stroke-width="1.8" stroke-linecap="round"/>
+  </svg>`,
+  b:`<svg viewBox="0 0 32 32" aria-hidden="true">
+    <rect x="4.5" y="4.5" width="23" height="23" rx="7" fill="rgba(111,150,200,.13)" stroke="rgba(159,185,220,.45)"/>
+    <rect x="10" y="10" width="5" height="5" rx="1.4" fill="#bed2ea"/>
+    <rect x="17" y="10" width="5" height="5" rx="1.4" fill="#6f96c8"/>
+    <rect x="10" y="17" width="5" height="5" rx="1.4" fill="#a9c88f"/>
+    <rect x="17" y="17" width="5" height="5" rx="1.4" fill="rgba(188,201,216,.38)"/>
+  </svg>`,
+  c:`<svg viewBox="0 0 32 32" aria-hidden="true">
+    <rect x="4.5" y="4.5" width="23" height="23" rx="7" fill="rgba(111,150,200,.13)" stroke="rgba(159,185,220,.45)"/>
+    <circle cx="14.4" cy="15.2" r="5" fill="none" stroke="#bed2ea" stroke-width="1.8"/>
+    <path d="m18.1 18.8 4.1 4.1" stroke="#9fb9dc" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M11 18.2 14 15l2.3 1.8 4.6-5" fill="none" stroke="#a9c88f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`,
+  d:`<svg viewBox="0 0 32 32" aria-hidden="true">
+    <rect x="4.5" y="4.5" width="23" height="23" rx="7" fill="rgba(111,150,200,.13)" stroke="rgba(159,185,220,.45)"/>
+    <path d="M10 11.2h8.2M10 16h6.6M10 20.8h8.6" stroke="#dce8f5" stroke-width="1.9" stroke-linecap="round"/>
+    <path d="M21 12.2v8.6M18.4 14.8h5.2" stroke="#9fb9dc" stroke-width="1.8" stroke-linecap="round"/>
+  </svg>`,
+  e:`<svg viewBox="0 0 32 32" aria-hidden="true">
+    <rect x="4.5" y="4.5" width="23" height="23" rx="7" fill="rgba(111,150,200,.13)" stroke="rgba(159,185,220,.45)"/>
+    <path d="M10 11h12l-2 4H8l2-4Z" fill="#bed2ea"/>
+    <path d="M12 15.4h12l-2 4H10l2-4Z" fill="#6f96c8"/>
+    <path d="M10 19.8h12l-2 4H8l2-4Z" fill="#a9c88f"/>
+  </svg>`
+};
+
+const logos = {
+  a:{
+    name:'EtGen',
+    short:'Scanner monogram',
+    descriptor:'Research console',
+    iconTitle:'Scanner Monogram',
+    iconNote:'Best balance of recognizable and current-app-native.',
+    recommendation:'Use this if EtGen should feel like keyword research plus generation in one symbol.',
+    wordmark:'Plain EtGen, extra-bold, current app font stack, no new display font.',
+    implementation:'Replace Etsy Pipeline text with EtGen and use the mark in sidebar, PWA icons, auth page, and landing page.'
   },
-  studio:{
-    name:'Studio Brass',
-    mark:'Et',
-    subtitle:'Product studio',
-    tone:'Creative, polished, still serious.',
-    store:'Reader Gift Atelier',
-    vars:{
-      '--brand-bg':'hsl(210 22% 11%)',
-      '--brand-panel':'hsl(210 18% 16%)',
-      '--brand-panel-2':'hsl(209 16% 21%)',
-      '--brand-line':'hsl(210 14% 31%)',
-      '--brand-text':'hsl(46 42% 94%)',
-      '--brand-muted':'hsl(39 18% 70%)',
-      '--brand-primary':'hsl(45 62% 63%)',
-      '--brand-secondary':'hsl(170 38% 58%)',
-      '--brand-danger':'hsl(5 66% 66%)'
-    },
-    notes:{
-      tone:'Creative, polished, still serious. Best if EtGen should feel like a product creation studio.',
-      logo:'Et wordmark mark with a brass tile. Softer and more brandable than a pure analytics symbol.',
-      best:'Product creator, mockup launcher, listing drafting, and seller-facing workflows.',
-      palette:'Charcoal ink, smoked slate, antique brass, sea glass, warm ivory text.',
-      type:'Refined sans with slightly wider capitals for EtGen. UI labels stay short and sturdy.',
-      rules:'Warmer accents, editorial spacing, fewer numbers per panel, strong product selection states.'
-    }
+  b:{
+    name:'EtGen',
+    short:'Opportunity grid',
+    descriptor:'Opportunity console',
+    iconTitle:'Opportunity Grid',
+    iconNote:'Cleanest at tiny sizes and closest to the existing UI geometry.',
+    recommendation:'Use this if you want the safest premium app icon: simple, abstract, and readable at favicon size.',
+    wordmark:'EtGen with the same extra-bold treatment, paired with a block-grid mark.',
+    implementation:'Best for sidebar, mobile nav, and PWA icon because it stays clear down to 24px.'
   },
-  signal:{
-    name:'Signal Frost',
-    mark:'G',
-    subtitle:'Scanner live',
-    tone:'Fast, technical, data-hungry.',
-    store:'Signal Reader Lab',
-    vars:{
-      '--brand-bg':'hsl(220 33% 8%)',
-      '--brand-panel':'hsl(218 28% 13%)',
-      '--brand-panel-2':'hsl(218 23% 18%)',
-      '--brand-line':'hsl(218 18% 30%)',
-      '--brand-text':'hsl(204 38% 96%)',
-      '--brand-muted':'hsl(207 18% 68%)',
-      '--brand-primary':'hsl(194 78% 62%)',
-      '--brand-secondary':'hsl(78 78% 62%)',
-      '--brand-danger':'hsl(356 78% 68%)'
-    },
-    notes:{
-      tone:'Fast, technical, data-hungry. Best if the scanner and opportunity engine are the hero.',
-      logo:'Single G signal mark. Simple enough for favicon and strong in dense navigation.',
-      best:'Continuous scanner, keyword ranking, opportunity feed, and developer mode.',
-      palette:'Night navy, cold panels, frost blue, electric lime, clear white.',
-      type:'Condensed-feeling UI labels, tabular numbers, sharp hierarchy through contrast.',
-      rules:'More live-state cues, brighter scores, compact tables, crisp blue active states.'
-    }
+  c:{
+    name:'EtGen',
+    short:'Profit lens',
+    descriptor:'Niche intelligence',
+    iconTitle:'Profit Lens',
+    iconNote:'Most literal: search, scan, and rising opportunity in one mark.',
+    recommendation:'Use this if the product story should say scanner first, profitable gaps second.',
+    wordmark:'Keep wordmark simple so the more detailed icon does the work.',
+    implementation:'Good in the app shell, but use the simplified lens alone for very small favicon sizes.'
   },
-  foundry:{
-    name:'Foundry Ember',
-    mark:'ET',
-    subtitle:'Niche foundry',
-    tone:'Warm, tactile, builder-focused.',
-    store:'Library Goods Foundry',
-    vars:{
-      '--brand-bg':'hsl(214 20% 10%)',
-      '--brand-panel':'hsl(215 17% 15%)',
-      '--brand-panel-2':'hsl(216 14% 20%)',
-      '--brand-line':'hsl(216 13% 31%)',
-      '--brand-text':'hsl(42 30% 94%)',
-      '--brand-muted':'hsl(34 16% 68%)',
-      '--brand-primary':'hsl(19 76% 61%)',
-      '--brand-secondary':'hsl(145 34% 57%)',
-      '--brand-danger':'hsl(354 62% 64%)'
-    },
-    notes:{
-      tone:'Warm, tactile, builder-focused. Best if EtGen should feel like making real products.',
-      logo:'ET block mark. More workshop than finance, with good contrast for app icons.',
-      best:'Product workflows, design approval, mockups, listing builder, and store management.',
-      palette:'Deep carbon, forged slate, ember orange, utility green, warm white.',
-      type:'Practical sans, heavier buttons, shorter copy, clear maker-workflow sections.',
-      rules:'Use amber only for action and selection. Keep panels darker so it does not become orange-heavy.'
-    }
+  d:{
+    name:'EtGen',
+    short:'Et wordmark tile',
+    descriptor:'Research console',
+    iconTitle:'Et Wordmark Tile',
+    iconNote:'Most minimal and mature. Less explanatory, more brand-like.',
+    recommendation:'Use this if you want the brand to feel established and premium without a literal search icon.',
+    wordmark:'Slightly tighter EtGen text, same font family, strong but quiet.',
+    implementation:'Strong choice for public landing pages and app chrome; may need more meaning from nearby copy.'
   },
-  clarity:{
-    name:'Clarity Ivory',
-    mark:'E',
-    subtitle:'Niche clarity',
-    tone:'Light, editorial, trustworthy.',
-    store:'Reader Market Studio',
-    vars:{
-      '--brand-bg':'hsl(48 45% 96%)',
-      '--brand-panel':'hsl(45 33% 99%)',
-      '--brand-panel-2':'hsl(47 28% 91%)',
-      '--brand-line':'hsl(43 18% 79%)',
-      '--brand-text':'hsl(202 24% 16%)',
-      '--brand-muted':'hsl(203 13% 43%)',
-      '--brand-primary':'hsl(155 46% 45%)',
-      '--brand-secondary':'hsl(32 58% 50%)',
-      '--brand-danger':'hsl(354 58% 55%)'
-    },
-    notes:{
-      tone:'Light, editorial, trustworthy. Best if you want less dark-dashboard energy.',
-      logo:'Single E mark with a confident editorial feel. Cleanest for public-facing pages.',
-      best:'User mode, imports, reports, public landing pages, and calmer long sessions.',
-      palette:'Ivory surface, ink text, green primary, ochre score accent, soft lines.',
-      type:'Neutral UI sans with more whitespace. Labels stay compact so it does not feel like a blog.',
-      rules:'Use fewer dark blocks, more line separation, generous row spacing, precise score color.'
-    }
+  e:{
+    name:'EtGen',
+    short:'Niche stack',
+    descriptor:'Store generator',
+    iconTitle:'Niche Stack',
+    iconNote:'Best representation of clustered keywords becoming store ideas.',
+    recommendation:'Use this if the store generator is the emotional center of the product.',
+    wordmark:'Neutral EtGen wordmark with layered mark; no new colors needed.',
+    implementation:'Works well for generator/stores, but less obvious as a general app logo than A or B.'
   }
 };
 
-const root = document.documentElement;
-const cards = [...document.querySelectorAll('.option-card')];
-const selectedMark = document.getElementById('selectedMark');
-const selectedName = document.getElementById('selectedName');
-const selectedTone = document.getElementById('selectedTone');
-const previewMark = document.getElementById('previewMark');
-const brandSubtitle = document.getElementById('brandSubtitle');
-const storeName = document.getElementById('storeName');
-const toneNote = document.getElementById('toneNote');
-const logoNote = document.getElementById('logoNote');
-const bestNote = document.getElementById('bestNote');
-const paletteSpec = document.getElementById('paletteSpec');
-const typeSpec = document.getElementById('typeSpec');
-const rulesSpec = document.getElementById('rulesSpec');
+const ids = ['summaryMark','sideMark','mobileMark','largeMark','collapsedMark'];
+document.querySelectorAll('[data-mark]').forEach(el=>{el.innerHTML = marks[el.dataset.mark]});
 
-function setOption(key){
-  const option = options[key];
-  Object.entries(option.vars).forEach(([name,value])=>root.style.setProperty(name,value));
-  root.style.setProperty('--brand-name', `"${option.name}"`);
-  selectedMark.textContent = option.mark;
-  selectedName.textContent = option.name;
-  selectedTone.textContent = option.tone;
-  previewMark.textContent = option.mark;
-  brandSubtitle.textContent = option.subtitle;
-  storeName.textContent = option.store;
-  toneNote.textContent = option.notes.tone;
-  logoNote.textContent = option.notes.logo;
-  bestNote.textContent = option.notes.best;
-  paletteSpec.textContent = option.notes.palette;
-  typeSpec.textContent = option.notes.type;
-  rulesSpec.textContent = option.notes.rules;
-  cards.forEach(card=>card.classList.toggle('active',card.dataset.option===key));
+function setLogo(key){
+  const logo = logos[key];
+  document.body.className = `logo-${key}`;
+  ids.forEach(id=>document.getElementById(id).innerHTML = marks[key]);
+  document.getElementById('summaryName').textContent = logo.name;
+  document.getElementById('summaryNote').textContent = logo.short;
+  document.getElementById('sideWordmark').textContent = logo.name;
+  document.getElementById('descriptor').textContent = logo.descriptor;
+  document.getElementById('topKicker').textContent = `${logo.name} intelligence`;
+  document.getElementById('iconTitle').textContent = logo.iconTitle;
+  document.getElementById('iconNote').textContent = logo.iconNote;
+  document.getElementById('collapsedTitle').textContent = logo.name;
+  document.getElementById('recommendation').textContent = logo.recommendation;
+  document.getElementById('wordmarkSpec').textContent = logo.wordmark;
+  document.getElementById('implementationSpec').textContent = logo.implementation;
+  document.querySelectorAll('.option').forEach(btn=>btn.classList.toggle('active',btn.dataset.logo===key));
 }
 
-cards.forEach(card=>card.addEventListener('click',()=>setOption(card.dataset.option)));
-setOption('ledger');
+document.querySelectorAll('.option').forEach(btn=>btn.addEventListener('click',()=>setLogo(btn.dataset.logo)));
+setLogo('a');
 </script>
 </body>
 </html>
