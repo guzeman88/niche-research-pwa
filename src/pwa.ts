@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = 'etsy-niches-v16'
+const APP_CACHE_VERSION = 'etsy-niches-v17'
 const VERSION_KEY = 'etsy-niches-app-version'
 const LEGACY_PATHS = new Set(['/explore', '/scheduler', '/settings'])
 
@@ -16,13 +16,13 @@ export function registerPwaUpdates() {
   if (!('serviceWorker' in navigator)) return
 
   if (isLegacyPath(window.location.pathname)) {
-    window.location.replace('/?v=16&legacy=1')
+    window.location.replace('/?v=17&legacy=1')
     return
   }
 
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data?.type === 'APP_CACHE_RESET') {
-      window.location.replace('/?v=16&reset=1')
+      window.location.replace('/?v=17&reset=1')
     }
   })
 
@@ -34,7 +34,7 @@ export function registerPwaUpdates() {
     .then((registrations) => {
       if (!shouldReset && registrations.length === 0) return Promise.resolve()
       return clearStaleAppCaches()
-        .then(() => navigator.serviceWorker.register('/sw.js?v=16', { scope: '/' }))
+        .then(() => navigator.serviceWorker.register('/sw.js?v=17', { scope: '/' }))
         .then((registration) => registration.update())
     })
     .catch(() => {})

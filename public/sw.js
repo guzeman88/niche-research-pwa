@@ -13,8 +13,8 @@ self.addEventListener('activate', (event) => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     await Promise.all(clients.map(async (client) => {
       const url = new URL(client.url)
-      if (url.searchParams.get('v') === '16' && url.searchParams.get('reset') === '1') return
-      await client.navigate('/?v=16&reset=1')
+      if (url.searchParams.get('v') === '17' && url.searchParams.get('reset') === '1') return
+      await client.navigate('/?v=17&reset=1')
     }))
 
     await self.registration.unregister()

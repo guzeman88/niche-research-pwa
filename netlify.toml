@@ -11,25 +11,25 @@
 
 [[redirects]]
   from = "/explore"
-  to = "/?v=15"
+  to = "/?v=17"
   status = 301
   force = true
 
 [[redirects]]
   from = "/scheduler"
-  to = "/?v=15"
+  to = "/?v=17"
   status = 301
   force = true
 
 [[redirects]]
   from = "/settings"
-  to = "/?v=15"
+  to = "/?v=17"
   status = 301
   force = true
 
 [[redirects]]
   from = "/reports/*"
-  to = "/?v=15"
+  to = "/?v=17"
   status = 301
   force = true
 

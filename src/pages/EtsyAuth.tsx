@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Icon from '../components/Icon'
+import BrandLogo from '../components/BrandLogo'
 
 type CopyState = 'idle' | 'copied' | 'failed'
 
@@ -15,12 +16,16 @@ function queryValue(name: string) {
 
 export default function EtsyAuth() {
   const [copyState, setCopyState] = useState<CopyState>('idle')
-  const redirectUrl = useMemo(callbackUrl, [])
+  const redirectUrl = useMemo(() => callbackUrl(), [])
   const code = queryValue('code')
   const state = queryValue('state')
   const error = queryValue('error')
   const errorDescription = queryValue('error_description')
   const hasResponse = Boolean(code || error)
+
+  useEffect(() => {
+    document.title = 'EtGen - Etsy Auth'
+  }, [])
 
   async function copy(text: string) {
     try {
@@ -35,14 +40,9 @@ export default function EtsyAuth() {
   return (
     <main className="min-h-screen bg-surface-950 px-4 py-6 text-surface-50 sm:px-6 lg:px-10">
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-3xl flex-col justify-center">
-        <div className="mb-4 flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-300/25 bg-primary-400/12 text-primary-100">
-            <Icon name="key" size={18} />
-          </span>
-          <div>
-            <h1 className="text-[18px] font-extrabold text-surface-50">Etsy Auth</h1>
-            <p className="mt-0.5 text-[12px] font-medium text-surface-300">Redirect endpoint</p>
-          </div>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <BrandLogo markClassName="h-9 w-9" wordmarkClassName="text-[18px] font-extrabold leading-none tracking-tight" subtitle="OAuth redirect endpoint" />
+          <Icon name="key" size={18} className="text-primary-100" />
         </div>
 
         <section className="panel overflow-hidden">

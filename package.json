@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Standalone Progressive Web App for Etsy niche research",
+  "description": "EtGen keyword intelligence and Etsy listing planning PWA",
   "scripts": {
     "dev": "vite",
     "build": "node scripts/build-data.cjs && tsc -b && vite build",

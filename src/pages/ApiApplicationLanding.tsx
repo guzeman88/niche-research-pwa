@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
+import BrandLogo from '../components/BrandLogo'
 
 const WEBSITE_URL = 'https://etsy-niches.netlify.app/api-application'
 const CALLBACK_URL = 'https://etsy-niches.netlify.app/auth/etsy'
@@ -10,7 +11,7 @@ const SCREENSHOTS = [
     title: 'Research dashboard',
     text: 'Keyword coverage, opportunity distribution, gap signals, and active niche leads in one review surface.',
     src: '/screenshots/dashboard.png',
-    alt: 'Etsy Pipeline dashboard showing keyword coverage and opportunity metrics',
+    alt: 'EtGen dashboard showing keyword coverage and opportunity metrics',
   },
   {
     title: 'User scan import',
@@ -42,7 +43,7 @@ const API_USES = [
 
 export default function ApiApplicationLanding() {
   useEffect(() => {
-    document.title = 'Etsy Pipeline - API Application'
+    document.title = 'EtGen - API Application'
   }, [])
 
   return (
@@ -57,12 +58,7 @@ export default function ApiApplicationLanding() {
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(20,25,33,0.96),rgba(20,25,33,0.76)_48%,rgba(20,25,33,0.52)),linear-gradient(180deg,rgba(20,25,33,0.36),#202631)]" />
 
         <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-300/30 bg-primary-400/12 text-primary-100">
-              <Icon name="search" size={17} />
-            </span>
-            <span className="text-[14px] font-extrabold tracking-tight text-surface-50">Etsy Pipeline</span>
-          </div>
+          <BrandLogo markClassName="h-9 w-9" wordmarkClassName="text-[14px] font-extrabold leading-none tracking-tight" />
           <Link className="btn-secondary min-h-10 px-3 py-2 text-[12px]" to="/">
             Open App
           </Link>
@@ -74,7 +70,7 @@ export default function ApiApplicationLanding() {
               Etsy seller research and listing planning
             </p>
             <h1 className="max-w-3xl text-4xl font-extrabold leading-[1.04] tracking-tight text-surface-50 sm:text-5xl lg:text-6xl">
-              Etsy Pipeline
+              EtGen
             </h1>
             <p className="mt-5 max-w-2xl text-[16px] leading-7 text-surface-200 sm:text-[18px]">
               A private workspace for Etsy shop owners to import keyword research, find niche opportunities, generate store and product ideas, and prepare listing drafts before publishing.
@@ -142,7 +138,7 @@ export default function ApiApplicationLanding() {
           <p className="section-label">Etsy API Application</p>
           <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-surface-50">How the API is used</h2>
           <p className="mt-4 text-[14px] leading-6 text-surface-300">
-            Etsy Pipeline uses Etsy OAuth so each seller explicitly authorizes access to their own shop data. The app is designed for seller research, listing planning, and shop-management workflows controlled by the connected account.
+            EtGen uses Etsy OAuth so each seller explicitly authorizes access to their own shop data. The app is designed for seller research, listing planning, and shop-management workflows controlled by the connected account.
           </p>
         </div>
         <div className="rounded-lg border border-surface-600/65 bg-surface-800/85 p-4">
@@ -166,7 +162,7 @@ export default function ApiApplicationLanding() {
             </p>
           </div>
           <footer className="flex flex-col gap-3 py-6 text-[12px] text-surface-400 sm:flex-row sm:items-center sm:justify-between">
-            <span>Etsy Pipeline - private seller workflow software</span>
+            <span>EtGen - private seller workflow software</span>
             <Link className="font-bold text-primary-100 hover:text-primary-200" to="/auth/etsy">OAuth callback page</Link>
           </footer>
         </div>

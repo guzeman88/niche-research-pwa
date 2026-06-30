@@ -51,7 +51,7 @@ export default function Dashboard() {
     <div className="page">
       <div className="page-header">
         <div>
-          <p className="text-[12px] text-primary-100 font-semibold">{isUserMode ? 'User scan workspace' : 'Etsy intelligence'}</p>
+          <p className="text-[12px] text-primary-100 font-semibold">{isUserMode ? 'User scan workspace' : 'EtGen intelligence'}</p>
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Dashboard</h2>
         </div>
         <Link to="/store-generator" className="btn-primary text-[13px]">

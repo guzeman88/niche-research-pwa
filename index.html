@@ -3,15 +3,96 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#6366f1" />
-    <meta name="description" content="Multi-source Etsy niche intelligence tool" />
+    <meta name="theme-color" content="#202631" />
+    <meta name="description" content="EtGen keyword intelligence and Etsy listing planning workspace" />
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192x192.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icon-512x512.png" />
-    <title>Niche Research PWA</title>
+    <title>EtGen</title>
+    <style>
+      .boot-screen {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top left, rgba(111, 150, 200, 0.12), transparent 34rem),
+          linear-gradient(135deg, #202631 0%, #252d3a 44%, #202631 100%);
+        color: #f3f6fb;
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .boot-card {
+        width: min(18rem, calc(100vw - 3rem));
+        display: grid;
+        justify-items: center;
+        gap: 1rem;
+        border: 1px solid rgba(70, 83, 101, 0.72);
+        border-radius: 8px;
+        background: linear-gradient(180deg, rgba(48, 57, 72, 0.9), rgba(37, 45, 58, 0.9));
+        padding: 1.5rem;
+        box-shadow: 0 18px 44px rgba(7, 10, 14, 0.25);
+      }
+      .boot-mark {
+        width: 4.5rem;
+        height: 4.5rem;
+        display: block;
+        border: 1px solid rgba(111, 150, 200, 0.34);
+        border-radius: 8px;
+        background: rgba(111, 150, 200, 0.1);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 34px rgba(7,10,14,0.22);
+      }
+      .boot-wordmark {
+        font-size: 1.65rem;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+      .boot-wordmark span:last-child { color: #9fb9dc; }
+      .boot-track {
+        width: 7.5rem;
+        height: 0.25rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(32, 38, 49, 0.85);
+      }
+      .boot-track span {
+        display: block;
+        width: 42%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #6f96c8, #bed2ea);
+        animation: boot-slide 1.25s ease-in-out infinite;
+      }
+      .boot-sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+      }
+      @keyframes boot-slide {
+        0% { transform: translateX(-105%); }
+        100% { transform: translateX(245%); }
+      }
+    </style>
   </head>
   <body class="bg-surface-950 text-white antialiased">
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-screen" role="status" aria-live="polite">
+        <div class="boot-card">
+          <svg class="boot-mark" viewBox="0 0 96 96" aria-hidden="true" focusable="false">
+            <rect x="16" y="16" width="64" height="64" rx="16" fill="rgba(111,150,200,.12)" stroke="rgba(190,210,234,.55)" stroke-width="2"/>
+            <circle cx="42" cy="44" r="15" fill="none" stroke="#bed2ea" stroke-width="5"/>
+            <path d="m53 55 13 13" stroke="#9fb9dc" stroke-width="5" stroke-linecap="round"/>
+            <path d="M32 50 41 39l7 7 14-16" fill="none" stroke="#a9c88f" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="boot-wordmark"><span>Et</span><span>Gen</span></div>
+          <div class="boot-track" aria-hidden="true"><span></span></div>
+          <span class="boot-sr">Loading EtGen</span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

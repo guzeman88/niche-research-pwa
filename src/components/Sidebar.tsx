@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import Icon from './Icon'
 import type { IconName } from './Icon'
 import { useAppMode, type AppMode } from '../lib/appMode'
+import BrandLogo from './BrandLogo'
 
 const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconName }[] = [
   { to: '/', label: 'Dashboard', icon: 'home' },
@@ -60,13 +61,7 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
   return (
     <div className="flex flex-col h-full p-4">
       <div className="mb-7 rounded-lg border border-surface-600/60 bg-surface-800/70 p-3">
-        <h1 className="text-[15px] font-extrabold text-surface-50 tracking-tight flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary-400/30 bg-primary-400/10">
-            <Icon name="search" size={17} className="text-primary-100" />
-          </span>
-          Etsy Pipeline
-        </h1>
-        <p className="text-[11px] text-surface-300 mt-1.5 font-medium">Research console</p>
+        <BrandLogo subtitle="Research console" />
       </div>
 
       <div className="mb-5">

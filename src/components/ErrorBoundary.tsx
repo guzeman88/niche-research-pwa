@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react'
 import Icon from './Icon'
 import { isChunkLoadError, refreshForCurrentAssets } from '../chunkRecovery'
+import BrandLogo from './BrandLogo'
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean; error: Error | null }
@@ -23,7 +24,10 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="min-h-screen flex items-center justify-center bg-surface-800 p-6">
           <div className="card max-w-md text-center space-y-4">
-            <div className="text-4xl"><Icon name="alert-triangle" size={48} /></div>
+            <div className="flex justify-center">
+              <BrandLogo className="justify-center" markClassName="h-9 w-9" wordmarkClassName="text-lg font-extrabold leading-none tracking-tight" />
+            </div>
+            <div className="flex justify-center text-primary-200"><Icon name="alert-triangle" size={34} /></div>
             <h2 className="text-lg font-bold text-surface-50">
               {isAssetError ? 'Refreshing app' : 'Something went wrong'}
             </h2>
@@ -38,11 +42,11 @@ export default class ErrorBoundary extends Component<Props, State> {
             <button
               onClick={() => {
                 this.setState({ hasError: false, error: null })
-                window.location.replace(`/?v=16&manual_refresh=${Date.now()}`)
+                window.location.replace(`/?v=17&manual_refresh=${Date.now()}`)
               }}
               className="btn-primary"
             >
-              Reload App
+              Reload EtGen
             </button>
           </div>
         </div>

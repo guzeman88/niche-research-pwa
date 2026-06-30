@@ -1,12 +1,13 @@
 {
-  "name": "Niche Research",
-  "short_name": "NicheResearch",
-  "description": "Multi-source Etsy niche intelligence tool",
+  "name": "EtGen",
+  "short_name": "EtGen",
+  "description": "EtGen keyword intelligence and Etsy listing planning workspace",
   "theme_color": "#202631",
   "background_color": "#202631",
   "display": "standalone",
   "orientation": "any",
-  "start_url": "/?v=15",
+  "id": "/",
+  "start_url": "/?v=17",
   "scope": "/",
   "icons": [
     { "src": "/icon-72x72.png", "sizes": "72x72", "type": "image/png" },
