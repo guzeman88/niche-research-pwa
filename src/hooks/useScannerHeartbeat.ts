@@ -2,11 +2,12 @@ import { useEffect } from 'react'
 import { ensureScannerRunning, hasConfiguredBackend } from '../lib/api'
 
 const HEARTBEAT_MS = 60_000
+const PUBLIC_PATH_PREFIXES = ['/auth/', '/api-application']
 
 export default function useScannerHeartbeat(enabled = true) {
   useEffect(() => {
     if (!enabled) return
-    if (window.location.pathname.startsWith('/auth/')) return
+    if (PUBLIC_PATH_PREFIXES.some((path) => window.location.pathname.startsWith(path))) return
     if (!hasConfiguredBackend()) return
 
     let cancelled = false
