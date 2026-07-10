@@ -45,6 +45,10 @@ const STATIC_MAP: Record<string, string> = {
 
 const LIVE_ONLY_GET_PATHS = new Set<string>();
 
+function shouldUseStaticReads(): boolean {
+  return USE_STATIC_DATA && !LIVE_API_FIRST;
+}
+
 // Try loading from static CDN JSON first (instant), fall back to API
 async function fetchStatic(path: string): Promise<any | null> {
   if (!USE_STATIC_DATA) return null;
@@ -141,7 +145,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const pathOnly = path.split('?')[0];
   const liveOnly = isGet && LIVE_ONLY_GET_PATHS.has(pathOnly);
 
-  if (isGet && !liveOnly && USE_STATIC_DATA && !LIVE_API_FIRST) {
+  if (isGet && !liveOnly && shouldUseStaticReads()) {
     const staticData = await fetchStatic(pathOnly);
     if (staticData) return staticData as T;
   }
@@ -276,6 +280,24 @@ export interface DesignProviderInfo {
   env_vars: string[];
 }
 
+const STATIC_DESIGN_PROVIDERS: DesignProviderInfo[] = [
+  { id: 'ideogram', label: 'Ideogram', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['IDEOGRAM_API_KEY'] },
+  { id: 'recraft', label: 'Recraft', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['RECRAFT_API_KEY'] },
+  { id: 'krea', label: 'Krea', configured: false, available: false, status: 'manual', detail: 'Use the prompt launcher workflow.', env_vars: [] },
+  { id: 'openai', label: 'OpenAI', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['OPENAI_API_KEY'] },
+  { id: 'firefly', label: 'Firefly', configured: false, available: false, status: 'manual', detail: 'Use the prompt launcher workflow.', env_vars: [] },
+  { id: 'stability', label: 'Stability', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['STABILITY_API_KEY'] },
+  { id: 'fal', label: 'fal', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['FAL_KEY'] },
+  { id: 'replicate', label: 'Replicate', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['REPLICATE_API_TOKEN'] },
+  { id: 'bfl', label: 'BFL', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['BFL_API_KEY'] },
+  { id: 'gemini', label: 'Gemini', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['GEMINI_API_KEY'] },
+  { id: 'luma', label: 'Luma', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['LUMA_API_KEY'] },
+  { id: 'magnific', label: 'Magnific', configured: false, available: false, status: 'manual', detail: 'Use the prompt launcher workflow.', env_vars: [] },
+  { id: 'leonardo', label: 'Leonardo', configured: false, available: false, status: 'needs_key', detail: 'Connect a live backend to generate directly.', env_vars: ['LEONARDO_API_KEY'] },
+  { id: 'midjourney', label: 'Midjourney', configured: false, available: false, status: 'manual', detail: 'Use the prompt launcher workflow.', env_vars: [] },
+  { id: 'local_svg', label: 'Built-in', configured: true, available: true, status: 'ready', detail: 'Available without a backend.', env_vars: [] },
+];
+
 export interface GeneratedDesignAsset {
   provider: string;
   title: string;
@@ -287,6 +309,7 @@ export interface GeneratedDesignAsset {
 }
 
 export function getDesignProviders(): Promise<DesignProviderInfo[]> {
+  if (shouldUseStaticReads()) return Promise.resolve(STATIC_DESIGN_PROVIDERS);
   return request('/api/designs/providers');
 }
 
@@ -457,6 +480,7 @@ function saveLocalStore(store: StoreItem): StoreItem {
 
 export async function getStores(): Promise<StoreItem[]> {
   const localStores = readLocalStores()
+  if (shouldUseStaticReads()) return mergeStores([], localStores)
   try {
     const stores = await request<StoreItem[]>('/api/stores')
     return mergeStores(stores, localStores)
