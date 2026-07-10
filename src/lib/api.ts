@@ -19,6 +19,7 @@ const API_URLS = [PRIMARY_API_URL, ...BACKUP_API_URLS]
 const BASE_URL = API_URLS[0] || '';
 const DEV_BACKEND_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_BACKEND === '1';
 const USE_STATIC_DATA = import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
+const LIVE_API_FIRST = import.meta.env.VITE_LIVE_API_FIRST === '1';
 const WAKE_BACKEND = import.meta.env.VITE_WAKE_BACKEND === '1';
 const MIN_SCORED_STATIC_ROWS = 1000;
 let lastBackendWake = 0;
@@ -140,7 +141,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const pathOnly = path.split('?')[0];
   const liveOnly = isGet && LIVE_ONLY_GET_PATHS.has(pathOnly);
 
-  if (isGet && !liveOnly && USE_STATIC_DATA && apiCandidates().length === 0) {
+  if (isGet && !liveOnly && USE_STATIC_DATA && !LIVE_API_FIRST) {
     const staticData = await fetchStatic(pathOnly);
     if (staticData) return staticData as T;
   }
@@ -312,7 +313,7 @@ export function getHealth(): Promise<HealthResponse> {
 }
 
 export function hasConfiguredBackend(): boolean {
-  return DEV_BACKEND_ENABLED || API_URLS.length > 0;
+  return DEV_BACKEND_ENABLED || (LIVE_API_FIRST && API_URLS.length > 0);
 }
 
 export function ensureScannerRunning(): Promise<Record<string, unknown>> {
