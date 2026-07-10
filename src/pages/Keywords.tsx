@@ -181,7 +181,39 @@ export default function Keywords() {
         </div>
 
         <div className="panel overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="divide-y divide-surface-600/35 md:hidden">
+            {isLoading && <div className="px-4 py-12 text-center text-surface-300">Loading...</div>}
+            {visibleKeywords.map(kw => {
+              const oppScore = finiteScore(kw.opportunity_score)
+              const gapScore = finiteScore(kw.gap_score)
+              return (
+                <div key={kw.keyword} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-extrabold text-surface-50">{kw.keyword}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="tag max-w-full truncate bg-accent-violet/10 text-accent-violet border-accent-violet/20">{kw.domain}</span>
+                        {kw.scanned ? (
+                          <span className="text-[10px] font-semibold text-accent-green">Scanned {fmtDate(kw.last_scanned_at)}</span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-accent-amber">Pending</span>
+                        )}
+                      </div>
+                    </div>
+                    <TrajectoryBadge trajectory={kw.trajectory} />
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <MobileScore label="Opp" value={oppScore} tone="primary" />
+                    <MobileScore label="Gap" value={gapScore} tone="green" />
+                  </div>
+                </div>
+              )
+            })}
+            {sorted.length === 0 && !isLoading && <div className="px-4 py-12 text-center text-surface-300">No keywords found</div>}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="border-b border-surface-600 bg-surface-900/65">
@@ -278,6 +310,35 @@ export default function Keywords() {
 
 function finiteScore(value: number | null | undefined): number | null {
   return Number.isFinite(value) ? Number(value) : null
+}
+
+function MobileScore({ label, value, tone }: { label: string; value: number | null; tone: 'primary' | 'green' }) {
+  const color = value == null
+    ? 'text-surface-400'
+    : value >= 70
+      ? 'text-accent-green'
+      : value >= 50
+        ? 'text-accent-amber'
+        : 'text-accent-red'
+  const bar = tone === 'primary' ? 'from-primary-400 to-primary-200' : 'from-accent-green to-accent-green/80'
+  return (
+    <div className="rounded-md border border-surface-600/45 bg-surface-950/20 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-surface-300">{label}</span>
+        <span className={`text-[13px] font-extrabold tabular-nums ${color}`}>{value != null ? value.toFixed(0) : '-'}</span>
+      </div>
+      <div className="progress-track mt-2">
+        {value != null && <span className={`block h-full rounded-full bg-gradient-to-r ${bar}`} style={{ width: `${Math.min(100, value)}%` }} />}
+      </div>
+    </div>
+  )
+}
+
+function TrajectoryBadge({ trajectory }: { trajectory?: string | null }) {
+  if (trajectory === 'rising') return <span className="rounded-md border border-accent-green/20 bg-accent-green/10 px-2 py-1 text-[10px] font-bold text-accent-green">rising</span>
+  if (trajectory === 'declining') return <span className="rounded-md border border-accent-red/20 bg-accent-red/10 px-2 py-1 text-[10px] font-bold text-accent-red">declining</span>
+  if (trajectory === 'stable') return <span className="rounded-md border border-surface-600/45 bg-surface-800/60 px-2 py-1 text-[10px] font-bold text-surface-300">stable</span>
+  return <span className="rounded-md border border-surface-600/35 bg-surface-800/40 px-2 py-1 text-[10px] font-bold text-surface-400">-</span>
 }
 
 function UserScanImporter({

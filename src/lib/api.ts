@@ -17,7 +17,8 @@ const API_URLS = [PRIMARY_API_URL, ...BACKUP_API_URLS]
   .map((url) => url.trim().replace(/\/+$/, ''))
   .filter(Boolean);
 const BASE_URL = API_URLS[0] || '';
-const USE_STATIC_DATA = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
+const DEV_BACKEND_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_BACKEND === '1';
+const USE_STATIC_DATA = import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
 const WAKE_BACKEND = import.meta.env.VITE_WAKE_BACKEND === '1';
 const MIN_SCORED_STATIC_ROWS = 1000;
 let lastBackendWake = 0;
@@ -75,7 +76,7 @@ function wakeBackend() {
 
 function apiCandidates(): string[] {
   if (API_URLS.length > 0) return API_URLS;
-  return import.meta.env.DEV ? [''] : [];
+  return DEV_BACKEND_ENABLED ? [''] : [];
 }
 
 function tunnelBypassHeaders(baseUrl: string): Record<string, string> {
@@ -139,6 +140,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const pathOnly = path.split('?')[0];
   const liveOnly = isGet && LIVE_ONLY_GET_PATHS.has(pathOnly);
 
+  if (isGet && !liveOnly && USE_STATIC_DATA && apiCandidates().length === 0) {
+    const staticData = await fetchStatic(pathOnly);
+    if (staticData) return staticData as T;
+  }
+
   // Prefer live APIs in configured order: local-machine tunnel first, then backups
   // such as Render. Static snapshots are only the final read fallback.
   if (isGet) {
@@ -152,7 +158,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     }
 
     // Backend unreachable, returned non-JSON HTML, or returned low-signal data.
-    if (!liveOnly && !import.meta.env.DEV) {
+    if (!liveOnly && USE_STATIC_DATA) {
       const staticData = await fetchStatic(pathOnly);
       if (staticData) {
         wakeBackend();
@@ -162,7 +168,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   // POST requests or backend-down fallback: use static CDN
-  if (isGet && !liveOnly && !import.meta.env.DEV) {
+  if (isGet && !liveOnly && USE_STATIC_DATA) {
     const staticData = await fetchStatic(pathOnly);
     if (staticData) return staticData as T;
   }
@@ -306,7 +312,7 @@ export function getHealth(): Promise<HealthResponse> {
 }
 
 export function hasConfiguredBackend(): boolean {
-  return import.meta.env.DEV || API_URLS.length > 0;
+  return DEV_BACKEND_ENABLED || API_URLS.length > 0;
 }
 
 export function ensureScannerRunning(): Promise<Record<string, unknown>> {

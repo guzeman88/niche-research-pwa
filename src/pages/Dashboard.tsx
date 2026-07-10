@@ -60,7 +60,7 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+      <div className="grid grid-cols-2 gap-2.5 sm:flex sm:overflow-x-auto sm:pb-1 sm:-mx-1 sm:px-1 sm:scrollbar-none">
         <Chip val={fmt(stats?.total_seeds)} label="Keywords" sub={stats?.total_seeds ? (isUserMode ? 'user scan rows' : `${stats.total_seeds} seeds`) : 'No data'} color="indigo" />
         <Chip val={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} label="Avg Opp" sub={topOpportunity ? 'real keywords' : 'No data'} color="emerald" />
         <Chip val={fmt(stats?.breakout_count)} label="Breakouts" sub={isUserMode ? 'from imports' : 'rising fast'} color="amber" />
@@ -132,7 +132,7 @@ function Chip({ val, label, sub, color }: { val: string; label: string; sub: str
   const colors = { indigo: 'from-surface-800 to-surface-700/50 border-accent-blue/20', emerald: 'from-accent-green/20 to-accent-green/10 border-accent-green/20', amber: 'from-accent-amber/20 to-accent-amber/10 border-accent-amber/20', violet: 'from-accent-violet/20 to-accent-violet/10 border-accent-violet/20' }
   const textColors = { indigo: 'text-accent-blue', emerald: 'text-accent-green', amber: 'text-accent-amber', violet: 'text-accent-violet' }
   return (
-    <div className={`flex-shrink-0 bg-gradient-to-b ${colors[color]} border rounded-lg px-4 py-2.5 min-w-[98px] shadow-[0_10px_24px_rgba(7,10,14,0.14)]`}>
+    <div className={`min-w-0 bg-gradient-to-b ${colors[color]} border rounded-lg px-4 py-2.5 shadow-[0_10px_24px_rgba(7,10,14,0.14)] sm:min-w-[98px] sm:flex-shrink-0`}>
       <div className={`text-lg font-extrabold tracking-tight ${textColors[color]}`}>{val}</div>
       <div className="text-[10px] text-surface-200 font-medium">{label}</div>
       <div className="text-[9px] text-surface-400 mt-0.5">{sub}</div>
