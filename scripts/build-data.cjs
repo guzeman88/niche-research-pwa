@@ -105,7 +105,7 @@ print(json.dumps(generate_profitable_store_ideas(limit=12, signal_limit=1000)))
 
   function scoredKeywordCount(data) {
     if (!Array.isArray(data)) return 0;
-    return data.filter((item) => Number(item && (item.opportunity_score ?? item.gap_score)) > 0).length;
+    return data.filter((item) => Number(item && (item.primary_score ?? item.opportunity_score ?? item.gap_score)) > 0).length;
   }
 
   function fallbackOrThrow(filename, message) {

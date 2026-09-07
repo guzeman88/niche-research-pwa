@@ -36,7 +36,7 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 8
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -1477,25 +1477,38 @@ def get_all_seeds_with_status(limit: int = 2000) -> list[dict]:
 # ── Query ─────────────────────────────────────────────────────────────────────
 
 def get_top_opportunities(limit: int = 100, domain: Optional[str] = None) -> list[dict]:
+    """Rank keywords by the best available business score.
+
+    Profitability is the preferred signal when real market evidence exists.
+    Older or thinner scans may only have opportunity or gap scores, so those
+    are used as explicit fallbacks instead of returning an empty dashboard.
+    """
     with _conn() as con:
         base = """
             SELECT s.keyword, s.domain, sc.opportunity_score, sc.demand_score,
                    sc.competition_score, sc.margin_score, sc.trend_score,
                    sc.avg_price_usd, sc.monthly_revenue_usd, sc.competition_quality,
                    sc.listing_count, sc.scanned_at, sc.entry_strategy, sc.peak_months,
-                   sc.gap_score, sc.score_delta, sc.trajectory,
+                   sc.gap_score, sc.score_delta, sc.trajectory, sc.profitability_index,
+                   COALESCE(sc.profitability_index, sc.opportunity_score, sc.gap_score, gs.gap_score) AS primary_score,
+                   CASE
+                       WHEN sc.profitability_index IS NOT NULL THEN 'profitability_index'
+                       WHEN sc.opportunity_score IS NOT NULL THEN 'opportunity_score'
+                       WHEN sc.gap_score IS NOT NULL THEN 'gap_score'
+                       ELSE 'gap_score'
+                   END AS primary_score_source,
                    gs.breakout_flag
             FROM seeds s
             JOIN scans sc ON sc.keyword=s.keyword
             LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
             WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
-              AND sc.opportunity_score IS NOT NULL
+              AND COALESCE(sc.profitability_index, sc.opportunity_score, sc.gap_score, gs.gap_score) IS NOT NULL
         """
         if domain:
-            rows = con.execute(base + " AND s.domain=? ORDER BY sc.opportunity_score DESC LIMIT ?",
+            rows = con.execute(base + " AND s.domain=? ORDER BY primary_score DESC LIMIT ?",
                                (domain, limit)).fetchall()
         else:
-            rows = con.execute(base + " ORDER BY sc.opportunity_score DESC LIMIT ?",
+            rows = con.execute(base + " ORDER BY primary_score DESC LIMIT ?",
                                (limit,)).fetchall()
         return [dict(r) for r in rows]
 
@@ -1507,7 +1520,13 @@ def get_top_gaps(limit: int = 100, domain: Optional[str] = None) -> list[dict]:
             SELECT s.keyword, s.domain, gs.gap_score, gs.score_delta, gs.trajectory,
                    gs.breakout_flag, sc.demand_score, sc.competition_quality,
                    sc.avg_price_usd, sc.monthly_revenue_usd, sc.scanned_at,
-                   sc.opportunity_score, sc.trend_score
+                   sc.opportunity_score, sc.trend_score, sc.profitability_index,
+                   COALESCE(sc.profitability_index, sc.opportunity_score, gs.gap_score) AS primary_score,
+                   CASE
+                       WHEN sc.profitability_index IS NOT NULL THEN 'profitability_index'
+                       WHEN sc.opportunity_score IS NOT NULL THEN 'opportunity_score'
+                       ELSE 'gap_score'
+                   END AS primary_score_source
             FROM gap_scores gs
             JOIN seeds s ON s.keyword=gs.keyword
             JOIN scans sc ON sc.keyword=gs.keyword

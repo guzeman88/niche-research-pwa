@@ -29,7 +29,8 @@ export default function ScoreDistribution() {
     const counts = BUCKETS.map(b => ({ ...b, count: 0 }))
     if (!opps || !Array.isArray(opps)) return counts
     for (const o of opps) {
-      const score = finiteScore((o as any).opportunity_score)
+      const row = o as Record<string, unknown>
+      const score = finiteScore(row.primary_score ?? row.opportunity_score ?? row.gap_score)
       if (score == null) continue
       for (const b of counts) {
         if (score >= b.min && score < b.max) { b.count++; break }

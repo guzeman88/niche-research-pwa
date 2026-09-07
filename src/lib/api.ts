@@ -123,13 +123,15 @@ function scoredRowCount(data: unknown): number {
   return data.filter((item) => {
     if (!item || typeof item !== 'object') return false;
     const row = item as Record<string, unknown>;
-    return Number(row.opportunity_score) > 0 || Number(row.gap_score) > 0;
+    return Number(row.primary_score ?? row.opportunity_score ?? row.gap_score) > 0;
   }).length;
 }
 
 function needsStaticFallback(path: string, data: unknown): boolean {
   if (path === '/api/stats') {
-    return !data || typeof data !== 'object' || Number((data as Record<string, unknown>).avg_opportunity || 0) <= 0;
+    if (!data || typeof data !== 'object') return true;
+    const row = data as Record<string, unknown>;
+    return Number(row.avg_opportunity || 0) <= 0 && Number(row.avg_gap_score || 0) <= 0;
   }
   if (path === '/api/keywords/opportunities') {
     return !Array.isArray(data) || data.length === 0;

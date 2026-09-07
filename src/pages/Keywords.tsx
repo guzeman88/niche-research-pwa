@@ -25,7 +25,7 @@ const COLUMNS: { key: SortKey; label: string; align: 'left' | 'right' }[] = [
   { key: 'keyword', label: 'Keyword', align: 'left' },
   { key: 'domain', label: 'Domain', align: 'left' },
   { key: 'status', label: 'Status', align: 'left' },
-  { key: 'opportunity', label: 'Opp', align: 'right' },
+  { key: 'opportunity', label: 'Score', align: 'right' },
   { key: 'gap', label: 'Gap', align: 'right' },
   { key: 'trajectory', label: 'Trend', align: 'right' },
 ]
@@ -75,7 +75,7 @@ export default function Keywords() {
         case 'keyword': va = a.keyword; vb = b.keyword; break
         case 'domain': va = a.domain; vb = b.domain; break
         case 'status': va = a.scanned ? 1 : 0; vb = b.scanned ? 1 : 0; break
-        case 'opportunity': va = a.opportunity_score ?? -999; vb = b.opportunity_score ?? -999; break
+        case 'opportunity': va = businessScore(a) ?? -999; vb = businessScore(b) ?? -999; break
         case 'gap': va = a.gap_score ?? -999; vb = b.gap_score ?? -999; break
         case 'trajectory': {
           const order: Record<string, number> = { rising: 3, stable: 2, declining: 1 }
@@ -184,7 +184,7 @@ export default function Keywords() {
           <div className="divide-y divide-surface-600/35 md:hidden">
             {isLoading && <div className="px-4 py-12 text-center text-surface-300">Loading...</div>}
             {visibleKeywords.map(kw => {
-              const oppScore = finiteScore(kw.opportunity_score)
+              const oppScore = businessScore(kw)
               const gapScore = finiteScore(kw.gap_score)
               return (
                 <div key={kw.keyword} className="px-4 py-3">
@@ -204,7 +204,7 @@ export default function Keywords() {
                   </div>
 
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <MobileScore label="Opp" value={oppScore} tone="primary" />
+                    <MobileScore label="Score" value={oppScore} tone="primary" />
                     <MobileScore label="Gap" value={gapScore} tone="green" />
                   </div>
                 </div>
@@ -236,7 +236,7 @@ export default function Keywords() {
               <tbody>
                 {isLoading && <tr><td colSpan={6} className="px-4 py-12 text-center text-surface-300">Loading...</td></tr>}
                 {visibleKeywords.map(kw => {
-                  const oppScore = finiteScore(kw.opportunity_score)
+                  const oppScore = businessScore(kw)
                   const gapScore = finiteScore(kw.gap_score)
                   const oppColor = oppScore == null ? 'text-surface-400' : oppScore >= 70 ? 'text-accent-green' : oppScore >= 50 ? 'text-accent-amber' : 'text-accent-red'
                   const gapColor = gapScore == null ? 'text-surface-400' : gapScore >= 70 ? 'text-accent-green' : gapScore >= 50 ? 'text-accent-amber' : 'text-accent-red'
@@ -310,6 +310,10 @@ export default function Keywords() {
 
 function finiteScore(value: number | null | undefined): number | null {
   return Number.isFinite(value) ? Number(value) : null
+}
+
+function businessScore(keyword: KeywordItem): number | null {
+  return finiteScore(keyword.primary_score ?? keyword.opportunity_score ?? keyword.gap_score)
 }
 
 function MobileScore({ label, value, tone }: { label: string; value: number | null; tone: 'primary' | 'green' }) {

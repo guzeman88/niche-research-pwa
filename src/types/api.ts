@@ -30,6 +30,8 @@ export interface KeywordItem {
   added_at: string;
   scanned: boolean;
   last_scanned_at: string | null;
+  primary_score?: number | null;
+  primary_score_source?: string | null;
   opportunity_score: number | null;
   gap_score: number | null;
   trajectory: string | null;

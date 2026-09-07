@@ -193,12 +193,20 @@ function normalizeDashboardOpportunities(reports?: ReportListItem[], keywordOppo
       id: String(keyword.keyword || keyword.report_id || `keyword-${index}`),
       title: String(keyword.keyword || keyword.seed_keywords || 'Unnamed'),
       generatedAt: typeof keyword.scanned_at === 'string' ? keyword.scanned_at : null,
-      opportunityScore: Number.isFinite(Number(keyword.opportunity_score)) ? Number(keyword.opportunity_score) : null,
+      opportunityScore: firstScore(keyword.primary_score, keyword.opportunity_score, keyword.gap_score),
     }))
 
   return source
     .sort((a, b) => numericScore(b.opportunityScore) - numericScore(a.opportunityScore))
     .slice(0, 8)
+}
+
+function firstScore(...values: unknown[]): number | null {
+  for (const value of values) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) return numeric
+  }
+  return null
 }
 
 function formatScore(value: number | null | undefined): string {
