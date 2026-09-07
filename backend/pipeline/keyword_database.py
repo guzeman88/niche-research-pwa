@@ -1505,10 +1505,10 @@ def get_top_opportunities(limit: int = 100, domain: Optional[str] = None) -> lis
               AND COALESCE(sc.profitability_index, sc.opportunity_score, sc.gap_score, gs.gap_score) IS NOT NULL
         """
         if domain:
-            rows = con.execute(base + " AND s.domain=? ORDER BY primary_score DESC LIMIT ?",
+            rows = con.execute(base + " AND s.domain=? ORDER BY primary_score DESC, s.keyword ASC LIMIT ?",
                                (domain, limit)).fetchall()
         else:
-            rows = con.execute(base + " ORDER BY primary_score DESC LIMIT ?",
+            rows = con.execute(base + " ORDER BY primary_score DESC, s.keyword ASC LIMIT ?",
                                (limit,)).fetchall()
         return [dict(r) for r in rows]
 

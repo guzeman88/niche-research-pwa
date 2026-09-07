@@ -203,7 +203,7 @@ async function supabaseKeywords() {
 async function supabaseOpportunities(limit = 500) {
   const rows = await supabaseRows('keyword_top_opportunities', {
     select: '*',
-    order: 'primary_score.desc.nullslast',
+    order: 'primary_score.desc.nullslast,keyword.asc',
   }, limit, 1000);
   return rows.map((row) => ({
     ...row,
