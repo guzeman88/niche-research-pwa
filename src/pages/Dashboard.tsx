@@ -67,8 +67,15 @@ export default function Dashboard() {
         <Chip val={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} label="Avg Gap" sub={topGap?.keyword ? 'top gap available' : 'no gap data'} color="violet" />
       </div>
 
+      {!isUserMode && stats?.evidence_backed != null && (
+        <p className="text-sm text-surface-200" role="status">
+          {fmt(stats.evidence_backed)} keywords have market evidence. {fmt(stats.successful)} returned source signals;
+          {' '}{fmt(stats.no_data)} returned no data; {fmt(stats.failed)} failed; {fmt(stats.stale)} are over 30 days old.
+          {stats.evidence_backed === 0 && ' Gap rankings are research leads, not validated profitability.'}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-2.5">
-        <MetricCard icon="database" label="Coverage" value={stats?.coverage_pct == null ? '-' : `${stats.coverage_pct}%`} sub={`${fmt(stats?.scanned)} of ${fmt(stats?.total_seeds)} scanned`} color="indigo" />
+        <MetricCard icon="database" label="Attempted coverage" value={stats?.coverage_pct == null ? '-' : `${stats.coverage_pct}%`} sub={`${fmt(stats?.scanned)} of ${fmt(stats?.total_seeds)} attempted`} color="indigo" />
         <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} sub={topOpportunity ? `Top: ${topOpportunity.title} ${formatScore(topOpportunity.opportunityScore)}` : 'No data yet'} color="emerald" />
         <MetricCard icon="zap" label="Total Scans" value={fmt(stats?.total_scans)} sub="lifetime DB total" color="amber" />
         <MetricCard icon="activity" label="Avg Gap Score" value={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} sub={topGap?.keyword ? `Top: ${topGap.keyword} ${formatScore(topGap.gap_score)}` : 'No gap data yet'} color="violet" />
@@ -79,7 +86,7 @@ export default function Dashboard() {
         <GapOverview />
       </div>
 
-      <Section title="Top Opportunities" link="/keywords" linkLabel="See all">
+      <Section title="Research leads" link="/keywords" linkLabel="See all">
         <div className="panel overflow-hidden">
           {opportunities.length > 0 ? opportunities.map((r, i) => (
             <div
@@ -187,14 +194,14 @@ function normalizeDashboardOpportunities(reports?: ReportListItem[], keywordOppo
     generatedAt: report.generated_at,
     opportunityScore: Number.isFinite(report.opportunity_score) ? Number(report.opportunity_score) : null,
   }))
-  const source = reportItems.length > 0
-    ? reportItems
-    : (keywordOpportunities || []).map((keyword, index) => ({
-      id: String(keyword.keyword || keyword.report_id || `keyword-${index}`),
-      title: String(keyword.keyword || keyword.seed_keywords || 'Unnamed'),
+  const source = keywordOpportunities?.length
+    ? keywordOpportunities.map((keyword, index) => ({
+      id: String(keyword.keyword || `keyword-${index}`),
+      title: String(keyword.keyword || 'Unnamed'),
       generatedAt: typeof keyword.scanned_at === 'string' ? keyword.scanned_at : null,
       opportunityScore: firstScore(keyword.primary_score, keyword.opportunity_score, keyword.gap_score),
     }))
+    : reportItems
 
   return source
     .sort((a, b) => numericScore(b.opportunityScore) - numericScore(a.opportunityScore))
@@ -203,6 +210,7 @@ function normalizeDashboardOpportunities(reports?: ReportListItem[], keywordOppo
 
 function firstScore(...values: unknown[]): number | null {
   for (const value of values) {
+    if (value == null || value === '') continue
     const numeric = Number(value)
     if (Number.isFinite(numeric)) return numeric
   }

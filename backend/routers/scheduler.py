@@ -16,18 +16,7 @@ router = APIRouter(prefix="/api/scheduler", tags=["scheduler"])
 def status():
     """Get current scheduler status."""
     s = scheduler_status()
-    return SchedulerStatus(
-        running=s.get("running", False),
-        paused=s.get("paused", False),
-        mode=s.get("mode", "performance"),
-        batch_size=s.get("batch_size", 5),
-        keywords_scanned=s.get("keywords_scanned", 0),
-        new_seeds_found=s.get("new_seeds_found", 0),
-        current_keyword=s.get("current_keyword"),
-        started_at=s.get("started_at"),
-        interval_s=s.get("interval_s", 30),
-        errors=s.get("errors", []),
-    )
+    return SchedulerStatus(**s)
 
 
 @router.post("/start")

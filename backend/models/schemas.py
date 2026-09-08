@@ -89,6 +89,10 @@ class GapReportItem(BaseModel):
 # ── Scheduler ───────────────────────────────────────────────────────────────
 
 class SchedulerStatus(BaseModel):
+    last_progress_at: str | None = None
+    consecutive_failures: int = 0
+    fatal_error: str | None = None
+    health: str = "stopped"
     running: bool
     paused: bool
     mode: str
@@ -109,6 +113,12 @@ class SchedulerAction(BaseModel):
 # ── Stats ───────────────────────────────────────────────────────────────────
 
 class StatsResponse(BaseModel):
+    attempted: int = 0
+    successful: int = 0
+    evidence_backed: int = 0
+    failed: int = 0
+    no_data: int = 0
+    stale: int = 0
     total_seeds: int
     scanned: int
     unscanned: int

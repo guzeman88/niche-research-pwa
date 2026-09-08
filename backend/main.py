@@ -14,10 +14,12 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from fastapi import FastAPI
+from security import allowed_origins, protect_operator_api
+from services.runtime_safety import safe_log, initialize_workspace
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
-from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs
+from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace
 
 # ── App factory ─────────────────────────────────────────────────────────────
 
@@ -27,11 +29,14 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS — allow all origins in development; restrict in production
+app.middleware("http")(protect_operator_api)
+
+# Browser origins are restricted; private API actions also require authorization.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=allowed_origins(),
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -48,6 +53,7 @@ app.include_router(export.router)
 app.include_router(stores.router)
 app.include_router(store_ideas.router)
 app.include_router(designs.router)
+app.include_router(workspace.router)
 
 
 async def _scheduler_watchdog() -> None:
@@ -63,11 +69,11 @@ async def _scheduler_watchdog() -> None:
             from services.scheduler_service import ensure_scheduler_running
             result = ensure_scheduler_running(mode=mode, batch_size=batch_size)
             if result.get("status") not in {"running", "already_running"}:
-                print(f"[watchdog] Scheduler ensure result: {result}", flush=True)
+                safe_log(f"[watchdog] Scheduler ensure result: {result}")
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            print(f"[watchdog] Scheduler ensure failed: {exc}", flush=True)
+            safe_log(f"[watchdog] Scheduler ensure failed: {exc}")
 
 
 # ── Startup ─────────────────────────────────────────────────────────────────
@@ -75,67 +81,16 @@ async def _scheduler_watchdog() -> None:
 @app.on_event("startup")
 async def startup():
     """Initialize database, seed from seed_data/ on first run, and load seed library."""
-    import shutil, os
-    from pathlib import Path
-
-    seed_dir = BACKEND_DIR / "seed_data"
-    workspace_dir = BACKEND_DIR / "workspace"
-    db_path = workspace_dir / "_keyword_db" / "keywords.sqlite"
-
-    print(f"[startup] BACKEND_DIR={BACKEND_DIR}")
-    print(f"[startup] seed_dir exists={seed_dir.exists()}")
-    print(f"[startup] db_path exists={db_path.exists()}")
-
-    # Seed if: seed_data exists AND (no DB yet OR forced OR seed_data DB is newer)
-    force_reseed = os.environ.get("FORCE_RESEED", "") == "1"
-    needs_seed = False
-    if seed_dir.exists():
-        seed_db = seed_dir / "_keyword_db" / "keywords.sqlite"
-        if force_reseed:
-            print("[startup] FORCE_RESEED=1 — re-seeding")
-            shutil.rmtree(workspace_dir, ignore_errors=True)
-            needs_seed = True
-        elif not db_path.exists():
-            needs_seed = True
-        elif seed_db.exists() and seed_db.stat().st_size > db_path.stat().st_size:
-            # Seed data has been updated — replace workspace with fresh seed
-            print(f"[startup] seed_data DB is newer ({seed_db.stat().st_size} > {db_path.stat().st_size}) — re-seeding")
-            shutil.rmtree(workspace_dir, ignore_errors=True)
-            needs_seed = True
-        else:
-            import sqlite3
-            try:
-                con = sqlite3.connect(str(db_path))
-                scan_count = con.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
-                con.close()
-                if scan_count == 0:
-                    print(f"[startup] DB exists but has 0 scans — re-seeding")
-                    shutil.rmtree(workspace_dir, ignore_errors=True)
-                    needs_seed = True
-                else:
-                    print(f"[startup] DB has {scan_count} scans — skipping seed")
-            except Exception:
-                shutil.rmtree(workspace_dir, ignore_errors=True)
-                needs_seed = True
-
-    if needs_seed:
-        print("[startup] Seeding workspace from seed_data/ ...")
-        workspace_dir.mkdir(parents=True, exist_ok=True)
-        for item in seed_dir.iterdir():
-            dest = workspace_dir / item.name
-            if item.is_dir():
-                if not dest.exists():
-                    shutil.copytree(item, dest)
-            else:
-                if not dest.exists():
-                    shutil.copy2(item, dest)
-        total_files = len(list(workspace_dir.rglob("*")))
-        print(f"[startup] Seeded {total_files} files from seed_data/")
-
+    import os
     from pipeline import keyword_database as kdb
+
+    if os.environ.get("FORCE_RESEED") == "1":
+        raise RuntimeError("FORCE_RESEED is disabled: preserve the workspace and restore an explicit backup instead.")
+    initialize_workspace(kdb.DB_PATH.resolve(), kdb.SEED_DB_PATH.resolve())
+
     kdb.init_db()
     count = kdb.load_seeds_from_library()
-    print(f"[startup] Keyword DB initialized. {count} library seeds loaded.")
+    safe_log(f"[startup] Keyword DB initialized. {count} library seeds loaded.")
 
     auto_start_scheduler = os.environ.get("AUTO_START_SCHEDULER", "1") != "0"
     if auto_start_scheduler:
@@ -144,14 +99,14 @@ async def startup():
             mode = os.environ.get("SCHEDULER_MODE", "burst")
             batch_size = int(os.environ.get("SCHEDULER_BATCH_SIZE", "20"))
             result = start_scheduler(mode=mode, batch_size=batch_size)
-            print(f"[startup] Scheduler auto-start result: {result}")
+            safe_log(f"[startup] Scheduler auto-start result: {result}")
             if not hasattr(app.state, "scheduler_watchdog_task"):
                 app.state.scheduler_watchdog_task = asyncio.create_task(_scheduler_watchdog())
-                print("[startup] Scheduler watchdog started")
+                safe_log("[startup] Scheduler watchdog started")
         except Exception as exc:
-            print(f"[startup] Scheduler auto-start failed: {exc}", flush=True)
+            safe_log(f"[startup] Scheduler auto-start failed: {exc}")
     else:
-        print("[startup] Scheduler auto-start disabled by AUTO_START_SCHEDULER=0")
+        safe_log("[startup] Scheduler auto-start disabled by AUTO_START_SCHEDULER=0")
 
 
 @app.on_event("shutdown")

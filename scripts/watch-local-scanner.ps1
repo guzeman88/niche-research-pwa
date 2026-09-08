@@ -82,15 +82,8 @@ function Ensure-Backend {
 
 function Ensure-Scheduler {
   try {
-    $body = @{
-      mode = $SchedulerMode
-      batch_size = $SchedulerBatchSize
-    } | ConvertTo-Json
     $status = Invoke-RestMethod `
-      -Uri "http://127.0.0.1:$Port/api/scheduler/start" `
-      -Method POST `
-      -ContentType "application/json" `
-      -Body $body `
+      -Uri "http://127.0.0.1:$Port/api/scheduler/status" `
       -TimeoutSec 15
     Write-ScannerLog "Scheduler status=$($status.status) running=$($status.running) paused=$($status.paused) mode=$($status.mode) batch=$($status.batch_size)"
   } catch {

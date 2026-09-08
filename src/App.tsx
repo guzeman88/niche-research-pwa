@@ -9,6 +9,7 @@ import { AppModeProvider, useAppMode } from './lib/appMode'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Keywords = lazy(() => import('./pages/Keywords'))
 const StoreGenerator = lazy(() => import('./pages/StoreGenerator'))
+const Workspace = lazy(() => import('./pages/Workspace'))
 const Stores = lazy(() => import('./pages/Stores'))
 const EtsyAuth = lazy(() => import('./pages/EtsyAuth'))
 const ApiApplicationLanding = lazy(() => import('./pages/ApiApplicationLanding'))
@@ -50,6 +51,7 @@ function AppRoutes() {
         <Route index element={page(<Dashboard />)} />
         <Route path="/keywords" element={page(<Keywords />)} />
         <Route path="/store-generator" element={page(<StoreGenerator />)} />
+        <Route path="/workspace" element={page(<Workspace />)} />
         <Route path="/stores" element={page(<Stores />)} />
         <Route path="*" element={page(<NotFound />)} />
       </Route>

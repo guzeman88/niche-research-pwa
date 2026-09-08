@@ -21,6 +21,7 @@ scheduler can resume after app restart.
 """
 
 import json
+import uuid
 import os
 import threading
 import time
@@ -70,7 +71,10 @@ class AutonomousScheduler:
         self._batch_size = batch_size
         self._stale_days = stale_days
         self._skip_scraper = skip_scraper
-        self._log = log_fn or print
+        self._log_fn = log_fn or print
+        self._last_progress_at = None
+        self._consecutive_failures = 0
+        self._fatal_error = None
         self._on_scan_complete = on_scan_complete  # called after each keyword, for UI refresh
 
         self._thread: Optional[threading.Thread] = None
@@ -91,6 +95,34 @@ class AutonomousScheduler:
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    def _log(self, message: str) -> None:
+        try:
+            self._log_fn(message)
+        except UnicodeEncodeError:
+            try:
+                self._log_fn(message.encode("ascii", errors="backslashreplace").decode("ascii"))
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _run_guarded(self) -> None:
+        status = "completed"
+        try:
+            self._loop()
+        except Exception as exc:
+            status = "failed"
+            self._fatal_error = str(exc)
+            self._errors.append(str(exc))
+            self._log(f"[scheduler] Worker failed: {exc}")
+        finally:
+            if self._stop_event.is_set():
+                status = "stopped"
+            if self._run_id:
+                kdb.update_scheduler_run(self._run_id, keywords_scanned=self._keywords_scanned,
+                    new_seeds=self._new_seeds_found, status=status, error_msg=self._fatal_error)
+            self._save_state(running=False)
+
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             self._log("[scheduler] Already running")
@@ -100,11 +132,13 @@ class AutonomousScheduler:
         self._keywords_scanned = 0
         self._new_seeds_found = 0
         self._errors = []
+        self._fatal_error = None
+        self._consecutive_failures = 0
         self._started_at = datetime.utcnow().isoformat()
         self._run_id = kdb.log_scheduler_run(mode=self._mode)
-        self._thread = threading.Thread(target=self._loop, daemon=True, name="keyword-scanner")
-        self._thread.start()
+        self._thread = threading.Thread(target=self._run_guarded, daemon=True, name="keyword-scanner")
         self._save_state(running=True)
+        self._thread.start()
         self._log(f"[scheduler] Started in '{self._mode}' mode — {RATES[self._mode]}s between keywords")
 
     def pause(self) -> None:
@@ -122,15 +156,8 @@ class AutonomousScheduler:
         self._pause_event.set()  # unblock if paused
         if self._thread:
             self._thread.join(timeout=10)
-        if self._run_id:
-            kdb.update_scheduler_run(
-                self._run_id,
-                keywords_scanned=self._keywords_scanned,
-                new_seeds=self._new_seeds_found,
-                status="stopped",
-            )
-        self._save_state(running=False)
-        self._log(f"[scheduler] Stopped. Total scanned: {self._keywords_scanned}, new seeds: {self._new_seeds_found}")
+        self._save_state(running=self.is_running())
+        self._log("[scheduler] Stop requested; current operation will finish before shutdown")
 
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -141,6 +168,10 @@ class AutonomousScheduler:
     def status(self) -> dict:
         return {
             "running":          self.is_running(),
+            "last_progress_at": self._last_progress_at,
+            "consecutive_failures": self._consecutive_failures,
+            "fatal_error": self._fatal_error,
+            "health": "failed" if self._fatal_error else "degraded" if self._consecutive_failures else "running" if self.is_running() else "stopped",
             "paused":           self.is_paused(),
             "mode":             self._mode,
             "batch_size":       self._batch_size,
@@ -204,6 +235,8 @@ class AutonomousScheduler:
                 self._current_keyword = kw
                 try:
                     new_seeds = self._scan_and_expand(kw)
+                    self._last_progress_at = datetime.utcnow().isoformat()
+                    self._consecutive_failures = 0
                     self._keywords_scanned += 1
                     self._new_seeds_found += new_seeds
                     scans_since_discover += 1
@@ -223,6 +256,10 @@ class AutonomousScheduler:
                 except Exception as e:
                     err = f"'{kw}': {e}"
                     self._errors.append(err)
+                    self._consecutive_failures += 1
+                    kdb.save_scan(kw, {"scan_error": str(e), "sources_used": []})
+                    if self._consecutive_failures >= 5:
+                        raise RuntimeError("Scanner halted after five consecutive failures: " + str(e)) from e
                     self._log(f"[scheduler] Error on {err}")
                 finally:
                     self._current_keyword = None
@@ -231,14 +268,6 @@ class AutonomousScheduler:
                 if not self._stop_event.is_set():
                     self._interruptible_sleep(RATES.get(self._mode, 90))
 
-        if self._run_id:
-            kdb.update_scheduler_run(
-                self._run_id,
-                keywords_scanned=self._keywords_scanned,
-                new_seeds=self._new_seeds_found,
-                status="completed",
-            )
-        self._save_state(running=False)
         self._log("[scheduler] Loop ended")
 
     def _scan_and_expand(self, keyword: str) -> int:
@@ -263,6 +292,9 @@ class AutonomousScheduler:
             allow_llm_synthesis=allow_llm_synthesis,
         )
         has_market_data = _report_has_market_data(report)
+        source_data = self._report_to_dict(report)
+        if not has_market_data and not source_data.get("sources_used"):
+            raise RuntimeError("No research source returned usable data; check provider availability")
         if not has_market_data:
             self._log(
                 f"[scheduler]   Thin market evidence for '{keyword}' - saving no-data scores and queuing for evidence refresh"
@@ -500,7 +532,9 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
             "new_seeds_found":  self._new_seeds_found,
             "last_updated":     datetime.utcnow().isoformat(),
         }
-        STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        temporary = STATE_FILE.with_name(f".{STATE_FILE.name}.{uuid.uuid4().hex}.tmp")
+        temporary.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        temporary.replace(STATE_FILE)
 
     def _load_state(self) -> None:
         if STATE_FILE.exists():
@@ -542,6 +576,6 @@ def _report_has_market_data(report) -> bool:
 
 
 def _scheduler_research_adapters() -> list[str]:
-    raw = os.environ.get("SCHEDULER_RESEARCH_ADAPTERS", "etsy_open_api,etsy_autocomplete")
+    raw = os.environ.get("SCHEDULER_RESEARCH_ADAPTERS", "etsy_open_api,etsy_autocomplete,google_suggest")
     names = [name.strip() for name in raw.split(",") if name.strip()]
-    return names or ["etsy_open_api", "etsy_autocomplete"]
+    return names or ["etsy_open_api", "etsy_autocomplete", "google_suggest"]

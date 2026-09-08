@@ -15,3 +15,8 @@ logs/
 .netlify/
 render-*.png
 public/data/*.json
+
+.env.*
+!.env.example
+!.env.production.example
+.pytest_cache/

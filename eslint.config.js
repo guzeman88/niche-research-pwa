@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/',
+      'work/',
       'node_modules/',
       'public/data/',
       'backend/',

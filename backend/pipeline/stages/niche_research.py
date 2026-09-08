@@ -446,6 +446,7 @@ def _build_adapters(
     from adapters.research.etsy_autocomplete import EtsyAutocompleteAdapter
     from adapters.research.etsy_open_api import EtsyOpenAPIAdapter
     from adapters.research.google_trends import GoogleTrendsAdapter
+    from adapters.research.google_suggest import GoogleSuggestAdapter
     from adapters.research.reddit_etsy import RedditEtsyAdapter
     from adapters.research.erank import ERankAdapter
     from adapters.research.marmalead import MarmaleadAdapter
@@ -455,6 +456,7 @@ def _build_adapters(
         "etsy_open_api": EtsyOpenAPIAdapter,
         "etsy_autocomplete": EtsyAutocompleteAdapter,
         "google_trends": GoogleTrendsAdapter,
+        "google_suggest": GoogleSuggestAdapter,
         "reddit_etsy": RedditEtsyAdapter,
         "erank": ERankAdapter,
         "marmalead": MarmaleadAdapter,
@@ -464,6 +466,7 @@ def _build_adapters(
     result = []
     for name in names:
         if name not in factories:
+            log_fn(f"[niche_research] Unknown adapter: {name}")
             continue
         try:
             if name == "reddit_etsy" and store_config and store_config.niche.subreddits:

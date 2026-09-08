@@ -19,6 +19,8 @@ if _ENV_PATH.exists():
 else:
     load_dotenv()  # fallback: search parent dirs
 
+load_dotenv(_ENV_PATH.with_name(".env.local"))
+
 # Backend root directory
 ROOT = Path(__file__).parent.resolve()
 

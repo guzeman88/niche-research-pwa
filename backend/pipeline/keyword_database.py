@@ -36,7 +36,7 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -70,21 +70,12 @@ def ensure_seed_snapshot(min_scans: int = 1) -> bool:
     Production hosts can start with an empty writable workspace; without this guard
     profit-ranked endpoints have no scanned keyword intelligence and return [].
     """
-    if not SEED_DB_PATH.exists():
+    if DB_PATH.exists() or not SEED_DB_PATH.exists():
         return False
-    if _db_scan_count(DB_PATH) >= min_scans:
-        return False
-
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    for suffix in ("", "-wal", "-shm"):
-        target = Path(f"{DB_PATH}{suffix}")
-        if target.exists():
-            target.unlink()
-    shutil.copy2(SEED_DB_PATH, DB_PATH)
-
-    seed_state = SEED_DB_PATH.parent / "scheduler_state.json"
-    if seed_state.exists():
-        shutil.copy2(seed_state, DB_PATH.parent / "scheduler_state.json")
+    with sqlite3.connect(SEED_DB_PATH.resolve().as_uri() + "?mode=ro", uri=True) as source:
+        with sqlite3.connect(DB_PATH) as target:
+            source.backup(target)
     return True
 
 
@@ -306,6 +297,14 @@ def init_db() -> None:
         if version < 8:
             _migrate_v8(con)
             _set_version(con, 8)
+        if version < 9:
+            con.execute("ALTER TABLE scans ADD COLUMN scan_status TEXT")
+            con.execute("ALTER TABLE scans ADD COLUMN scan_error TEXT")
+            con.execute("""UPDATE scans SET scan_status=CASE
+                WHEN COALESCE(market_evidence_score,0)>=20 THEN 'evidence'
+                WHEN COALESCE(sources_used,'[]') NOT IN ('[]','', 'null') THEN 'signals'
+                ELSE 'no_data' END""")
+            _set_version(con, 9)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
 
@@ -1111,8 +1110,8 @@ def save_scan(keyword: str, report) -> None:
                price_min_usd, price_p25_usd, price_median_usd, price_p75_usd,
                price_max_usd, avg_favorites, max_favorites, pct_high_favorites,
                pct_star_sellers, pct_bestsellers, revenue_per_listing,
-               market_evidence_score, profitability_index)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               market_evidence_score, profitability_index, scan_status, scan_error)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             kw, now, opp, demand,
             r.get("competition_score"), margin,
@@ -1137,6 +1136,8 @@ def save_scan(keyword: str, report) -> None:
             metrics["revenue_per_listing"],
             market_evidence,
             profitability_index,
+            "failed" if r.get("scan_error") else "evidence" if market_evidence >= 20 else "signals" if r.get("sources_used") else "no_data",
+            r.get("scan_error"),
         ))
 
     if gap is not None:
@@ -1670,7 +1671,21 @@ def get_stats() -> dict:
             "SELECT domain, COUNT(*) as cnt FROM seeds GROUP BY domain ORDER BY cnt DESC"
         ).fetchall()
 
+        quality = con.execute("""SELECT
+            SUM(sc.scan_status IN ('signals','evidence')) AS successful,
+            SUM(sc.scan_status='evidence') AS evidence_backed,
+            SUM(sc.scan_status='failed') AS failed,
+            SUM(sc.scan_status='no_data') AS no_data,
+            SUM(sc.scanned_at < ?) AS stale
+            FROM scans sc JOIN (SELECT keyword, MAX(id) id FROM scans GROUP BY keyword) latest ON latest.id=sc.id
+        """, ((datetime.utcnow()-timedelta(days=30)).isoformat(),)).fetchone()
         return {
+            "attempted": scanned,
+            "successful": quality["successful"] or 0,
+            "evidence_backed": quality["evidence_backed"] or 0,
+            "failed": quality["failed"] or 0,
+            "no_data": quality["no_data"] or 0,
+            "stale": quality["stale"] or 0,
             "total_seeds":      total_seeds,
             "scanned":          scanned,
             "unscanned":        total_seeds - scanned,

@@ -1,7 +1,8 @@
 """Settings router — read/update configuration."""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from security import redact_settings
 from models.schemas import SettingsUpdate
 from config import load_settings, reload_settings, get_setting, CONFIG_DIR
 from pipeline.guidelines import all_categories, save as save_guidelines
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 def get_settings():
     """Get all current settings."""
     return {
-        "settings": load_settings(),
+        "settings": redact_settings(load_settings()),
         "guidelines": all_categories(),
     }
 
@@ -24,6 +25,10 @@ def update_settings(req: SettingsUpdate):
     import yaml
 
     if req.settings is not None:
+        if redact_settings(req.settings) != req.settings:
+            raise HTTPException(400, "Store credentials in environment variables, not settings.")
+        if "[configured]" in str(req.settings):
+            raise HTTPException(400, "Remove redacted credential fields before saving settings.")
         path = CONFIG_DIR / "settings.yaml"
         path.write_text(
             yaml.dump(req.settings, default_flow_style=False, allow_unicode=True),

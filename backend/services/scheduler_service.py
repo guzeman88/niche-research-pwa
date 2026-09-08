@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from services.research_service import _emit
+from services.runtime_safety import safe_log
 
 _scheduler = None
 DEFAULT_SCHEDULER_MODE = os.environ.get("SCHEDULER_MODE", "burst")
@@ -22,7 +23,7 @@ def _scheduler_log(msg: str) -> None:
         "message": msg,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
-    print(msg, flush=True)
+    safe_log(msg)
 
 
 def get_scheduler():
@@ -71,15 +72,10 @@ def start_scheduler(mode: str = DEFAULT_SCHEDULER_MODE, batch_size: int = DEFAUL
 def ensure_scheduler_running(mode: str = DEFAULT_SCHEDULER_MODE, batch_size: int = DEFAULT_BATCH_SIZE) -> dict:
     """Idempotently keep the scanner alive in the expected continuous mode."""
     s = get_scheduler()
-    if not s.is_running():
-        return start_scheduler(mode=mode, batch_size=batch_size)
-    changed = _apply_scheduler_settings(s, mode, batch_size)
-    if s.is_paused():
-        s.resume()
-        return {"status": "resumed", "message": "Scheduler was paused and is now running", **s.status()}
-    if changed:
-        return {"status": "retuned", "message": "Scheduler settings updated while running", **s.status()}
-    return {"status": "running", "message": "Scheduler is running", **s.status()}
+    # Automatic retries must never undo an operator stop/pause or hide a crash loop.
+    state = s.status()
+    return {**state, "status": "paused" if s.is_paused() else
+            "running" if s.is_running() else "failed" if state.get("fatal_error") else "stopped"}
 
 
 def stop_scheduler() -> dict:

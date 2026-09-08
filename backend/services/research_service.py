@@ -9,6 +9,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Callable
+from services.runtime_safety import safe_log
 
 # SSE event queue (imported by routers/stream.py)
 _sse_queue: asyncio.Queue | None = None
@@ -39,7 +40,7 @@ def _log_callback(msg: str) -> None:
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
     # Also log to stdout for server console
-    print(msg, flush=True)
+    safe_log(msg)
 
 
 def _progress_callback(stage: str, keyword: str = "", percent: float = 0.0) -> None:

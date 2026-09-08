@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { ensureScannerRunning, hasConfiguredBackend } from '../lib/api'
+import { getSchedulerStatus, hasConfiguredBackend } from '../lib/api'
 
 const HEARTBEAT_MS = 60_000
 const PUBLIC_PATH_PREFIXES = ['/auth/', '/api-application']
@@ -14,8 +14,8 @@ export default function useScannerHeartbeat(enabled = true) {
 
     const ensureRunning = () => {
       if (cancelled) return
-      ensureScannerRunning().catch(() => {
-        // The PWA can run from static snapshots; scanner startup is best-effort when a backend exists.
+      getSchedulerStatus().catch(() => {
+        // Observe health without changing an operator’s pause or stop.
       })
     }
 

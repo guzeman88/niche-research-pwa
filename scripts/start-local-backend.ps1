@@ -10,6 +10,8 @@ $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $BackendDir = Join-Path $RepoRoot "backend"
 $Python = (Get-Command python -ErrorAction Stop).Source
 
+$env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUTF8 = "1"
 $env:BACKEND_DIR = $BackendDir
 $env:AUTO_START_SCHEDULER = if ($NoScheduler) { "0" } else { "1" }
 $env:SCHEDULER_MODE = $SchedulerMode

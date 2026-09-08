@@ -73,6 +73,7 @@ if (Array.isArray(opportunities)) {
 }
 
 const storeIdeas = readJson('public/data/store-ideas.json');
+try { require('./snapshot-contract.cjs').validateStoreIdeas(storeIdeas); } catch (error) { fail(error.message); }
 if (Array.isArray(storeIdeas)) {
   if (storeIdeas.length === 0) {
     console.warn('public/data/store-ideas.json is empty; no market-evidence-backed store ideas are currently available');

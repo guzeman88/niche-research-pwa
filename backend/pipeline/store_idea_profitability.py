@@ -217,11 +217,16 @@ def generate_profitable_store_ideas(limit: int = 12, signal_limit: int = 800, do
     from pipeline import keyword_database as kdb
 
     rows = kdb.get_store_idea_signals(limit=signal_limit, domain=domain)
+    return generate_store_ideas_from_rows(rows, limit)
+
+
+def generate_store_ideas_from_rows(rows: list[dict[str, Any]], limit: int = 12) -> list[dict[str, Any]]:
+    """Generate the same evidence contract from a fixed set of source rows."""
     signals = [
         signal for signal in (_to_signal(row) for row in rows)
         if signal and signal.source_strength > 0
     ]
-    signals.sort(key=_weighted_keyword_score, reverse=True)
+    signals.sort(key=lambda signal: (-_weighted_keyword_score(signal), signal.keyword))
     signals = signals[:320]
     if not signals:
         return []
@@ -376,7 +381,7 @@ def _source_strength(sources: list[str], row: dict[str, Any]) -> float:
         score += 36.0
     if "google_suggest" in normalized:
         score += 32.0
-    if "etsy_search" in normalized or "etsy_open_api" in normalized:
+    if normalized & {"etsy_search", "etsy_search_scraper", "etsy_open_api"}:
         score += 50.0
     if _number(row.get("score_delta")) > 0:
         score += min(10.0, _number(row.get("score_delta")))
@@ -443,7 +448,7 @@ def _merge_small_clusters(clusters: list[ClusterSeed]) -> list[ClusterSeed]:
 
 def _to_store_idea(cluster: ClusterSeed) -> dict[str, Any] | None:
     signals = _unique_by_keyword(cluster.signals)
-    signals.sort(key=_weighted_keyword_score, reverse=True)
+    signals.sort(key=lambda signal: (-_weighted_keyword_score(signal), signal.keyword))
     if len(signals) < 3:
         return None
 
@@ -1290,7 +1295,7 @@ def _make_keyword_clusters(
     seen_labels: set[str] = set()
     for group in ranked:
         group_signals = _unique_by_keyword(group["signals"])
-        group_signals.sort(key=_weighted_keyword_score, reverse=True)
+        group_signals.sort(key=lambda signal: (-_weighted_keyword_score(signal), signal.keyword))
         if len(group_signals) < 2 and len(result) >= 3:
             continue
         label_key = _normalize(group["label"])

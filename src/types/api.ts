@@ -1,4 +1,10 @@
 export interface StatsResponse {
+  attempted?: number;
+  successful?: number;
+  evidence_backed?: number;
+  failed?: number;
+  no_data?: number;
+  stale?: number;
   total_seeds: number;
   scanned: number;
   unscanned: number;

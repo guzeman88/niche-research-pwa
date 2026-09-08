@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import Icon from './Icon'
 import type { IconName } from './Icon'
 import { useAppMode, type AppMode } from '../lib/appMode'
@@ -19,7 +19,8 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
   if (mobile) {
     return (
       <div className="p-1.5">
-        <ModeSwitch mode={mode} onModeChange={setMode} compact />
+        <div className="flex items-center gap-2"><div className="flex-1"><ModeSwitch mode={mode} onModeChange={setMode} compact /></div>
+          <Link to="/workspace" className="text-xs text-surface-100 px-2 py-2">Backups</Link></div>
         <div className="mt-1 grid grid-cols-4 gap-1">
           {NAV_ITEMS.map(({ to, label, shortLabel, icon }) => (
             <NavLink
@@ -88,6 +89,7 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
         ))}
       </nav>
 
+      <Link to="/workspace" className="text-sm text-surface-100 px-3 py-3">Workspace & backups</Link>
       <div className="pt-4 border-t border-surface-600/60">
         <div className="flex items-center gap-2 rounded-lg border border-surface-600/55 bg-surface-800/55 px-3 py-2 text-[11px]">
           <span className={`w-2 h-2 rounded-full ${statusOk ? 'bg-emerald-400 shadow-[0_0_6px_#a3be8c]' : 'bg-red-400'}`} />

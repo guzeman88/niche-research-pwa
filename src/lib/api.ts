@@ -7,6 +7,7 @@ import type {
   StatsResponse, HealthResponse, KeywordItem,
 } from '../types/api'
 import type { GapReport } from '../types/gaps'
+import { readConnection, operatorHeaders } from './operatorConnection'
 import type { StoreIdea } from './storeIdeas'
 
 const PRIMARY_API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
@@ -80,6 +81,8 @@ function wakeBackend() {
 }
 
 function apiCandidates(): string[] {
+  const connection = readConnection()
+  if (connection.url) return [connection.url]
   if (API_URLS.length > 0) return API_URLS;
   return DEV_BACKEND_ENABLED ? [''] : [];
 }
@@ -103,8 +106,8 @@ async function fetchApi(path: string, options?: RequestInit, timeoutMs = 8000): 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...tunnelBypassHeaders(baseUrl), ...options?.headers },
         ...options,
+        headers: { 'Content-Type': 'application/json', ...tunnelBypassHeaders(baseUrl), ...operatorHeaders(baseUrl), ...options?.headers },
         signal: controller.signal,
       });
       clearTimeout(timeout);
@@ -311,7 +314,7 @@ export interface GeneratedDesignAsset {
 }
 
 export function getDesignProviders(): Promise<DesignProviderInfo[]> {
-  if (shouldUseStaticReads()) return Promise.resolve(STATIC_DESIGN_PROVIDERS);
+  if (shouldUseStaticReads() && !readConnection().url) return Promise.resolve(STATIC_DESIGN_PROVIDERS);
   return request('/api/designs/providers');
 }
 
@@ -338,14 +341,11 @@ export function getHealth(): Promise<HealthResponse> {
 }
 
 export function hasConfiguredBackend(): boolean {
-  return DEV_BACKEND_ENABLED || (LIVE_API_FIRST && API_URLS.length > 0);
+  return Boolean(readConnection().url) || DEV_BACKEND_ENABLED || (LIVE_API_FIRST && API_URLS.length > 0);
 }
 
-export function ensureScannerRunning(): Promise<Record<string, unknown>> {
-  return request('/api/scheduler/start', {
-    method: 'POST',
-    body: JSON.stringify({ mode: 'performance', batch_size: 5 }),
-  });
+export function getSchedulerStatus(): Promise<Record<string, unknown>> {
+  return request('/api/scheduler/status');
 }
 
 // ── Stores ─────────────────────────────────────────────────────────────
