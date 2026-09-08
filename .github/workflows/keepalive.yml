@@ -10,4 +10,4 @@ jobs:
       - name: Explain disabled keepalive
         run: |
           echo "No live backend URL is configured for keepalive."
-          echo "The PWA now builds from bundled real-data snapshots instead of pinging a suspended host."
+          echo "Production snapshots are built from Supabase. Backend startup is an explicit operator action."

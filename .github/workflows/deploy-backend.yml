@@ -11,6 +11,7 @@ jobs:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
       RENDER_SERVICE_URL: https://niche-research-api-kqlt.onrender.com
+      PIPELINE_API_TOKEN: ${{ secrets.PIPELINE_API_TOKEN }}
     steps:
       - name: Resolve Render service
         id: render_service
@@ -171,6 +172,11 @@ jobs:
           curl -i -fsS https://niche-research-api-kqlt.onrender.com/api/stats | tee stats.raw
           sed -n '/^{/,$p' stats.raw > stats.json
           node -e "const s=require('./stats.json'); if ((s.total_seeds || 0) < 13000) throw new Error('Backend has fewer than 13000 keywords')"
-          STATUS=$(curl -fsS https://niche-research-api-kqlt.onrender.com/api/scheduler/status || echo '{}')
-          echo "$STATUS"
-          echo "$STATUS" | grep -q '"running":true' || curl -fsS -X POST https://niche-research-api-kqlt.onrender.com/api/scheduler/start -H 'Content-Type: application/json' -d '{"mode":"continuous","batch_size":5}'
+          if [ -n "$PIPELINE_API_TOKEN" ]; then
+            curl -fsS https://niche-research-api-kqlt.onrender.com/api/scheduler/status \
+              -H "Authorization: Bearer $PIPELINE_API_TOKEN"
+          else
+            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' https://niche-research-api-kqlt.onrender.com/api/scheduler/status)
+            test "$STATUS" = "401"
+            echo "Private scheduler endpoint requires operator authentication."
+          fi
