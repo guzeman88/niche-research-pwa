@@ -5,11 +5,15 @@ import Layout from './components/Layout'
 import BrandLogo from './components/BrandLogo'
 import useScannerHeartbeat from './hooks/useScannerHeartbeat'
 import { AppModeProvider, useAppMode } from './lib/appMode'
+import {RequireAccount, useAuth} from './lib/auth'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Keywords = lazy(() => import('./pages/Keywords'))
 const StoreGenerator = lazy(() => import('./pages/StoreGenerator'))
 const Workspace = lazy(() => import('./pages/Workspace'))
+const Account = lazy(() => import('./pages/Account'))
+const SignIn = lazy(() => import('./pages/SignIn'))
+const ConfirmAccount = lazy(() => import('./pages/ConfirmAccount'))
 const Stores = lazy(() => import('./pages/Stores'))
 const EtsyAuth = lazy(() => import('./pages/EtsyAuth'))
 const ApiApplicationLanding = lazy(() => import('./pages/ApiApplicationLanding'))
@@ -41,17 +45,21 @@ export default function App() {
 
 function AppRoutes() {
   const { mode } = useAppMode()
-  useScannerHeartbeat(mode === 'developer')
+  const auth = useAuth()
+  useScannerHeartbeat(mode === 'developer' && auth.profile?.role === 'admin')
 
   return (
     <Routes>
+      <Route path="/signin" element={page(<SignIn />)} />
+      <Route path="/auth/confirm" element={page(<ConfirmAccount />)} />
       <Route path="/api-application" element={page(<ApiApplicationLanding />)} />
       <Route path="/auth/etsy" element={page(<EtsyAuth />)} />
-      <Route element={<Layout />}>
+      <Route element={<RequireAccount><Layout /></RequireAccount>}>
         <Route index element={page(<Dashboard />)} />
         <Route path="/keywords" element={page(<Keywords />)} />
         <Route path="/store-generator" element={page(<StoreGenerator />)} />
         <Route path="/workspace" element={page(<Workspace />)} />
+        <Route path="/account" element={page(<Account />)} />
         <Route path="/stores" element={page(<Stores />)} />
         <Route path="*" element={page(<NotFound />)} />
       </Route>

@@ -8,6 +8,8 @@ import type {
 } from '../types/api'
 import type { GapReport } from '../types/gaps'
 import { readConnection, operatorHeaders } from './operatorConnection'
+import {accountStorage} from './accountWorkspace'
+import {accountRequest} from './accountApi'
 import type { StoreIdea } from './storeIdeas'
 
 const PRIMARY_API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || '');
@@ -99,6 +101,14 @@ function tunnelBypassHeaders(baseUrl: string): Record<string, string> {
 
 async function fetchApi(path: string, options?: RequestInit, timeoutMs = 8000): Promise<Response | null> {
   const isGet = !options?.method || options.method === 'GET';
+  if (!isGet || /^\/api\/(settings|scheduler|stores|workspace|stream)(\/|\?|$)/.test(path)) {
+    try {
+      const data = await accountRequest('/backend',{path,method:options?.method || 'GET',body:typeof options?.body === 'string' ? JSON.parse(options.body) : undefined});
+      return new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
+    } catch (error) {
+      return new Response(JSON.stringify({detail:error instanceof Error ? error.message : 'Private action failed.'}),{status:403,headers:{'Content-Type':'application/json'}});
+    }
+  }
   const sep = path.includes('?') ? '&' : '?';
   for (const baseUrl of apiCandidates()) {
     const url = `${baseUrl}${path}${isGet ? `${sep}_t=${Date.now()}` : ''}`;
@@ -401,7 +411,7 @@ function hasBrowserStorage(): boolean {
 function readLocalStores(): StoreItem[] {
   if (!hasBrowserStorage()) return []
   try {
-    const raw = window.localStorage.getItem(LOCAL_STORES_KEY)
+    const raw = accountStorage.getItem(LOCAL_STORES_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed.filter(isValidStore) : []
@@ -412,7 +422,7 @@ function readLocalStores(): StoreItem[] {
 
 function writeLocalStores(stores: StoreItem[]): void {
   if (!hasBrowserStorage()) return
-  window.localStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores.filter(isValidStore)))
+  accountStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(stores.filter(isValidStore)))
 }
 
 function isValidStore(store: unknown): store is StoreItem {
@@ -481,27 +491,11 @@ function saveLocalStore(store: StoreItem): StoreItem {
 }
 
 export async function getStores(): Promise<StoreItem[]> {
-  const localStores = readLocalStores()
-  if (shouldUseStaticReads()) return mergeStores([], localStores)
-  try {
-    const stores = await request<StoreItem[]>('/api/stores')
-    return mergeStores(stores, localStores)
-  } catch {
-    return mergeStores([], localStores)
-  }
+  return mergeStores([], readLocalStores())
 }
 
 export async function createStore(payload: CreateStorePayload): Promise<StoreItem> {
-  try {
-    const store = await request<StoreItem>('/api/stores', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
-    saveLocalStore(store)
-    return store
-  } catch {
-    return saveLocalStore(storeFromPayload(payload, readLocalStores()))
-  }
+  return saveLocalStore(storeFromPayload(payload, readLocalStores()))
 }
 
 // ── Export ──────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import type { StoreItem } from './api'
+import {accountStorage} from './accountWorkspace'
 import type { StoreIdeaKeyword } from './storeIdeas'
 
 export type ProductStatus = 'idea' | 'brief_ready' | 'design_approved' | 'mockup_selected' | 'sent_to_listing'
@@ -651,7 +652,7 @@ export function validationItems(store: StoreItem, workspace: StoreWorkspace): Ar
 function readWorkspaceStore(): WorkspaceStore {
   if (typeof window === 'undefined' || !window.localStorage) return {}
   try {
-    const raw = window.localStorage.getItem(WORKSPACE_KEY)
+    const raw = accountStorage.getItem(WORKSPACE_KEY)
     if (!raw) return {}
     const parsed = JSON.parse(raw)
     return parsed && typeof parsed === 'object' ? parsed as WorkspaceStore : {}
@@ -662,7 +663,7 @@ function readWorkspaceStore(): WorkspaceStore {
 
 function writeWorkspaceStore(value: WorkspaceStore): void {
   if (typeof window === 'undefined' || !window.localStorage) return
-  window.localStorage.setItem(WORKSPACE_KEY, JSON.stringify(value))
+  accountStorage.setItem(WORKSPACE_KEY, JSON.stringify(value))
 }
 
 function keywordsNear(store: StoreItem, keyword: string): StoreKeywordCandidate[] {

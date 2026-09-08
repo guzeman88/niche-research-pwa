@@ -2,6 +2,7 @@ import type { StatsResponse, KeywordItem } from '../types/api'
 import type { GapReport } from '../types/gaps'
 import { generateStoreIdeas, type StoreIdea } from './storeIdeas'
 import { USER_DATA_EVENT } from './appMode'
+import {accountStorage} from './accountWorkspace'
 
 export type UserScanSource = 'erank' | 'semrush' | 'csv' | 'manual'
 
@@ -186,8 +187,8 @@ export function importUserScan(input: { source: UserScanSource; name?: string; t
 
 export function clearUserKeywordData(): void {
   if (!hasStorage()) return
-  window.localStorage.removeItem(USER_KEYWORDS_KEY)
-  window.localStorage.removeItem(USER_BATCHES_KEY)
+  accountStorage.removeItem(USER_KEYWORDS_KEY)
+  accountStorage.removeItem(USER_BATCHES_KEY)
   emitUserDataChanged()
 }
 
@@ -391,7 +392,7 @@ function readUserKeywords(): UserKeywordItem[] {
 function readJson<T>(key: string, fallback: T): T {
   if (!hasStorage()) return fallback
   try {
-    const raw = window.localStorage.getItem(key)
+    const raw = accountStorage.getItem(key)
     if (!raw) return fallback
     return JSON.parse(raw) as T
   } catch {
@@ -401,7 +402,7 @@ function readJson<T>(key: string, fallback: T): T {
 
 function writeJson(key: string, value: unknown): void {
   if (!hasStorage()) return
-  window.localStorage.setItem(key, JSON.stringify(value))
+  accountStorage.setItem(key, JSON.stringify(value))
 }
 
 function hasStorage(): boolean {

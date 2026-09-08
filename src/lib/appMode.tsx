@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import {useAuth} from './auth'
 
 export type AppMode = 'developer' | 'user'
 
@@ -22,6 +23,7 @@ export function readStoredAppMode(): AppMode {
 }
 
 export function AppModeProvider({ children }: { children: ReactNode }) {
+  const {profile} = useAuth()
   const [mode, setModeState] = useState<AppMode>(() => readStoredAppMode())
   const [userDataVersion, setUserDataVersion] = useState(0)
 
@@ -41,8 +43,8 @@ export function AppModeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AppModeContextValue>(() => ({
-    mode,
-    isUserMode: mode === 'user',
+    mode: profile?.role === 'admin' ? mode : 'user',
+    isUserMode: profile?.role !== 'admin' || mode === 'user',
     userDataVersion,
     setMode(nextMode) {
       setModeState(nextMode)
@@ -53,7 +55,7 @@ export function AppModeProvider({ children }: { children: ReactNode }) {
     refreshUserData() {
       setUserDataVersion((current) => current + 1)
     },
-  }), [mode, userDataVersion])
+  }), [mode, userDataVersion, profile?.role])
 
   return <AppModeContext.Provider value={value}>{children}</AppModeContext.Provider>
 }
