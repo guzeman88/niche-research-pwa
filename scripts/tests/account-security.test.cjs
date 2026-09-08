@@ -33,10 +33,10 @@ test('interrupted saves preserve owner edits without exposing them to another ac
   const w=module.exports;
   w.activateWorkspace('owner',{},0);w.accountStorage.setItem('stores','["private"]');
   await assert.rejects(w.flushAccountWorkspace());
-  w.clearAccountWorkspace();w.activateWorkspace('other',{},0);
+  w.clearAccountWorkspace();assert.ok(w.hasInterruptedEdits());w.activateWorkspace('other',{},0);
   assert.equal(w.accountStorage.getItem('stores'),null);
   w.clearAccountWorkspace();w.activateWorkspace('owner',{},0);
   assert.equal(w.accountStorage.getItem('stores'),'["private"]');
   assert.ok(w.workspaceStatus().dirty);fail=false;
-  await w.flushAccountWorkspace();assert.equal(w.workspaceStatus().dirty,false);
+  await w.flushAccountWorkspace();assert.equal(w.workspaceStatus().dirty,false);assert.equal(w.hasInterruptedEdits(),false);
 });

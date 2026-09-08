@@ -7,6 +7,7 @@ let message = ''
 const listeners = new Set<() => void>()
 // Keep interrupted edits only in this tab's memory, keyed to their verified owner.
 const interrupted = new Map<string, {rows:Map<string,string>;revision:number}>()
+export const hasInterruptedEdits = () => interrupted.size > 0
 const notify = () => listeners.forEach(fn => fn())
 export const subscribeWorkspace = (fn: () => void) => { listeners.add(fn); return () => {listeners.delete(fn)} }
 export const workspaceStatus = () => ({owner, dirty:change !== saved, saving:Boolean(saving), error:message})

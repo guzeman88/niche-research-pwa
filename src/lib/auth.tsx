@@ -3,7 +3,7 @@ import type {ReactNode} from 'react'
 import {Navigate, useLocation} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {accountRequest, AccountError} from './accountApi'
-import {activateWorkspace, clearAccountWorkspace, flushAccountWorkspace, subscribeWorkspace, workspaceStatus} from './accountWorkspace'
+import {activateWorkspace, clearAccountWorkspace, flushAccountWorkspace, hasInterruptedEdits, subscribeWorkspace, workspaceStatus} from './accountWorkspace'
 import {clearConnection} from './operatorConnection'
 
 export interface Profile {id:string; display_name:string; business_name:string; timezone:string; currency:string; role:'admin'|'member'; created_at:string}
@@ -37,7 +37,12 @@ export function AuthProvider({children}:{children:ReactNode}) {
       setError(error instanceof Error ? error.message : 'Unable to load your account.')
     } finally {setLoading(false)}
   },[clear,client])
-  const logout = async (all=false) => {await flushAccountWorkspace(); await accountRequest('/logout',{all}); clear(); const channel=new BroadcastChannel('etgen-account');channel.postMessage('logout');channel.close()}
+  const logout = async (all=false) => {
+    // Saving problems must not prevent a user from revoking their session.
+    await flushAccountWorkspace().catch(()=>{})
+    await accountRequest('/logout',{all}); clear()
+    const channel=new BroadcastChannel('etgen-account');channel.postMessage('logout');channel.close()
+  }
   useEffect(()=>{clearConnection();void refresh();const timer=setInterval(()=>void refresh(),60000);return()=>clearInterval(timer)},[refresh])
   useEffect(()=>{
     const channel=new BroadcastChannel('etgen-account');channel.onmessage=()=>{clear();void refresh()}
@@ -47,7 +52,7 @@ export function AuthProvider({children}:{children:ReactNode}) {
   useEffect(()=>{
     let timer:ReturnType<typeof setTimeout>
     const unsubscribe=subscribeWorkspace(()=>{clearTimeout(timer);const state=workspaceStatus();if(state.dirty&&!state.saving&&!state.error)timer=setTimeout(()=>void flushAccountWorkspace().catch(()=>{}),750)})
-    const unload=(e:BeforeUnloadEvent)=>{if(workspaceStatus().dirty){e.preventDefault();e.returnValue=''}}
+    const unload=(e:BeforeUnloadEvent)=>{if(workspaceStatus().dirty || hasInterruptedEdits()){e.preventDefault();e.returnValue=''}}
     window.addEventListener('beforeunload',unload)
     return()=>{clearTimeout(timer);unsubscribe();window.removeEventListener('beforeunload',unload)}
   },[])
