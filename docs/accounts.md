@@ -6,8 +6,8 @@ opaque HttpOnly cookies, encryption, idle expiry and immediate revocation.
 
 Required function runtime variables are `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_COOKIE_SECRET` (32 random bytes in base64), and
-`APP_ORIGIN` (exact HTTPS origin). `ACCOUNT_EMAIL_READY=1` enables signup/recovery
-only after custom SMTP and the confirmation templates are tested. An optional
+`APP_ORIGIN` (exact HTTPS origin). `ACCOUNT_EMAIL_READY=1` enables email flows
+with tested custom SMTP or the restricted free personal mode described below. An optional
 `PRIVATE_BACKEND_URL` enables administrator research operations. Never expose
 service keys through Vite variables.
 
@@ -32,3 +32,17 @@ an explicit import. Desktop local pipeline files have a separate lifecycle.
 Live tests create isolated synthetic users, send no email, and clean up only the
 exact users/invitations they created. They use private `.env.local` configuration;
 do not run them against arbitrary customer accounts.
+# Free personal email authentication
+
+The account function supports Supabase's default test sender with
+`ACCOUNT_EMAIL_MODE=team-only`, `ACCOUNT_EMAIL_ALLOWED_RECIPIENTS` containing only
+verified Supabase organization members, and `ACCOUNT_EMAIL_READY=1`. The sender is
+limited to two emails/hour and is not a customer-registration service.
+
+`/signin?mode=email` provides passwordless email links. Standard provider callbacks
+use PKCE with an encrypted HttpOnly browser cookie and server-side token exchange.
+The user must open the latest link in the same browser within one hour. Existing
+custom-template token-hash callbacks and password sign-in remain supported.
+
+Tests cover recipient restrictions, missing/expired/cross-origin verifier cookies,
+PKCE mismatch/replay, recovery intent, account mismatch, MFA, and server-only tokens.

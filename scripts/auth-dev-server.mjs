@@ -14,6 +14,8 @@ createServer(async (req,res) => {
     for await (const chunk of req) {bytes+=chunk.length;if(bytes>5*1024*1024){res.writeHead(413);res.end();return}chunks.push(chunk)}
     const request=new Request(`http://127.0.0.1:8890${req.url}`,{method:req.method,headers:req.headers,body:['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks)});
     const result=await handler(request,{ip:req.socket.remoteAddress});
-    res.writeHead(result.status,Object.fromEntries(result.headers));res.end(Buffer.from(await result.arrayBuffer()));
+    const headers=Object.fromEntries(result.headers);
+    const cookies=result.headers.getSetCookie();if(cookies.length)headers['set-cookie']=cookies;
+    res.writeHead(result.status,headers);res.end(Buffer.from(await result.arrayBuffer()));
   } catch {res.writeHead(500);res.end('{"error":"Local account service failed."}');}
 }).listen(8890,'127.0.0.1',()=>console.log('Account service listening on 127.0.0.1:8890'));

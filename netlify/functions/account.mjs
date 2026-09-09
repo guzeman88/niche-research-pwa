@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'node:crypto';
+import {createEmailFlow, readEmailFlow, emailFlowCookie, emailRecipientAllowed, authEmailRequest} from './lib/account-email.mjs';
 import { ValidationError, hash, seal, unseal, trustedMutation, validatePassword, validateProfile, validateWorkspace, sessionCookie, readSessionCookie } from './lib/account-security.mjs';
 
 const options = {global:{fetch:(input, init = {}) => fetch(input, {...init, signal: init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000)})},auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}};
@@ -12,7 +13,12 @@ const assurance = token => { try { return JSON.parse(Buffer.from(token.split('.'
 export default async function handler(request, context = {}) {
   const origin = process.env.APP_ORIGIN || 'https://etsy-niches.netlify.app';
   const headers = {'Content-Type':'application/json', 'Cache-Control':'private, no-store', 'Pragma':'no-cache', 'Vary':'Cookie', 'X-Content-Type-Options':'nosniff'};
-  const response = (data, status = 200) => new Response(JSON.stringify(data), {status, headers});
+  const extraCookies = [];
+  const response = (data, status = 200) => {
+    const combined = new Headers(headers);
+    for (const cookie of extraCookies) combined.append('Set-Cookie', cookie);
+    return new Response(JSON.stringify(data), {status, headers:combined});
+  };
   try {
     const url = new URL(request.url);
     const route = url.pathname.replace(/^\/(?:api\/account|\.netlify\/functions\/account)/, '') || '/session';
@@ -47,7 +53,7 @@ export default async function handler(request, context = {}) {
       await audit(user.id, recovery ? 'recovery_started' : 'signed_in');
       return {user:{id:user.id,email:user.email}, mfa_required:verifiedFactors(user).length > 0 && assurance(tokens.access_token) !== 'aal2', recovery};
     }
-    if (request.method === 'POST' && ['/login','/signup','/recover'].includes(route)) {
+    if (request.method === 'POST' && ['/login','/signup','/recover','/email'].includes(route)) {
       const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new Failure(400, 'Enter a valid email address.');
       await limit(`${route}:${email}`, route === '/recover' ? 5 : 10, route === '/recover' ? 3600 : 900);
@@ -58,6 +64,26 @@ export default async function handler(request, context = {}) {
       }
       const message = 'If this email has access, you will receive an email with the next steps.';
       if (process.env.ACCOUNT_EMAIL_READY !== '1') throw new Failure(503,'Account email delivery is being configured. Please contact the administrator before registering or resetting a password.');
+      if (!emailRecipientAllowed(email)) return response({message});
+      if (process.env.ACCOUNT_EMAIL_MODE === 'team-only' || route === '/email') {
+        if (route === '/signup') validatePassword(body.password);
+        let invited = false;
+        if (route !== '/recover') {
+          const invite = check(await service.from('app_invites').select('email').eq('email',email).gt('expires_at',new Date().toISOString()).maybeSingle());
+          invited = Boolean(invite);
+          if (route === '/signup' && !invited) return response({message});
+        }
+        const flow = createEmailFlow(email, route.slice(1), secret, origin);
+        const path = route === '/email' ? 'otp' : route.slice(1);
+        const sent = await authEmailRequest(supabaseUrl, anonKey, `${path}?redirect_to=${encodeURIComponent(`${origin}/auth/confirm`)}`, {
+          email, ...(route === '/signup' ? {password:body.password} : {}),
+          ...(route === '/email' ? {create_user:invited} : {}),
+          code_challenge:flow.challenge, code_challenge_method:'s256',
+        });
+        if (!sent.ok) throw new Failure(sent.status === 429 ? 429 : 503, sent.status === 429 ? 'The free email allowance has been reached. Please wait an hour before requesting another link.' : 'Unable to send the email right now. Please try again later.');
+        extraCookies.push(flow.cookie);
+        return response({message:message + ' Open the latest link in this browser. Delivery may take a few minutes.'});
+      }
       if (route === '/recover') {
         const sent = await auth.auth.resetPasswordForEmail(email, {redirectTo:`${origin}/auth/confirm`});
         if (sent.error && sent.error.status >= 500) throw new Failure(503, 'Email delivery is unavailable. Please try again later.');
@@ -73,6 +99,17 @@ export default async function handler(request, context = {}) {
       return response({message});
     }
     if (route === '/confirm' && request.method === 'POST') {
+      if (body.code !== undefined && body.code !== null) {
+        if (typeof body.code !== 'string' || !body.code || body.code.length > 512) throw new Failure(400, 'Invalid verification link.');
+        const flow = readEmailFlow(request, secret, origin);
+        const result = await authEmailRequest(supabaseUrl, anonKey, 'token?grant_type=pkce', {auth_code:body.code, code_verifier:flow.verifier});
+        if (!result.ok || !result.data.access_token || !result.data.refresh_token) throw new Failure(400, 'This link has expired or has already been used. Request a new email.');
+        const confirmed = check(await auth.auth.getUser(result.data.access_token)).user;
+        if (confirmed.email?.toLowerCase() !== flow.email) throw new Failure(403, 'This link belongs to a different sign-in request.');
+        const session = await startSession(result.data, flow.intent === 'recover');
+        extraCookies.push(emailFlowCookie('', origin, true));
+        return response(session);
+      }
       if (!['signup','invite','recovery','email_change'].includes(body.type) || typeof body.token_hash !== 'string' || body.token_hash.length > 512) throw new Failure(400, 'Invalid verification link.');
       const result = await auth.auth.verifyOtp({token_hash:body.token_hash,type:body.type});
       if (result.error || !result.data.session) throw new Failure(400, 'This link has expired or has already been used. Request a new email.');
