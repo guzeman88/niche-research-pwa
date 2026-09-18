@@ -62,23 +62,23 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 gap-2.5 sm:flex sm:overflow-x-auto sm:pb-1 sm:-mx-1 sm:px-1 sm:scrollbar-none">
         <Chip val={fmt(stats?.total_seeds)} label="Keywords" sub={stats?.total_seeds ? (isUserMode ? 'user scan rows' : `${stats.total_seeds} seeds`) : 'No data'} color="indigo" />
-        <Chip val={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} label="Avg Opp" sub={topOpportunity ? 'real keywords' : 'No data'} color="emerald" />
+        <Chip val={stats?.avg_opportunity != null ? `${stats.avg_opportunity}` : 'TBD'} label="Avg Opp" sub={topOpportunity ? 'verified ranking' : 'Awaiting evidence'} color="emerald" />
         <Chip val={fmt(stats?.breakout_count)} label="Breakouts" sub={isUserMode ? 'from imports' : 'rising fast'} color="amber" />
-        <Chip val={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} label="Avg Gap" sub={topGap?.keyword ? 'top gap available' : 'no gap data'} color="violet" />
+        <Chip val={stats?.avg_gap_score != null ? `${stats.avg_gap_score}` : 'TBD'} label="Avg Gap" sub={topGap?.keyword ? 'verified gap' : 'Awaiting evidence'} color="violet" />
       </div>
 
       {!isUserMode && stats?.evidence_backed != null && (
         <p className="text-sm text-surface-200" role="status">
           {fmt(stats.evidence_backed)} keywords have market evidence. {fmt(stats.successful)} returned source signals;
           {' '}{fmt(stats.no_data)} returned no data; {fmt(stats.failed)} failed; {fmt(stats.stale)} are over 30 days old.
-          {stats.evidence_backed === 0 && ' Gap rankings are research leads, not validated profitability.'}
+          {stats.evidence_backed === 0 && ' Rankings remain TBD until verified inputs and a versioned model are available.'}
         </p>
       )}
       <div className="grid grid-cols-2 gap-2.5">
-        <MetricCard icon="database" label="Attempted coverage" value={stats?.coverage_pct == null ? '-' : `${stats.coverage_pct}%`} sub={`${fmt(stats?.scanned)} of ${fmt(stats?.total_seeds)} attempted`} color="indigo" />
-        <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity ? `${stats.avg_opportunity}` : '-'} sub={topOpportunity ? `Top: ${topOpportunity.title} ${formatScore(topOpportunity.opportunityScore)}` : 'No data yet'} color="emerald" />
+        <MetricCard icon="database" label="Attempted coverage" value={stats?.coverage_pct == null ? 'TBD' : `${stats.coverage_pct}%`} sub={`${fmt(stats?.scanned)} of ${fmt(stats?.total_seeds)} attempted`} color="indigo" />
+        <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity != null ? `${stats.avg_opportunity}` : 'TBD'} sub={topOpportunity ? `Top: ${topOpportunity.title} ${formatScore(topOpportunity.opportunityScore)}` : 'Awaiting verified score'} color="emerald" />
         <MetricCard icon="zap" label="Total Scans" value={fmt(stats?.total_scans)} sub="lifetime DB total" color="amber" />
-        <MetricCard icon="activity" label="Avg Gap Score" value={stats?.avg_gap_score ? `${stats.avg_gap_score}` : '-'} sub={topGap?.keyword ? `Top: ${topGap.keyword} ${formatScore(topGap.gap_score)}` : 'No gap data yet'} color="violet" />
+        <MetricCard icon="activity" label="Avg Gap Score" value={stats?.avg_gap_score != null ? `${stats.avg_gap_score}` : 'TBD'} sub={topGap?.keyword ? `Top: ${topGap.keyword} ${formatScore(topGap.gap_score)}` : 'Awaiting verified score'} color="violet" />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
@@ -106,7 +106,7 @@ export default function Dashboard() {
               </div>
             </div>
           )) : (
-            <div className="px-4 py-10 text-center text-sm text-surface-300">No opportunity data yet.</div>
+            <div className="px-4 py-10 text-center text-sm text-surface-300">Opportunity rankings are TBD until verified evidence is available.</div>
           )}
         </div>
       </Section>
@@ -218,5 +218,5 @@ function firstScore(...values: unknown[]): number | null {
 }
 
 function formatScore(value: number | null | undefined): string {
-  return Number.isFinite(value) ? Number(value).toFixed(1) : '-'
+  return Number.isFinite(value) ? Number(value).toFixed(1) : 'TBD'
 }

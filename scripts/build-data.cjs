@@ -10,7 +10,6 @@ let API = process.env.VITE_API_URL || '';
 const OUT = process.env.SNAPSHOT_OUTPUT_DIR || path.join(__dirname, '..', 'public', 'data');
 const FALLBACK = path.join(__dirname, '..', 'backend', 'seed_data', 'static');
 const MIN_KEYWORD_SNAPSHOT_COUNT = Number(process.env.MIN_KEYWORD_SNAPSHOT_COUNT || 13000);
-const MIN_SCORED_KEYWORD_COUNT = Number(process.env.MIN_SCORED_KEYWORD_COUNT || 1000);
 
 loadEnvFiles([
   path.join(__dirname, '..', '.env.local'),
@@ -134,8 +133,8 @@ async function supabaseStats() {
     domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
   }
   const topGapRows = await supabaseRows(
-    'keyword_gap_scores',
-    { select: 'keyword,gap_score', order: 'gap_score.desc.nullslast' },
+    'keyword_gap_reports',
+    { select: 'keyword,composite_gap_score', evidence_status: 'eq.verified', score_version: 'not.is.null', order: 'composite_gap_score.desc.nullslast' },
     1,
     1,
   );
@@ -145,14 +144,14 @@ async function supabaseStats() {
     scanned: numeric(stats.scanned, 0),
     unscanned: numeric(stats.unscanned, 0),
     total_scans: numeric(stats.total_scans, 0),
-    coverage_pct: numeric(stats.coverage_pct, 0),
-    avg_opportunity: numeric(stats.avg_opportunity, 0),
-    avg_gap_score: numeric(stats.avg_gap_score, 0),
+    coverage_pct: numeric(stats.coverage_pct),
+    avg_opportunity: numeric(stats.avg_opportunity),
+    avg_gap_score: numeric(stats.avg_gap_score),
     breakout_count: numeric(stats.breakout_count, 0),
     expansion_edges: numeric(stats.expansion_edges, 0),
     top_gap_keyword: topGapRows[0] ? {
       keyword: topGapRows[0].keyword,
-      gap_score: numeric(topGapRows[0].gap_score, 0),
+      gap_score: numeric(topGapRows[0].composite_gap_score),
     } : null,
     domains: Array.from(domainCounts.entries())
       .map(([domain, cnt]) => ({ domain, cnt }))
@@ -161,47 +160,55 @@ async function supabaseStats() {
 }
 
 async function supabaseKeywords() {
-  const [seeds, scans, gaps] = await Promise.all([
+  const [seeds, attempts, evidence] = await Promise.all([
     supabaseRows('keyword_seeds', {
       select: 'keyword,domain,source,priority,added_at',
       order: 'keyword.asc',
     }, Infinity, 1000),
-    supabaseRows('keyword_latest_scans', {
-      select: 'keyword,scanned_at,opportunity_score,gap_score,trajectory,profitability_index', order: 'keyword.asc',
+    supabaseRows('keyword_latest_attempts', {
+      select: 'keyword,scanned_at,scan_status,scan_error,evidence_status,evidence_details', order: 'keyword.asc',
     }, Infinity, 1000),
-    supabaseRows('keyword_gap_scores', {
-      select: 'keyword,gap_score,trajectory,breakout_flag', order: 'keyword.asc',
+    supabaseRows('keyword_latest_evidence', {
+      select: 'keyword,scanned_at,opportunity_score,gap_score,trajectory,profitability_index,evidence_status,score_version,evidence_details,observed_search_volume,listing_count,sampled_listing_count,avg_price_usd', order: 'keyword.asc',
     }, Infinity, 1000),
   ]);
-  const scanByKeyword = byKeyword(scans);
-  const gapByKeyword = byKeyword(gaps);
+  const attemptByKeyword = byKeyword(attempts);
+  const evidenceByKeyword = byKeyword(evidence);
   return seeds.map((seed) => {
     const key = String(seed.keyword || '').toLowerCase();
-    const scan = scanByKeyword.get(key) || {};
-    const gap = gapByKeyword.get(key) || {};
-    const primaryScore = numeric(scan.profitability_index ?? scan.opportunity_score ?? scan.gap_score ?? gap.gap_score);
+    const attempt = attemptByKeyword.get(key) || {};
+    const scan = evidenceByKeyword.get(key) || {};
+    const primaryScore = scan.score_version ? numeric(scan.profitability_index ?? scan.opportunity_score ?? scan.gap_score) : null;
     return {
       keyword: seed.keyword,
       domain: seed.domain || 'unknown',
       source: seed.source || 'library',
-      priority: numeric(seed.priority, 5),
+      priority: numeric(seed.priority),
       added_at: seed.added_at || '',
-      scanned: Boolean(scan.scanned_at),
-      last_scanned_at: scan.scanned_at || null,
+      scanned: Boolean(attempt.scanned_at),
+      last_scanned_at: attempt.scanned_at || null,
+      scan_status: attempt.scan_status || null,
+      scan_error: attempt.scan_error || null,
+      evidence_status: attempt.evidence_status || 'unverified',
+      evidence_details_json: attempt.evidence_details ? JSON.stringify(attempt.evidence_details) : null,
+      score_version: scan.score_version || null,
+      observed_search_volume: numeric(scan.observed_search_volume),
+      listing_count: numeric(scan.listing_count),
+      sampled_listing_count: numeric(scan.sampled_listing_count),
+      avg_price_usd: numeric(scan.avg_price_usd),
       primary_score: primaryScore,
       primary_score_source: scan.profitability_index != null ? 'profitability_index'
         : scan.opportunity_score != null ? 'opportunity_score'
-        : scan.gap_score != null || gap.gap_score != null ? 'gap_score'
+        : scan.gap_score != null ? 'gap_score'
         : null,
       opportunity_score: numeric(scan.opportunity_score),
-      gap_score: numeric(gap.gap_score ?? scan.gap_score),
-      trajectory: gap.trajectory || scan.trajectory || null,
-      breakout: boolish(gap.breakout_flag),
+      gap_score: numeric(scan.gap_score),
+      trajectory: scan.score_version ? (scan.trajectory || null) : null,
+      breakout: false,
     };
   }).sort((a, b) => {
     if (a.scanned !== b.scanned) return a.scanned ? 1 : -1;
-    return numeric(b.gap_score, 0) - numeric(a.gap_score, 0)
-      || String(b.last_scanned_at || '').localeCompare(String(a.last_scanned_at || ''));
+    return String(b.last_scanned_at || '').localeCompare(String(a.last_scanned_at || ''));
   });
 }
 
@@ -233,40 +240,37 @@ async function supabaseGaps(limit = 500) {
     if (!latest.has(row.keyword)) latest.set(row.keyword, row);
   }
   return Array.from(latest.values())
-    .filter((row) => numeric(row.composite_gap_score, 0) >= 0)
-    .sort((a, b) => numeric(b.composite_gap_score, 0) - numeric(a.composite_gap_score, 0))
+    .filter((row) => row.evidence_status === 'verified' && row.score_version && numeric(row.composite_gap_score) != null)
+    .sort((a, b) => numeric(b.composite_gap_score) - numeric(a.composite_gap_score))
     .slice(0, limit)
     .map((row) => ({
       id: row.source_gap_report_id,
       keyword: row.keyword,
       analyzed_at: row.analyzed_at,
-      volume_gap_score: numeric(row.volume_gap_score, 0),
-      quality_gap_score: numeric(row.quality_gap_score, 0),
-      tag_gap_score: numeric(row.tag_gap_score, 0),
-      style_gap_score: numeric(row.style_gap_score, 0),
-      price_gap_score: numeric(row.price_gap_score, 0),
-      recency_gap_score: numeric(row.recency_gap_score, 0),
-      buyer_intent_score: numeric(row.buyer_intent_score, 0),
-      profit_gap_score: numeric(row.profit_gap_score, 0),
-      composite_gap_score: numeric(row.composite_gap_score, 0),
+      volume_gap_score: numeric(row.volume_gap_score),
+      quality_gap_score: numeric(row.quality_gap_score),
+      tag_gap_score: numeric(row.tag_gap_score),
+      style_gap_score: numeric(row.style_gap_score),
+      price_gap_score: numeric(row.price_gap_score),
+      recency_gap_score: numeric(row.recency_gap_score),
+      buyer_intent_score: numeric(row.buyer_intent_score),
+      profit_gap_score: numeric(row.profit_gap_score),
+      composite_gap_score: numeric(row.composite_gap_score),
       entry_angle: row.entry_angle || '',
-      recommended_price_min: numeric(row.recommended_price_min, 0),
-      recommended_price_max: numeric(row.recommended_price_max, 0),
+      recommended_price_min: numeric(row.recommended_price_min),
+      recommended_price_max: numeric(row.recommended_price_max),
       untagged_searches_json: row.untagged_searches || [],
       dominant_competitor_tags_json: row.dominant_competitor_tags || [],
       recommended_tags_json: row.recommended_tags || [],
       listings_analyzed: numeric(row.listings_analyzed, 0),
-      avg_listing_age_months: numeric(row.avg_listing_age_months, 0),
+      avg_listing_age_months: numeric(row.avg_listing_age_months),
+      evidence_status: row.evidence_status,
+      score_version: row.score_version,
     }));
 }
 
 async function supabaseBreakouts(limit = 100) {
-  const rows = await supabaseRows('keyword_gap_scores', {
-    select: 'keyword,breakout_flag,gap_score',
-    breakout_flag: 'eq.true',
-    order: 'gap_score.desc.nullslast',
-  }, limit, 1000);
-  return rows.map((row) => ({ keyword: row.keyword, breakout: true }));
+  return [];
 }
 
 async function supabaseReports(limit = 50) {
@@ -278,10 +282,10 @@ async function supabaseReports(limit = 50) {
     opportunity_score: numeric(row.opportunity_score),
     primary_score: numeric(row.primary_score),
     primary_score_source: row.primary_score_source,
-    demand_score: numeric(row.demand_score, 0),
-    competition_score: numeric(row.competition_score, 0),
-    margin_score: numeric(row.margin_score, 0),
-    trend_velocity_score: numeric(row.trend_score, 0),
+    demand_score: numeric(row.demand_score),
+    competition_score: numeric(row.competition_score),
+    margin_score: numeric(row.margin_score),
+    trend_velocity_score: numeric(row.trend_score),
     generated_at: row.scanned_at || '',
     sources_used: [],
   }));
@@ -321,7 +325,11 @@ function generateStoreIdeas(rows, limit = 12) {
   if (process.env.REQUIRE_SUPABASE === '1' && !hasSupabaseSource()) {
     throw new Error('This release requires Supabase build credentials.');
   }
-  const source = hasSupabaseSource() ? 'supabase' : API ? 'api' : 'bundled';
+  const requestedSource = process.env.SNAPSHOT_SOURCE || '';
+  if (requestedSource && !['supabase', 'api', 'bundled'].includes(requestedSource)) {
+    throw new Error(`Unsupported SNAPSHOT_SOURCE: ${requestedSource}`);
+  }
+  const source = requestedSource || (hasSupabaseSource() ? 'supabase' : API ? 'api' : 'bundled');
   const snapshots = {};
   for (const [filename, endpoint] of endpoints) {
     // Never combine new and fallback snapshots in one release.

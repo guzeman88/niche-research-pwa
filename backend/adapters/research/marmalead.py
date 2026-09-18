@@ -53,18 +53,19 @@ class MarmaleadAdapter(BaseResearchAdapter):
     def _parse(keyword: str, data: dict) -> NicheSignal:
         # Marmalead response shape may vary — handle both wrapped and flat
         kw_data = data.get("keyword", data)
-        searches = int(kw_data.get("search_frequency", 0) or 0)
-        comp_raw = kw_data.get("competition", 50)
-        comp = float(comp_raw) if isinstance(comp_raw, (int, float)) else 50.0
-        avg_price = float(kw_data.get("avg_price", 0) or 0)
-        engagement = kw_data.get("engagement", "medium") or "medium"
+        searches = kw_data.get("search_frequency")
+        comp_raw = kw_data.get("competition")
+        comp = float(comp_raw) if isinstance(comp_raw, (int, float)) else None
+        avg_price_raw = kw_data.get("avg_price")
+        avg_price = float(avg_price_raw) if avg_price_raw is not None else None
+        engagement = kw_data.get("engagement")
         trend = {"high": "rising", "medium": "stable", "low": "declining"}.get(
-            str(engagement).lower(), "stable"
+            str(engagement).lower(), None
         )
         return NicheSignal(
             keyword=keyword,
-            monthly_searches=searches,
-            competition_score=min(100.0, comp),
+            monthly_searches=int(searches) if searches is not None else None,
+            competition_score=min(100.0, comp) if comp is not None else None,
             avg_price_usd=avg_price,
             trend_direction=trend,
             source="marmalead",
@@ -72,6 +73,6 @@ class MarmaleadAdapter(BaseResearchAdapter):
 
 
 def _zero_signal(keyword: str) -> NicheSignal:
-    return NicheSignal(keyword=keyword, monthly_searches=0,
-                       competition_score=50.0, avg_price_usd=0.0,
-                       trend_direction="stable", source="marmalead")
+    return NicheSignal(keyword=keyword, monthly_searches=None,
+                       competition_score=None, avg_price_usd=None,
+                       trend_direction=None, source="marmalead")

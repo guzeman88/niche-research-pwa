@@ -36,10 +36,10 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
         for kw in suggestions:
             results.append(NicheSignal(
                 keyword=kw,
-                monthly_searches=0,  # Google Suggest doesn't provide volume
-                competition_score=50.0,
-                avg_price_usd=0.0,
-                trend_direction="stable",
+                monthly_searches=None,
+                competition_score=None,
+                avg_price_usd=None,
+                trend_direction=None,
                 source="google_suggest",
             ))
         return results

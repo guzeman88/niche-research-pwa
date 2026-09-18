@@ -145,10 +145,10 @@ class EtsyOpenAPIAdapter(BaseResearchAdapter):
         return [
             NicheSignal(
                 keyword=keyword,
-                monthly_searches=0,
-                competition_score=competition,
+                monthly_searches=None,
+                competition_score=None,
                 avg_price_usd=round(avg_price, 2),
-                trend_direction="stable",
+                trend_direction=None,
                 source=self.name,
             )
         ]

@@ -38,6 +38,15 @@ def list_keywords(
             gap_score=r.get("gap_score"),
             trajectory=r.get("trajectory"),
             breakout=bool(r.get("breakout_flag")),
+            scan_status=r.get("scan_status"),
+            scan_error=r.get("scan_error"),
+            evidence_status=r.get("evidence_status") or "unverified",
+            score_version=r.get("score_version"),
+            evidence_details_json=r.get("evidence_details_json"),
+            observed_search_volume=r.get("observed_search_volume"),
+            listing_count=r.get("listing_count"),
+            sampled_listing_count=r.get("sampled_listing_count"),
+            avg_price_usd=r.get("avg_price_usd"),
         ))
     return results[:limit]
 

@@ -18,18 +18,18 @@ def _report_id_for_row(row: dict) -> str:
     return f"rpt_{keyword.replace(' ','_')[:30]}_{scan_date[:10] if scan_date else 'unknown'}"
 
 
-def _as_float(value, default: float = 0.0) -> float:
+def _as_float(value) -> float | None:
     try:
-        return float(value) if value is not None else default
+        return float(value) if value is not None else None
     except (TypeError, ValueError):
-        return default
+        return None
 
 
-def _as_int(value, default: int = 0) -> int:
+def _as_int(value) -> int | None:
     try:
-        return int(value) if value is not None else default
+        return int(value) if value is not None else None
     except (TypeError, ValueError):
-        return default
+        return None
 
 
 def _json_list(value) -> list:
@@ -44,8 +44,8 @@ def _json_list(value) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
-def _price_sweet_spot(avg_price: float) -> str:
-    if avg_price <= 0:
+def _price_sweet_spot(avg_price: float | None) -> str:
+    if avg_price is None or avg_price <= 0:
         return ""
     low = max(1.0, avg_price * 0.8)
     high = avg_price * 1.2
@@ -67,31 +67,31 @@ def _db_report_from_opportunity(row: dict, store_slug: str) -> dict:
         "seed_keywords": [keyword] if keyword else [],
         "keyword_signals": [{
             "keyword": keyword,
-            "monthly_searches": 0,
+            "monthly_searches": row.get("observed_search_volume"),
             "competition_score": _as_float(row.get("competition_score")),
             "avg_price_usd": avg_price,
-            "trend_direction": row.get("trajectory") or "stable",
+            "trend_direction": row.get("trajectory"),
             "source": "keyword_database",
         }],
         "keyword_search_data": [{
             "keyword": keyword,
             "total_listing_count": listing_count,
             "avg_price_usd": avg_price,
-            "price_min": 0,
-            "price_p25": 0,
+            "price_min": row.get("price_min_usd"),
+            "price_p25": row.get("price_p25_usd"),
             "price_median": avg_price,
-            "price_p75": 0,
-            "price_max": 0,
+            "price_p75": row.get("price_p75_usd"),
+            "price_max": row.get("price_max_usd"),
             "price_sweet_spot": price_sweet_spot,
-            "avg_review_count": 0,
-            "pct_star_sellers": 0,
-            "pct_bestsellers": 0,
+            "avg_review_count": None,
+            "pct_star_sellers": row.get("pct_star_sellers"),
+            "pct_bestsellers": row.get("pct_bestsellers"),
             "competition_quality_score": competition_quality,
-            "estimated_market_monthly_revenue_usd": monthly_revenue,
+            "estimated_market_monthly_revenue_usd": None,
             "top_listing_titles": [],
-            "avg_favorites": 0,
-            "max_favorites": 0,
-            "pct_high_favorites": 0,
+            "avg_favorites": row.get("avg_favorites"),
+            "max_favorites": row.get("max_favorites"),
+            "pct_high_favorites": row.get("pct_high_favorites"),
         }],
         "demand_score": _as_float(row.get("demand_score")),
         "competition_score": _as_float(row.get("competition_score")),
@@ -145,11 +145,11 @@ def list_reports(store_slug: str = "__global__", limit: int = 50):
             report_id=_report_id_for_row(o),
             store_slug=store_slug,
             seed_keywords=[kw],
-            opportunity_score=o.get("opportunity_score", 0) or 0,
-            demand_score=o.get("demand_score", 0) or 0,
-            competition_score=o.get("competition_score", 0) or 0,
-            margin_score=o.get("margin_score", 0) or 0,
-            trend_velocity_score=o.get("trend_score", 0) or 0,
+            opportunity_score=o.get("opportunity_score"),
+            demand_score=o.get("demand_score"),
+            competition_score=o.get("competition_score"),
+            margin_score=o.get("margin_score"),
+            trend_velocity_score=o.get("trend_score"),
             generated_at=scan_date,
             sources_used=[],
         ))

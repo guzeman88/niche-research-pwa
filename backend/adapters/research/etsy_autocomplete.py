@@ -54,8 +54,7 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
         results: list[NicheSignal] = []
         for kw in suggestions[:10]:
             count = self._get_listing_count(kw)
-            if count > 0:
-                results.append(self._build_signal(kw, count))
+            results.append(self._build_signal(kw, count if count > 0 else None))
             time.sleep(self._delay)
         return results
 
@@ -115,24 +114,19 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
         return 0
 
     @staticmethod
-    def _build_signal(keyword: str, listing_count: int) -> NicheSignal:
+    def _build_signal(keyword: str, listing_count: int | None) -> NicheSignal:
         # competition score: log-scale capped at 100
         # <5k listings = low competition; >500k = very high
         import math
-        if listing_count <= 0:
-            comp = 50.0
-        else:
-            comp = min(100.0, math.log10(max(1, listing_count)) / math.log10(500_000) * 100)
-
-        # demand score inversely related to competition (autocomplete proxy)
-        demand_proxy = max(0, 100 - comp * 0.6)
-
-        # trend: no trend data from this source — default stable
+        comp = (
+            min(100.0, math.log10(listing_count) / math.log10(500_000) * 100)
+            if listing_count is not None and listing_count > 0 else None
+        )
         return NicheSignal(
             keyword=keyword,
-            monthly_searches=int(demand_proxy * 100),  # rough proxy
-            competition_score=round(comp, 1),
-            avg_price_usd=0.0,  # not available from autocomplete
-            trend_direction="stable",
+            monthly_searches=None,
+            competition_score=round(comp, 1) if comp is not None else None,
+            avg_price_usd=None,
+            trend_direction=None,
             source="etsy_autocomplete",
         )

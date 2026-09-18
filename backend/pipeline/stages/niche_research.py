@@ -2,9 +2,8 @@
 Stage 0 — Niche Research
 Multi-source Etsy niche intelligence pipeline:
 
-  1. Etsy Search Scraper  — top-20 listing data: real prices, review counts,
-                            Star Seller %, Bestseller %, competition quality score,
-                            revenue estimates (reviews × 20 heuristic)
+  1. Etsy Search Scraper  — sampled listing counts, prices, reviews, favorites,
+                            Star Seller %, and Bestseller %
   2. Etsy Autocomplete    — keyword discovery (no key)
   3. Google Trends        — 90-day trend direction + 5-year seasonality
   4. Reddit               — community sentiment (REDDIT_CLIENT_* gated)
@@ -55,8 +54,8 @@ class KeywordSearchData:
     avg_review_count: float
     pct_star_sellers: float
     pct_bestsellers: float
-    competition_quality_score: float  # 0-100
-    estimated_market_monthly_revenue_usd: float
+    competition_quality_score: float | None
+    estimated_market_monthly_revenue_usd: float | None
     sampled_listing_count: int = 0
     top_listing_titles: list[str] = field(default_factory=list)
     avg_favorites: float = 0.0          # avg favorites across sampled listings
@@ -82,17 +81,17 @@ class NicheReport:
     keyword_search_data: list[dict] = field(default_factory=list)  # KeywordSearchData dicts
 
     # ── Aggregate scores (0–100) ───────────────────────────────────────────────
-    demand_score: float = 0.0
-    competition_score: float = 0.0   # 100 = easy, 0 = saturated
-    margin_score: float = 0.0
-    trend_velocity_score: float = 0.0
-    opportunity_score: float = 0.0   # weighted composite
+    demand_score: float | None = None
+    competition_score: float | None = None
+    margin_score: float | None = None
+    trend_velocity_score: float | None = None
+    opportunity_score: float | None = None
 
     # ── Market-level metrics ───────────────────────────────────────────────────
-    avg_price_usd: float = 0.0
+    avg_price_usd: float | None = None
     price_sweet_spot: str = ""
-    estimated_market_monthly_revenue_usd: float = 0.0
-    avg_competition_quality: float = 0.0  # avg of per-keyword quality scores
+    estimated_market_monthly_revenue_usd: float | None = None
+    avg_competition_quality: float | None = None
 
     # ── Seasonality ───────────────────────────────────────────────────────────
     seasonality: list[dict] = field(default_factory=list)  # SeasonalityPoint dicts
@@ -179,25 +178,21 @@ def run(
     )
     opportunity = _opportunity_score(demand, competition, margin, trend, keyword_search_data)
 
-    _log(
-        f"[niche_research] demand:{demand:.0f} comp:{competition:.0f} "
-        f"margin:{margin:.0f} trend:{trend:.0f} -> opportunity:{opportunity:.0f}"
-    )
+    _log("[niche_research] Aggregate ranking is TBD pending a validated score model")
 
     # ── Step 5: Market-level metrics from scraper ─────────────────────────────
-    avg_price = 0.0
+    avg_price: float | None = None
     price_sweet = ""
-    market_revenue = 0.0
-    avg_comp_quality = 0.0
+    market_revenue: float | None = None
+    avg_comp_quality: float | None = None
     if keyword_search_data:
-        avg_price = sum(k.avg_price_usd for k in keyword_search_data if k.avg_price_usd) / max(
-            sum(1 for k in keyword_search_data if k.avg_price_usd), 1
-        )
+        observed_prices = [k.avg_price_usd for k in keyword_search_data if k.avg_price_usd > 0]
+        avg_price = sum(observed_prices) / len(observed_prices) if observed_prices else None
         # Use the keyword with most data for sweet spot
         best = max(keyword_search_data, key=lambda k: k.total_listing_count, default=None)
         price_sweet = best.price_sweet_spot if best else ""
-        market_revenue = sum(k.estimated_market_monthly_revenue_usd for k in keyword_search_data)
-        avg_comp_quality = sum(k.competition_quality_score for k in keyword_search_data) / len(keyword_search_data)
+        # Historical revenue and competition-quality fields are heuristic, not
+        # observations. Keep them out of the report-level evidence contract.
 
     # ── Step 6: LLM synthesis ─────────────────────────────────────────────────
     if allow_llm_synthesis:
@@ -220,10 +215,10 @@ def run(
         margin_score=margin,
         trend_velocity_score=trend,
         opportunity_score=opportunity,
-        avg_price_usd=round(avg_price, 2),
+        avg_price_usd=round(avg_price, 2) if avg_price is not None else None,
         price_sweet_spot=price_sweet,
-        estimated_market_monthly_revenue_usd=round(market_revenue, 2),
-        avg_competition_quality=round(avg_comp_quality, 1),
+        estimated_market_monthly_revenue_usd=None,
+        avg_competition_quality=None,
         seasonality=[asdict(s) for s in seasonality],
         peak_months=peak_months,
         keyword_clusters=synthesis.get("keyword_clusters", []),
@@ -294,8 +289,8 @@ def _run_scraper(
                 avg_review_count=sr.avg_review_count,
                 pct_star_sellers=sr.pct_star_sellers,
                 pct_bestsellers=sr.pct_bestsellers,
-                competition_quality_score=sr.competition_quality_score,
-                estimated_market_monthly_revenue_usd=sr.estimated_total_monthly_revenue_usd,
+                competition_quality_score=None,
+                estimated_market_monthly_revenue_usd=None,
                 sampled_listing_count=len(sr.listings),
                 top_listing_titles=[l.title for l in sr.listings[:5] if l.title],
                 avg_favorites=sr.avg_favorites,
@@ -306,9 +301,7 @@ def _run_scraper(
             log_fn(
                 f"[niche_research] '{kw}': {sr.total_listing_count:,} listings  "
                 f"{len(sr.listings)} sampled  avg ${pd.mean:.2f}  sweet spot {pd.sweet_spot}  "
-                f"avg favs {sr.avg_favorites:.0f}  "
-                f"comp quality {sr.competition_quality_score:.0f}/100  "
-                f"est. market revenue ${sr.estimated_total_monthly_revenue_usd:,.0f}/mo"
+                f"avg favs {sr.avg_favorites:.0f}"
             )
         except Exception as exc:
             log_fn(f"[niche_research] scraper error '{kw}': {exc}")
@@ -360,8 +353,8 @@ def _run_etsy_open_api_search(
                 avg_review_count=sr.avg_review_count,
                 pct_star_sellers=sr.pct_star_sellers,
                 pct_bestsellers=sr.pct_bestsellers,
-                competition_quality_score=sr.competition_quality_score,
-                estimated_market_monthly_revenue_usd=sr.estimated_total_monthly_revenue_usd,
+                competition_quality_score=None,
+                estimated_market_monthly_revenue_usd=None,
                 sampled_listing_count=len(sr.listings),
                 top_listing_titles=[l.title for l in sr.listings[:5] if l.title],
                 avg_favorites=sr.avg_favorites,
@@ -372,7 +365,7 @@ def _run_etsy_open_api_search(
             log_fn(
                 f"[niche_research] '{kw}': Etsy API {sr.total_listing_count:,} listings  "
                 f"{len(sr.listings)} sampled  avg ${pd.mean:.2f}  sweet spot {pd.sweet_spot}  "
-                f"avg favs {sr.avg_favorites:.0f}  comp quality {sr.competition_quality_score:.0f}/100"
+                f"avg favs {sr.avg_favorites:.0f}"
             )
     finally:
         client.close()
@@ -484,88 +477,14 @@ def _build_adapters(
 def _aggregate_scores(
     signals: list[NicheSignal],
     scrape_data: list[KeywordSearchData],
-) -> tuple[float, float, float, float]:
-    """Returns (demand, competition, margin, trend) 0–100."""
-    import math
-
-    # ── Demand ────────────────────────────────────────────────────────────────
-    searches = [s.monthly_searches for s in signals if s.monthly_searches > 0]
-    if searches:
-        mx = max(searches)
-        demand = min(100.0, sum(searches) / len(searches) / max(mx, 1) * 100)
-    else:
-        demand = 30.0
-
-    # Favorites-based demand boost: favorites = explicit save-for-later = buyer intent.
-    # Log scale: avg 50 favs → +5, avg 500 → +13, avg 5000 → +20 (hard cap).
-    # This is the single closest proxy to eRank's "engagement" metric without an API key.
-    if scrape_data:
-        fav_scores = [k.avg_favorites for k in scrape_data if k.avg_favorites > 0]
-        if fav_scores:
-            avg_fav = sum(fav_scores) / len(fav_scores)
-            fav_boost = min(20.0, math.log10(max(1.0, avg_fav)) / math.log10(5000) * 20)
-            demand = min(100.0, demand + fav_boost)
-
-    # ── Competition ───────────────────────────────────────────────────────────
-    # Use scraper's quality score (more accurate) if available; fall back to signal data
-    if scrape_data:
-        avg_quality = sum(k.competition_quality_score for k in scrape_data) / len(scrape_data)
-        competition = round(avg_quality, 1)   # 0=easy, 100=saturated
-    else:
-        # Use autocomplete competition scores (based on real Etsy listing counts)
-        comp_vals = [s.competition_score for s in signals if s.competition_score > 0]
-        if comp_vals:
-            # Weighted: lower-listing-count keywords = less competition (lower score)
-            competition = sum(comp_vals) / len(comp_vals)
-        else:
-            competition = 50.0
-
-    # ── Margin ────────────────────────────────────────────────────────────────
-    # Use real scraped prices if available; estimate from competition if not
-    if scrape_data:
-        prices = [k.avg_price_usd for k in scrape_data if k.avg_price_usd > 0]
-    else:
-        prices = [s.avg_price_usd for s in signals if s.avg_price_usd > 0]
-
-    if prices:
-        avg_price = sum(prices) / len(prices)
-        if avg_price >= 60:
-            margin = 90.0
-        elif avg_price >= 30:
-            margin = 70.0 + (avg_price - 30) / 30 * 20
-        elif avg_price >= 10:
-            margin = 40.0 + (avg_price - 10) / 20 * 30
-        else:
-            margin = 20.0 + avg_price / 10 * 20
-    else:
-        # Estimate margin from competition: lower competition = better margin potential
-        # Range: 25 (high comp) to 75 (low comp)
-        margin = round(75.0 - competition * 0.5, 1)
-
-    # ── Trend ─────────────────────────────────────────────────────────────────
-    trend_map = {"rising": 85.0, "stable": 50.0, "declining": 20.0}
-    trend_vals = [trend_map.get(s.trend_direction, 50.0) for s in signals]
-    trend = sum(trend_vals) / len(trend_vals) if trend_vals else 50.0
-
-    return round(demand, 1), round(competition, 1), round(margin, 1), round(trend, 1)
+) -> tuple[None, None, None, None]:
+    """Scores stay unknown until a versioned model is calibrated on outcomes."""
+    return None, None, None, None
 
 
-def _opportunity_score(demand: float, competition: float, margin: float, trend: float,
-                       scrape_data: list | None = None) -> float:
-    """
-    demand×0.30 + (100-competition)×0.30 + margin×0.20 + trend×0.20
-
-    Gap bonus (+5): Google Trends rising AND Etsy listing count still low (<50k).
-    This is the textbook breakout signal: consumer interest outpacing seller supply.
-    """
-    base = demand * 0.30 + (100 - competition) * 0.30 + margin * 0.20 + trend * 0.20
-    # Cross-signal gap bonus: trending + undersupplied
-    if scrape_data and trend >= 70:
-        avg_listings = sum(k.total_listing_count for k in scrape_data if k.total_listing_count > 0)
-        n = sum(1 for k in scrape_data if k.total_listing_count > 0)
-        if n > 0 and (avg_listings / n) < 50_000:
-            base = min(100.0, base + 5.0)
-    return round(base, 1)
+def _opportunity_score(*_args, **_kwargs) -> None:
+    """No ranking is emitted without a validated, versioned model."""
+    return None
 
 
 # ── LLM synthesis ─────────────────────────────────────────────────────────────
@@ -580,7 +499,7 @@ def _llm_synthesis(
 ) -> dict:
     try:
         # Keep prompt compact — large prompts time out on CPU inference
-        top_signals = sorted(signals, key=lambda s: s.monthly_searches, reverse=True)[:8]
+        top_signals = sorted(signals, key=lambda s: s.monthly_searches or -1, reverse=True)[:8]
         signals_summary = [
             {"kw": s.keyword, "searches": s.monthly_searches,
              "comp": s.competition_score, "price": s.avg_price_usd, "trend": s.trend_direction}
@@ -590,8 +509,6 @@ def _llm_synthesis(
         scrape_summary = [
             {"kw": k.keyword, "listings": k.total_listing_count,
              "sweet_spot": k.price_sweet_spot, "avg_price": k.avg_price_usd,
-             "comp_quality": k.competition_quality_score,
-             "rev_mo": k.estimated_market_monthly_revenue_usd,
              "titles": k.top_listing_titles[:2]}
             for k in scrape_data[:4]
         ]
@@ -653,7 +570,7 @@ def _fallback_synthesis() -> dict:
         "keyword_clusters": [],
         "underserved_angles": [],
         "winning_styles": [],
-        "recommended_product_types": ["digital_download", "wall_art"],
+        "recommended_product_types": [],
         "competitor_gaps": [],
         "pricing_insights": "",
         "entry_strategy": "",

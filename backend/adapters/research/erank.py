@@ -51,21 +51,21 @@ class ERankAdapter(BaseResearchAdapter):
 
     @staticmethod
     def _parse(keyword: str, data: dict) -> NicheSignal:
-        searches = data.get("monthly_searches", 0) or 0
-        comp = float(data.get("competition", 50) or 50)
-        avg_price = float(data.get("avg_price", 0) or 0)
-        trend = data.get("trend", "stable") or "stable"
+        searches = data.get("monthly_searches")
+        comp = data.get("competition")
+        avg_price = data.get("avg_price")
+        trend = data.get("trend")
         return NicheSignal(
             keyword=keyword,
-            monthly_searches=int(searches),
-            competition_score=min(100.0, comp),
-            avg_price_usd=avg_price,
-            trend_direction=trend if trend in ("rising", "stable", "declining") else "stable",
+            monthly_searches=int(searches) if searches is not None else None,
+            competition_score=min(100.0, float(comp)) if comp is not None else None,
+            avg_price_usd=float(avg_price) if avg_price is not None else None,
+            trend_direction=trend if trend in ("rising", "stable", "declining") else None,
             source="erank",
         )
 
 
 def _zero_signal(keyword: str) -> NicheSignal:
-    return NicheSignal(keyword=keyword, monthly_searches=0,
-                       competition_score=50.0, avg_price_usd=0.0,
-                       trend_direction="stable", source="erank")
+    return NicheSignal(keyword=keyword, monthly_searches=None,
+                       competition_score=None, avg_price_usd=None,
+                       trend_direction=None, source="erank")

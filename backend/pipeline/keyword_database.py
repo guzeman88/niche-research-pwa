@@ -36,7 +36,9 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
+SCORE_VERSION = "evidence-v1"
+MIN_LISTING_SAMPLE = 5
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -305,6 +307,9 @@ def init_db() -> None:
                 WHEN COALESCE(sources_used,'[]') NOT IN ('[]','', 'null') THEN 'signals'
                 ELSE 'no_data' END""")
             _set_version(con, 9)
+        if version < 10:
+            _migrate_v10(con)
+            _set_version(con, 10)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
 
@@ -340,6 +345,135 @@ def _migrate_v8(con: sqlite3.Connection) -> None:
     """)
 
 
+def _migrate_v10(con: sqlite3.Connection) -> None:
+    """Add evidence provenance and remove legacy, unverified rankings."""
+    for col, typedef in [
+        ("score_version", "TEXT"),
+        ("evidence_status", "TEXT NOT NULL DEFAULT 'unverified'"),
+        ("evidence_details_json", "TEXT"),
+        ("observed_search_volume", "REAL"),
+        ("sampled_listing_count", "INTEGER"),
+    ]:
+        try:
+            con.execute(f"ALTER TABLE scans ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass
+
+    for col, typedef in [
+        ("score_version", "TEXT"),
+        ("evidence_status", "TEXT NOT NULL DEFAULT 'unverified'"),
+        ("evidence_details_json", "TEXT"),
+    ]:
+        try:
+            con.execute(f"ALTER TABLE gap_reports ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass
+
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS keyword_sources (
+            keyword             TEXT NOT NULL,
+            source              TEXT NOT NULL,
+            first_seen_at       TEXT NOT NULL,
+            last_seen_at        TEXT NOT NULL,
+            observation_count   INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (keyword, source),
+            FOREIGN KEY (keyword) REFERENCES seeds(keyword) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS keyword_observations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword         TEXT NOT NULL,
+            source          TEXT NOT NULL,
+            observed_at     TEXT NOT NULL,
+            metric          TEXT NOT NULL,
+            value           REAL NOT NULL,
+            unit            TEXT NOT NULL,
+            sample_size     INTEGER,
+            metadata_json   TEXT,
+            UNIQUE(keyword, source, observed_at, metric),
+            FOREIGN KEY (keyword) REFERENCES seeds(keyword) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS keyword_product_economics (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword                 TEXT NOT NULL,
+            product_type            TEXT NOT NULL,
+            observed_at             TEXT NOT NULL,
+            source                  TEXT NOT NULL,
+            sale_price_usd          REAL NOT NULL,
+            production_cost_usd     REAL NOT NULL,
+            shipping_cost_usd       REAL NOT NULL,
+            marketplace_fees_usd    REAL NOT NULL,
+            advertising_cost_usd    REAL NOT NULL,
+            refund_allowance_usd    REAL NOT NULL,
+            contribution_profit_usd REAL NOT NULL,
+            UNIQUE(keyword, product_type, observed_at, source),
+            FOREIGN KEY (keyword) REFERENCES seeds(keyword) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS keyword_outcomes (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword                 TEXT NOT NULL,
+            listing_id              TEXT NOT NULL,
+            product_type            TEXT NOT NULL,
+            period_start            TEXT NOT NULL,
+            period_end              TEXT NOT NULL,
+            impressions             INTEGER NOT NULL,
+            clicks                  INTEGER NOT NULL,
+            orders                  INTEGER NOT NULL,
+            revenue_usd             REAL NOT NULL,
+            marketplace_fees_usd    REAL NOT NULL,
+            advertising_cost_usd    REAL NOT NULL,
+            production_cost_usd     REAL NOT NULL,
+            shipping_cost_usd       REAL NOT NULL,
+            refunds_usd             REAL NOT NULL,
+            contribution_profit_usd REAL NOT NULL,
+            source                  TEXT NOT NULL,
+            UNIQUE(listing_id, keyword, period_start, period_end, source),
+            FOREIGN KEY (keyword) REFERENCES seeds(keyword) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_keyword_sources_source
+            ON keyword_sources(source, keyword);
+        CREATE INDEX IF NOT EXISTS idx_keyword_observations_lookup
+            ON keyword_observations(keyword, metric, observed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_keyword_economics_lookup
+            ON keyword_product_economics(keyword, product_type, observed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_keyword_outcomes_lookup
+            ON keyword_outcomes(keyword, product_type, period_end DESC);
+    """)
+
+    now = datetime.utcnow().isoformat()
+    con.execute("""
+        INSERT OR IGNORE INTO keyword_sources
+            (keyword, source, first_seen_at, last_seen_at, observation_count)
+        SELECT keyword, source, added_at, ?, 1 FROM seeds
+    """, (now,))
+
+    # A retained score must prove that it came from an actual listing sample.
+    con.execute("""
+        DELETE FROM gap_reports
+        WHERE COALESCE(listings_analyzed, 0) < ?
+           OR COALESCE(market_evidence_score, 0) <= 0
+    """, (MIN_LISTING_SAMPLE,))
+    con.execute("""
+        DELETE FROM scans
+        WHERE COALESCE(sampled_listing_count, 0) < ?
+           OR COALESCE(listing_count, 0) <= 0
+           OR COALESCE(avg_price_usd, 0) <= 0
+           OR COALESCE(market_evidence_score, 0) <= 0
+    """, (MIN_LISTING_SAMPLE,))
+    con.execute("""
+        DELETE FROM gap_scores
+        WHERE NOT EXISTS (
+            SELECT 1 FROM scans
+            WHERE scans.keyword=gap_scores.keyword
+              AND scans.evidence_status='verified'
+        )
+    """)
+    con.execute("DELETE FROM scheduler_log")
+
+
 # ── Seed management ───────────────────────────────────────────────────────────
 
 def load_seeds_from_library() -> int:
@@ -357,16 +491,34 @@ def load_seeds_from_library() -> int:
             "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at, priority) VALUES (?,?,?,?,?)",
             rows,
         )
+        con.executemany("""
+            INSERT OR IGNORE INTO keyword_sources
+                (keyword, source, first_seen_at, last_seen_at, observation_count)
+            VALUES (?, 'library', ?, ?, 1)
+        """, [(keyword, now, now) for keyword, _domain, _source, _added, _priority in rows])
         return cur.rowcount
 
 
 def add_seed(keyword: str, domain: str = "discovered", source: str = "auto",
              priority: int = 5) -> bool:
     now = datetime.utcnow().isoformat()
+    normalized = keyword.strip().lower()
     with _conn() as con:
         cur = con.execute(
             "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at, priority) VALUES (?,?,?,?,?)",
-            (keyword.strip().lower(), domain, source, now, priority),
+            (normalized, domain, source, now, priority),
+        )
+        con.execute("""
+            INSERT INTO keyword_sources
+                (keyword, source, first_seen_at, last_seen_at, observation_count)
+            VALUES (?, ?, ?, ?, 1)
+            ON CONFLICT(keyword, source) DO UPDATE SET
+                last_seen_at=excluded.last_seen_at,
+                observation_count=keyword_sources.observation_count + 1
+        """, (normalized, source, now, now))
+        con.execute(
+            "UPDATE seeds SET priority=MAX(priority, ?) WHERE keyword=?",
+            (priority, normalized),
         )
         return cur.rowcount > 0
 
@@ -382,6 +534,18 @@ def add_seeds_bulk(keywords: list[str], domain: str = "discovered", source: str 
         cur = con.executemany(
             "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at, priority) VALUES (?,?,?,?,?)",
             rows,
+        )
+        con.executemany("""
+            INSERT INTO keyword_sources
+                (keyword, source, first_seen_at, last_seen_at, observation_count)
+            VALUES (?, ?, ?, ?, 1)
+            ON CONFLICT(keyword, source) DO UPDATE SET
+                last_seen_at=excluded.last_seen_at,
+                observation_count=keyword_sources.observation_count + 1
+        """, [(keyword, source, now, now) for keyword, _domain, _source, _added, _priority in rows])
+        con.executemany(
+            "UPDATE seeds SET priority=MAX(priority, ?) WHERE keyword=?",
+            [(priority, keyword) for keyword, _domain, _source, _added, _priority in rows],
         )
         return cur.rowcount
 
@@ -987,65 +1151,130 @@ def _score_profitability_index(
     return _clamp_score(raw)
 
 
+def _present_number(value) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _extract_market_metrics(keyword: str, report_data: dict) -> dict:
-    ksd = report_data.get("keyword_search_data", []) or []
-    if not isinstance(ksd, list):
-        ksd = []
+    """Extract only observations for the requested keyword; never borrow defaults."""
+    raw_rows = report_data.get("keyword_search_data", []) or []
+    if not isinstance(raw_rows, list):
+        raw_rows = []
     normalized = keyword.strip().lower()
-    matching = [item for item in ksd if str(item.get("keyword", "")).strip().lower() == normalized]
-    rows = matching or ksd
-    counts = [
-        int(item.get("listing_count") or item.get("total_listing_count") or 0)
-        for item in rows
-        if item.get("listing_count") or item.get("total_listing_count")
-    ]
-    listing_count = int(sum(counts) / len(counts)) if counts else 0
-    monthly_revenue = _avg([float(item.get("estimated_market_monthly_revenue_usd") or 0) for item in rows])
-    if not monthly_revenue:
-        monthly_revenue = float(report_data.get("estimated_market_monthly_revenue_usd") or 0)
-    avg_price = _avg([float(item.get("avg_price_usd") or 0) for item in rows]) or float(report_data.get("avg_price_usd") or 0)
-    revenue_per_listing = monthly_revenue / listing_count if monthly_revenue > 0 and listing_count > 0 else 0.0
-    sampled_listings = sum(
-        int(item.get("sampled_listing_count") or len(item.get("top_listing_titles") or []))
-        for item in rows
+    rows = [
+        item for item in raw_rows
         if isinstance(item, dict)
-    )
-    metrics = {
-        "keyword_market_rows": len(rows),
-        "sampled_listings": sampled_listings,
-        "listing_count": listing_count,
-        "avg_price_usd": avg_price,
-        "price_min_usd": _avg([float(item.get("price_min") or 0) for item in rows]),
-        "price_p25_usd": _avg([float(item.get("price_p25") or 0) for item in rows]),
-        "price_median_usd": _avg([float(item.get("price_median") or 0) for item in rows]),
-        "price_p75_usd": _avg([float(item.get("price_p75") or 0) for item in rows]),
-        "price_max_usd": _avg([float(item.get("price_max") or 0) for item in rows]),
-        "avg_favorites": _avg([float(item.get("avg_favorites") or 0) for item in rows]),
-        "max_favorites": int(max([int(item.get("max_favorites") or 0) for item in rows] or [0])),
-        "pct_high_favorites": _avg([float(item.get("pct_high_favorites") or 0) for item in rows]),
-        "pct_star_sellers": _avg([float(item.get("pct_star_sellers") or 0) for item in rows]),
-        "pct_bestsellers": _avg([float(item.get("pct_bestsellers") or 0) for item in rows]),
-        "competition_quality": _avg([float(item.get("competition_quality_score") or 0) for item in rows]) or float(report_data.get("avg_competition_quality") or 0),
-        "monthly_revenue_usd": monthly_revenue,
-        "revenue_per_listing": revenue_per_listing,
+        and str(item.get("keyword", "")).strip().lower() == normalized
+    ]
+    row = rows[0] if len(rows) == 1 else None
+
+    signals = report_data.get("keyword_signals", []) or []
+    volume_observations = [
+        _present_number(item.get("monthly_searches"))
+        for item in signals
+        if isinstance(item, dict)
+        and str(item.get("keyword", "")).strip().lower() == normalized
+        and str(item.get("source", "")).lower() in {"erank", "marmalead"}
+    ]
+    volume_observations = [value for value in volume_observations if value is not None and value > 0]
+
+    if row is None:
+        return {
+            "sampled_listings": None,
+            "listing_count": None,
+            "avg_price_usd": None,
+            "price_min_usd": None,
+            "price_p25_usd": None,
+            "price_median_usd": None,
+            "price_p75_usd": None,
+            "price_max_usd": None,
+            "avg_favorites": None,
+            "max_favorites": None,
+            "pct_high_favorites": None,
+            "pct_star_sellers": None,
+            "pct_bestsellers": None,
+            "observed_search_volume": volume_observations[0] if len(volume_observations) == 1 else None,
+        }
+
+    return {
+        "sampled_listings": int(row.get("sampled_listing_count") or len(row.get("top_listing_titles") or [])) or None,
+        "listing_count": int(row.get("listing_count") or row.get("total_listing_count") or 0) or None,
+        "avg_price_usd": _present_number(row.get("avg_price_usd")),
+        "price_min_usd": _present_number(row.get("price_min")),
+        "price_p25_usd": _present_number(row.get("price_p25")),
+        "price_median_usd": _present_number(row.get("price_median")),
+        "price_p75_usd": _present_number(row.get("price_p75")),
+        "price_max_usd": _present_number(row.get("price_max")),
+        "avg_favorites": _present_number(row.get("avg_favorites")),
+        "max_favorites": int(row["max_favorites"]) if row.get("max_favorites") is not None else None,
+        "pct_high_favorites": _present_number(row.get("pct_high_favorites")),
+        "pct_star_sellers": _present_number(row.get("pct_star_sellers")),
+        "pct_bestsellers": _present_number(row.get("pct_bestsellers")),
+        "observed_search_volume": volume_observations[0] if len(volume_observations) == 1 else None,
     }
-    metrics["market_evidence_score"] = _score_market_evidence(metrics)
-    return metrics
 
 
-def _suppress_thin_market_scores(
-    opportunity: float,
-    demand: float,
-    margin: float,
-    trend: float,
-    metrics: dict,
-) -> tuple[float | None, float | None, float | None, float | None]:
-    """Avoid saving placeholder-looking profit scores when market evidence is absent."""
-    evidence = metrics.get("market_evidence_score", 0) or 0
-    if evidence >= 20:
-        return float(opportunity or 0), float(demand or 0), float(margin or 0), float(trend or 0)
+def _classify_market_evidence(metrics: dict, scan_error: str | None = None) -> tuple[str, dict]:
+    requirements = {
+        "listing_sample": (metrics.get("sampled_listings") or 0) >= MIN_LISTING_SAMPLE,
+        "listing_count": metrics.get("listing_count") is not None,
+        "average_price": metrics.get("avg_price_usd") is not None,
+    }
+    if scan_error:
+        status = "failed"
+    elif all(requirements.values()):
+        status = "verified"
+    elif any(value is not None for value in metrics.values()):
+        status = "partial"
+    else:
+        status = "unverified"
+    return status, {
+        "requirements": requirements,
+        "missing": [name for name, present in requirements.items() if not present],
+        "score_available": False,
+        "score_reason": "No calibrated outcome model is available for this evidence set.",
+    }
 
-    return None, None, None, None
+
+def _record_scan_observations(con: sqlite3.Connection, keyword: str, observed_at: str,
+                              metrics: dict, sources: list[str]) -> None:
+    market_source = next(
+        (source for source in sources if source in {"etsy_open_api", "etsy_search_scraper"}),
+        "etsy_market",
+    )
+    definitions = {
+        "listing_count": ("count", None),
+        "sampled_listings": ("count", None),
+        "avg_price_usd": ("usd", metrics.get("sampled_listings")),
+        "price_p25_usd": ("usd", metrics.get("sampled_listings")),
+        "price_median_usd": ("usd", metrics.get("sampled_listings")),
+        "price_p75_usd": ("usd", metrics.get("sampled_listings")),
+        "avg_favorites": ("count", metrics.get("sampled_listings")),
+        "pct_star_sellers": ("percent", metrics.get("sampled_listings")),
+        "pct_bestsellers": ("percent", metrics.get("sampled_listings")),
+    }
+    for metric, (unit, sample_size) in definitions.items():
+        value = metrics.get(metric)
+        if value is None:
+            continue
+        con.execute("""
+            INSERT OR REPLACE INTO keyword_observations
+                (keyword, source, observed_at, metric, value, unit, sample_size, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+        """, (keyword, market_source, observed_at, metric, value, unit, sample_size))
+
+    if metrics.get("observed_search_volume") is not None:
+        con.execute("""
+            INSERT OR REPLACE INTO keyword_observations
+                (keyword, source, observed_at, metric, value, unit, sample_size, metadata_json)
+            VALUES (?, 'external_keyword_provider', ?, 'monthly_searches', ?, 'searches_per_month', NULL, NULL)
+        """, (keyword, observed_at, metrics["observed_search_volume"]))
 
 
 def save_scan(keyword: str, report) -> None:
@@ -1060,47 +1289,18 @@ def save_scan(keyword: str, report) -> None:
     now = datetime.utcnow().isoformat()
     kw = keyword.strip().lower()
 
-    opp = r.get("opportunity_score") or 0
-    demand = r.get("demand_score") or 0
-    trend = r.get("trend_velocity_score") or 0
-    margin = r.get("margin_score") or 0
     metrics = _extract_market_metrics(kw, r)
-    opp, demand, margin, trend = _suppress_thin_market_scores(opp, demand, margin, trend, metrics)
-    listing_count = metrics["listing_count"] or None
-    comp_quality = metrics["competition_quality"]
-    comp_q = comp_quality if comp_quality and comp_quality > 0 else 0
-    monthly_rev = metrics["monthly_revenue_usd"] or 0
-    market_evidence = metrics["market_evidence_score"]
-    if market_evidence >= 20:
-        profitability_index = _score_profitability_index(
-            kw,
-            demand=demand,
-            margin=margin or 0,
-            comp_quality=comp_q,
-            monthly_rev=monthly_rev,
-            listing_count=listing_count,
-            avg_price=metrics["avg_price_usd"],
-            revenue_per_listing=metrics["revenue_per_listing"],
-            avg_favorites=metrics["avg_favorites"],
-            market_evidence_score=market_evidence,
-        )
-
-        gap, listing_eff = _calculate_gap_score(
-            kw,
-            demand=demand,
-            trend=trend,
-            comp_quality=comp_q,
-            margin=margin or 0,
-            monthly_rev=monthly_rev,
-            listing_count=listing_count,
-        )
-    else:
-        profitability_index = None
-        gap = None
-        listing_eff = None
+    sources = [str(source) for source in (r.get("sources_used") or []) if source]
+    evidence_status, evidence_details = _classify_market_evidence(metrics, r.get("scan_error"))
+    scan_status = (
+        "failed" if evidence_status == "failed"
+        else "evidence" if evidence_status == "verified"
+        else "signals" if sources
+        else "no_data"
+    )
 
     with _conn() as con:
-        con.execute("""
+        cur = con.execute("""
             INSERT INTO scans
               (keyword, scanned_at, opportunity_score, demand_score, competition_score,
                margin_score, trend_score, avg_price_usd, monthly_revenue_usd,
@@ -1113,16 +1313,16 @@ def save_scan(keyword: str, report) -> None:
                market_evidence_score, profitability_index, scan_status, scan_error)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
-            kw, now, opp, demand,
-            r.get("competition_score"), margin,
-            trend, metrics["avg_price_usd"],
-            monthly_rev, comp_quality, listing_count,
-            json.dumps(r.get("sources_used", [])),
+            kw, now, None, None,
+            None, None,
+            None, metrics["avg_price_usd"],
+            None, None, metrics["listing_count"],
+            json.dumps(sources),
             r.get("report_path"),
             json.dumps(r.get("peak_months", [])),
             json.dumps(r.get("keyword_clusters", [])),
             r.get("entry_strategy"),
-            gap, listing_eff, 0.0, "stable",
+            None, None, None, None,
             metrics["price_min_usd"],
             metrics["price_p25_usd"],
             metrics["price_median_usd"],
@@ -1133,106 +1333,45 @@ def save_scan(keyword: str, report) -> None:
             metrics["pct_high_favorites"],
             metrics["pct_star_sellers"],
             metrics["pct_bestsellers"],
-            metrics["revenue_per_listing"],
-            market_evidence,
-            profitability_index,
-            "failed" if r.get("scan_error") else "evidence" if market_evidence >= 20 else "signals" if r.get("sources_used") else "no_data",
+            None,
+            None,
+            None,
+            scan_status,
             r.get("scan_error"),
         ))
-
-    if gap is not None:
-        _update_gap_score(kw, gap, listing_efficiency=listing_eff)
+        con.execute("""
+            UPDATE scans
+            SET score_version=NULL,
+                evidence_status=?,
+                evidence_details_json=?,
+                observed_search_volume=?,
+                sampled_listing_count=?
+            WHERE id=?
+        """, (
+            evidence_status,
+            json.dumps(evidence_details),
+            metrics.get("observed_search_volume"),
+            metrics.get("sampled_listings"),
+            cur.lastrowid,
+        ))
+        _record_scan_observations(con, kw, now, metrics, sources)
 
 
 def _update_gap_score(keyword: str, new_gap: float, listing_efficiency: float | None = None) -> None:
-    """Compute trajectory and update gap_scores table.
-
-    Velocity is time-normalized to a 30-day rate so keywords rescanned
-    frequently don't show inflated deltas vs. keywords rescanned monthly.
-    e.g. a +10 point jump in 2 days = +150/30d velocity (breakout)
-         a +10 point jump in 60 days = +5/30d velocity (stable)
-    """
-    with _conn() as con:
-        prev = con.execute(
-            "SELECT gap_score, last_computed FROM gap_scores WHERE keyword = ?", (keyword,)
-        ).fetchone()
-        prev_score = prev[0] if prev else None
-        prev_time_str = prev[1] if prev else None
-        delta = (new_gap - prev_score) if prev_score is not None else 0.0
-
-        # Time-normalize delta to a 30-day velocity
-        velocity = delta
-        if prev_score is not None and prev_time_str:
-            try:
-                elapsed = datetime.utcnow() - datetime.fromisoformat(prev_time_str)
-                days = elapsed.total_seconds() / 86400
-                velocity = delta if days < 1 else delta / days * 30
-            except Exception:
-                pass
-
-        if velocity >= 8:
-            trajectory = "rising"
-        elif velocity <= -8:
-            trajectory = "declining"
-        else:
-            trajectory = "stable"
-
-        breakout = 1 if velocity >= 15 else 0
-
-        con.execute("""
-            INSERT INTO gap_scores
-              (keyword, gap_score, listing_efficiency, score_delta,
-               previous_gap_score, trajectory, breakout_flag, last_computed)
-            VALUES (?,?,?,?,?,?,?,?)
-            ON CONFLICT(keyword) DO UPDATE SET
-              previous_gap_score = gap_scores.gap_score,
-              gap_score = excluded.gap_score,
-              listing_efficiency = excluded.listing_efficiency,
-              score_delta = excluded.score_delta,
-              trajectory = excluded.trajectory,
-              breakout_flag = excluded.breakout_flag,
-              last_computed = excluded.last_computed
-        """, (keyword, new_gap, listing_efficiency or 0.0, delta, prev_score, trajectory, breakout,
-              datetime.utcnow().isoformat()))
-
-        # Update trajectory on most recent scan row too
-        con.execute("""
-            UPDATE scans SET gap_score=?, score_delta=?, trajectory=?
-            WHERE keyword=? AND id=(SELECT MAX(id) FROM scans WHERE keyword=?)
-        """, (new_gap, delta, trajectory, keyword, keyword))
+    """Retired: legacy gap trajectories were derived from unversioned estimates."""
+    raise RuntimeError("gap score synthesis is disabled; persist verified observations instead")
 
 
 def rebuild_gap_scores() -> int:
-    """Recompute gap scores for all scanned keywords. Returns count updated."""
+    """Remove legacy synthetic scores. Verified scores must be recomputed by a versioned model."""
     with _conn() as con:
-        rows = con.execute("""
-            SELECT s.keyword, sc.demand_score, sc.trend_score,
-                   sc.competition_quality, sc.margin_score,
-                   sc.monthly_revenue_usd, sc.listing_count,
-                   gr.composite_gap_score
-            FROM seeds s
-            JOIN scans sc ON sc.keyword = s.keyword
-            LEFT JOIN gap_reports gr ON gr.id = (
-                SELECT MAX(id) FROM gap_reports gr2 WHERE gr2.keyword = s.keyword
-            )
-            WHERE sc.id = (SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword = s.keyword)
-        """).fetchall()
-
-    count = 0
-    for r in rows:
-        gap, listing_eff = _calculate_gap_score(
-            r["keyword"],
-            demand=r["demand_score"] or 0,
-            trend=r["trend_score"] or 0,
-            comp_quality=r["competition_quality"] or 0,
-            margin=r["margin_score"] or 0,
-            monthly_rev=r["monthly_revenue_usd"] or 0,
-            listing_count=r["listing_count"],
-            full_gap_score=r["composite_gap_score"],
-        )
-        _update_gap_score(r["keyword"], gap, listing_efficiency=listing_eff)
-        count += 1
-    return count
+        removed = con.execute("SELECT COUNT(*) FROM gap_scores").fetchone()[0]
+        con.execute("DELETE FROM gap_scores")
+        con.execute("""
+            UPDATE scans SET gap_score=NULL, score_delta=NULL, trajectory=NULL,
+                             listing_efficiency=NULL
+        """)
+    return removed
 
 
 # ── Queue / batch selection ───────────────────────────────────────────────────
@@ -1284,57 +1423,14 @@ def _lane_quotas(limit: int) -> dict[str, int]:
 
 
 def get_unscanned_portfolio(limit: int = 20, domain: Optional[str] = None, min_quality: float = 58.0) -> list[str]:
-    """Return unscanned seeds from proven/adjacent/trend/wild lanes."""
-    candidate_limit = max(limit * 120, 1000)
-    ranked = _rank_seed_rows(_unscanned_candidate_rows(domain, candidate_limit))
-    quotas = _lane_quotas(limit)
-    lane_min = {
-        "proven": min_quality,
-        "adjacent": max(52.0, min_quality - 2.0),
-        "trend": max(50.0, min_quality - 4.0),
-        "wild": max(50.0, min_quality - 6.0),
-    }
-    buckets: dict[str, list[tuple[float, sqlite3.Row]]] = {lane: [] for lane in _SCAN_LANE_ALLOCATION}
-    for score, lane, row in ranked:
-        buckets.setdefault(lane, []).append((score, row))
-
-    result: list[str] = []
-    seen: set[str] = set()
-
-    def _add_keyword(keyword: str) -> None:
-        if keyword not in seen and len(result) < limit:
-            result.append(keyword)
-            seen.add(keyword)
-
-    for lane, quota in quotas.items():
-        added = 0
-        for score, row in buckets.get(lane, []):
-            if added >= quota:
-                break
-            if score < lane_min.get(lane, min_quality):
-                continue
-            _add_keyword(row["keyword"])
-            added += 1
-
-    for score, _lane, row in ranked:
-        if len(result) >= limit:
-            break
-        if score >= max(50.0, min_quality - 8.0):
-            _add_keyword(row["keyword"])
-
-    return result[:limit]
+    """Return the explicit-priority queue; do not infer market quality from wording."""
+    rows = _unscanned_candidate_rows(domain, limit)
+    return [row["keyword"] for row in rows]
 
 
 def get_unscanned(limit: int = 20, domain: Optional[str] = None, min_quality: float = 58.0) -> list[str]:
-    ranked = _rank_seed_rows(_unscanned_candidate_rows(domain, max(limit * 80, 800)))
-    qualified = [r["keyword"] for score, _lane, r in ranked if score >= min_quality]
-    if len(qualified) >= limit:
-        return qualified[:limit]
-
-    # Do not starve the scanner if the queue is temporarily weak; fill the
-    # tail with the best remaining candidates after the strong ones.
-    fallback = [r["keyword"] for score, _lane, r in ranked if score < min_quality and score >= 45.0]
-    return (qualified + fallback)[:limit]
+    rows = _unscanned_candidate_rows(domain, limit)
+    return [row["keyword"] for row in rows]
 
 
 def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> list[str]:
@@ -1344,82 +1440,50 @@ def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> 
             SELECT s.keyword FROM seeds s
             JOIN (SELECT keyword, MAX(scanned_at) AS last_scan FROM scans GROUP BY keyword) latest
               ON latest.keyword=s.keyword
-            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
-            LEFT JOIN scans sc ON sc.keyword=s.keyword
-              AND sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
             WHERE latest.last_scan < ?
         """
         if domain:
             rows = con.execute(base + """
                 AND s.domain=?
-                ORDER BY
-                    gs.breakout_flag DESC,
-                    gs.gap_score DESC,
-                    gs.listing_efficiency DESC,
-                    sc.opportunity_score DESC,
-                    latest.last_scan ASC
+                ORDER BY latest.last_scan ASC
                 LIMIT ?
             """,
                                (cutoff, domain, limit)).fetchall()
         else:
             rows = con.execute(base + """
-                ORDER BY
-                    gs.breakout_flag DESC,
-                    gs.gap_score DESC,
-                    gs.listing_efficiency DESC,
-                    sc.opportunity_score DESC,
-                    latest.last_scan ASC
+                ORDER BY latest.last_scan ASC
                 LIMIT ?
             """,
                                (cutoff, limit)).fetchall()
-        return [r["keyword"] for r in rows if is_scanworthy_seed(r["keyword"], min_score=45.0)]
+        return [r["keyword"] for r in rows]
 
 
 def get_breakouts(limit: int = 20) -> list[str]:
-    """Keywords whose gap score jumped 12+ points since last scan — highest priority."""
-    with _conn() as con:
-        rows = con.execute("""
-            SELECT keyword FROM gap_scores
-            WHERE breakout_flag=1
-            ORDER BY score_delta DESC LIMIT ?
-        """, (limit,)).fetchall()
-        return [r[0] for r in rows if is_scanworthy_seed(r[0], min_score=45.0)]
+    """No breakout is asserted until comparable, versioned observations exist."""
+    return []
 
 
 def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[str]:
-    """High-potential keywords whose market evidence is still too thin."""
+    """Old attempts missing the explicit minimum market observations."""
     cutoff = (datetime.utcnow() - timedelta(hours=min_age_hours)).isoformat()
     with _conn() as con:
         rows = con.execute("""
             SELECT s.keyword
             FROM seeds s
             JOIN scans sc ON sc.keyword=s.keyword
-            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
             WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
               AND sc.scanned_at < ?
               AND (
-                s.source != 'llm_brainstorm'
-                OR COALESCE(sc.market_evidence_score, 0) >= 55
+                sc.evidence_status != 'verified'
+                OR sc.sampled_listing_count IS NULL
+                OR sc.sampled_listing_count < ?
+                OR sc.avg_price_usd IS NULL
+                OR sc.listing_count IS NULL
               )
-              AND (
-                COALESCE(sc.market_evidence_score, 0) < 55
-                OR COALESCE(sc.avg_price_usd, 0) <= 0
-                OR COALESCE(sc.monthly_revenue_usd, 0) <= 0
-              )
-              AND (
-                COALESCE(sc.profitability_index, 0) >= 55
-                OR COALESCE(gs.gap_score, sc.gap_score, 0) >= 58
-                OR COALESCE(sc.opportunity_score, 0) >= 68
-                OR COALESCE(sc.market_evidence_score, 0) < 20
-              )
-            ORDER BY
-              COALESCE(sc.profitability_index, 0) DESC,
-              COALESCE(gs.gap_score, sc.gap_score, 0) DESC,
-              COALESCE(sc.opportunity_score, 0) DESC,
-              sc.scanned_at ASC
+            ORDER BY sc.scanned_at ASC
             LIMIT ?
-        """, (cutoff, limit)).fetchall()
-        return [r[0] for r in rows if is_scanworthy_seed(r[0], min_score=45.0)]
+        """, (cutoff, MIN_LISTING_SAMPLE, limit)).fetchall()
+        return [r[0] for r in rows]
 
 
 def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
@@ -1433,10 +1497,7 @@ def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
                 result.append(kw)
                 seen.add(kw)
 
-    breakout_budget = max(1, min(count, count // 5 or 1))
     evidence_budget = max(1, min(count, count // 4 or 1))
-
-    _add(get_breakouts(limit=breakout_budget))
     _add(get_profit_evidence_gaps(limit=evidence_budget))
 
     remaining = count - len(result)
@@ -1455,21 +1516,37 @@ def get_all_seeds_with_status(limit: int = 2000) -> list[dict]:
     """Return all seeds with scan status for the UI checklist."""
     with _conn() as con:
         rows = con.execute("""
-            SELECT s.keyword, s.domain, s.source, s.priority, s.added_at,
-                   sc.scanned_at,
-                   sc.opportunity_score,
-                   COALESCE(gs.gap_score, sc.gap_score) AS gap_score,
-                   gs.trajectory,
-                   COALESCE(gs.breakout_flag, 0) AS breakout_flag,
-                   gs.listing_efficiency
+            SELECT s.keyword, s.domain,
+                   COALESCE((SELECT GROUP_CONCAT(ks.source, ', ')
+                             FROM keyword_sources ks WHERE ks.keyword=s.keyword), s.source) AS source,
+                   s.priority, s.added_at,
+                   attempt.scanned_at,
+                   attempt.scan_status,
+                   attempt.scan_error,
+                   attempt.evidence_status,
+                   attempt.evidence_details_json,
+                   evidence.opportunity_score,
+                   evidence.gap_score,
+                   evidence.trajectory,
+                   evidence.observed_search_volume,
+                   evidence.listing_count,
+                   evidence.sampled_listing_count,
+                   evidence.avg_price_usd,
+                   0 AS breakout_flag,
+                   evidence.listing_efficiency,
+                   evidence.score_version
             FROM seeds s
-            LEFT JOIN scans sc ON sc.keyword = s.keyword
-              AND sc.id = (SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
-            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
+            LEFT JOIN scans attempt ON attempt.keyword = s.keyword
+              AND attempt.id = (SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
+            LEFT JOIN scans evidence ON evidence.keyword = s.keyword
+              AND evidence.id = (
+                  SELECT MAX(id) FROM scans sc3
+                  WHERE sc3.keyword=s.keyword AND sc3.evidence_status='verified'
+              )
             ORDER BY
-                CASE WHEN sc.scanned_at IS NULL THEN 0 ELSE 1 END,
-                COALESCE(gs.gap_score, sc.gap_score, 0) DESC,
-                sc.scanned_at DESC
+                CASE WHEN attempt.scanned_at IS NULL THEN 0 ELSE 1 END,
+                attempt.scanned_at DESC,
+                s.keyword ASC
             LIMIT ?
         """, (limit,)).fetchall()
         return [dict(r) for r in rows]
@@ -1478,12 +1555,7 @@ def get_all_seeds_with_status(limit: int = 2000) -> list[dict]:
 # ── Query ─────────────────────────────────────────────────────────────────────
 
 def get_top_opportunities(limit: int = 100, domain: Optional[str] = None) -> list[dict]:
-    """Rank keywords by the best available business score.
-
-    Profitability is the preferred signal when real market evidence exists.
-    Older or thinner scans may only have opportunity or gap scores, so those
-    are used as explicit fallbacks instead of returning an empty dashboard.
-    """
+    """Return only versioned, verified scores; there is no fallback ranking."""
     with _conn() as con:
         base = """
             SELECT s.keyword, s.domain, sc.opportunity_score, sc.demand_score,
@@ -1491,19 +1563,24 @@ def get_top_opportunities(limit: int = 100, domain: Optional[str] = None) -> lis
                    sc.avg_price_usd, sc.monthly_revenue_usd, sc.competition_quality,
                    sc.listing_count, sc.scanned_at, sc.entry_strategy, sc.peak_months,
                    sc.gap_score, sc.score_delta, sc.trajectory, sc.profitability_index,
-                   COALESCE(sc.profitability_index, sc.opportunity_score, sc.gap_score, gs.gap_score) AS primary_score,
+                   sc.evidence_status, sc.score_version, sc.evidence_details_json,
+                   COALESCE(sc.profitability_index, sc.opportunity_score, sc.gap_score) AS primary_score,
                    CASE
                        WHEN sc.profitability_index IS NOT NULL THEN 'profitability_index'
                        WHEN sc.opportunity_score IS NOT NULL THEN 'opportunity_score'
                        WHEN sc.gap_score IS NOT NULL THEN 'gap_score'
-                       ELSE 'gap_score'
+                       WHEN sc.gap_score IS NOT NULL THEN 'gap_score'
+                       ELSE NULL
                    END AS primary_score_source,
-                   gs.breakout_flag
+                   0 AS breakout_flag
             FROM seeds s
             JOIN scans sc ON sc.keyword=s.keyword
-            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
-            WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
-              AND COALESCE(sc.profitability_index, sc.opportunity_score, sc.gap_score, gs.gap_score) IS NOT NULL
+            WHERE sc.id=(
+                SELECT MAX(id) FROM scans sc2
+                WHERE sc2.keyword=s.keyword AND sc2.evidence_status='verified'
+            )
+              AND sc.score_version IS NOT NULL
+              AND COALESCE(sc.profitability_index, sc.opportunity_score, sc.gap_score) IS NOT NULL
         """
         if domain:
             rows = con.execute(base + " AND s.domain=? ORDER BY primary_score DESC, s.keyword ASC LIMIT ?",
@@ -1515,36 +1592,37 @@ def get_top_opportunities(limit: int = 100, domain: Optional[str] = None) -> lis
 
 
 def get_top_gaps(limit: int = 100, domain: Optional[str] = None) -> list[dict]:
-    """Ranked by gap_score (underserved high-demand) rather than raw opportunity."""
+    """Return only verified, versioned gap reports."""
     with _conn() as con:
         base = """
-            SELECT s.keyword, s.domain, gs.gap_score, gs.score_delta, gs.trajectory,
-                   gs.breakout_flag, sc.demand_score, sc.competition_quality,
-                   sc.avg_price_usd, sc.monthly_revenue_usd, sc.scanned_at,
-                   sc.opportunity_score, sc.trend_score, sc.profitability_index,
-                   COALESCE(sc.profitability_index, sc.opportunity_score, gs.gap_score) AS primary_score,
-                   CASE
-                       WHEN sc.profitability_index IS NOT NULL THEN 'profitability_index'
-                       WHEN sc.opportunity_score IS NOT NULL THEN 'opportunity_score'
-                       ELSE 'gap_score'
-                   END AS primary_score_source
-            FROM gap_scores gs
-            JOIN seeds s ON s.keyword=gs.keyword
-            JOIN scans sc ON sc.keyword=gs.keyword
-            WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=gs.keyword)
-              AND gs.gap_score IS NOT NULL
+            SELECT s.keyword, s.domain, gr.composite_gap_score AS gap_score,
+                   NULL AS score_delta, NULL AS trajectory, 0 AS breakout_flag,
+                   sc.demand_score, sc.competition_quality, sc.avg_price_usd,
+                   sc.monthly_revenue_usd, sc.scanned_at, sc.opportunity_score,
+                   sc.trend_score, sc.profitability_index,
+                   gr.composite_gap_score AS primary_score,
+                   'gap_score' AS primary_score_source,
+                   gr.evidence_status, gr.score_version, gr.evidence_details_json
+            FROM gap_reports gr
+            JOIN seeds s ON s.keyword=gr.keyword
+            JOIN scans sc ON sc.keyword=gr.keyword
+            WHERE gr.id=(SELECT MAX(id) FROM gap_reports gr2 WHERE gr2.keyword=gr.keyword)
+              AND sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=gr.keyword AND sc2.evidence_status='verified')
+              AND gr.evidence_status='verified'
+              AND gr.score_version IS NOT NULL
+              AND gr.composite_gap_score IS NOT NULL
         """
         if domain:
-            rows = con.execute(base + " AND s.domain=? ORDER BY gs.gap_score DESC LIMIT ?",
+            rows = con.execute(base + " AND s.domain=? ORDER BY gr.composite_gap_score DESC LIMIT ?",
                                (domain, limit)).fetchall()
         else:
-            rows = con.execute(base + " ORDER BY gs.gap_score DESC LIMIT ?",
+            rows = con.execute(base + " ORDER BY gr.composite_gap_score DESC LIMIT ?",
                                (limit,)).fetchall()
         return [dict(r) for r in rows]
 
 
 def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> list[dict]:
-    """Latest scanned keyword rows enriched with the newest gap report per keyword."""
+    """Versioned, verified ranking rows only; unknowns never receive a fallback rank."""
     with _conn() as con:
         base = """
             SELECT
@@ -1577,11 +1655,14 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 sc.peak_months,
                 sc.keyword_clusters_json,
                 sc.sources_used,
-                COALESCE(sc.gap_score, gs.gap_score) AS gap_score,
+                sc.gap_score,
                 sc.listing_efficiency,
                 sc.score_delta,
                 sc.trajectory,
-                gs.breakout_flag,
+                0 AS breakout_flag,
+                sc.evidence_status,
+                sc.score_version,
+                sc.evidence_details_json,
                 gr.composite_gap_score,
                 gr.volume_gap_score,
                 gr.quality_gap_score,
@@ -1599,30 +1680,23 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
                 gr.revenue_per_listing AS gap_revenue_per_listing,
                 gr.market_evidence_score AS gap_market_evidence_score
             FROM seeds s
-            LEFT JOIN scans sc ON sc.keyword=s.keyword
-            LEFT JOIN gap_scores gs ON gs.keyword=s.keyword
+            JOIN scans sc ON sc.keyword=s.keyword
             LEFT JOIN gap_reports gr ON gr.id = (
-                SELECT MAX(id) FROM gap_reports gr2 WHERE gr2.keyword=s.keyword
+                SELECT MAX(id) FROM gap_reports gr2
+                WHERE gr2.keyword=s.keyword AND gr2.evidence_status='verified'
             )
-            WHERE (sc.id IS NULL OR sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword))
-              AND (
-                sc.opportunity_score IS NOT NULL
-                OR sc.gap_score IS NOT NULL
-                OR gs.gap_score IS NOT NULL
-                OR gr.composite_gap_score IS NOT NULL
-              )
+            WHERE sc.id=(SELECT MAX(id) FROM scans sc2
+                         WHERE sc2.keyword=s.keyword AND sc2.evidence_status='verified')
+              AND sc.score_version IS NOT NULL
+              AND COALESCE(sc.profitability_index, sc.opportunity_score,
+                           sc.gap_score, gr.composite_gap_score) IS NOT NULL
         """
         if domain:
             rows = con.execute(
                 base + """
                 AND s.domain=?
-                ORDER BY
-                    ((COALESCE(sc.profitability_index, 0) * 0.34)
-                    + (COALESCE(sc.margin_score, 0) * 0.18)
-                    + (COALESCE(sc.gap_score, gr.composite_gap_score, gs.gap_score, 0) * 0.18)
-                    + (COALESCE(sc.demand_score, 0) * 0.14)
-                    + (COALESCE(sc.market_evidence_score, gr.market_evidence_score, 0) * 0.10)
-                    + (COALESCE(sc.revenue_per_listing, gr.revenue_per_listing, 0) * 0.06)) DESC
+                ORDER BY COALESCE(sc.profitability_index, sc.opportunity_score,
+                                  sc.gap_score, gr.composite_gap_score) DESC
                 LIMIT ?
                 """,
                 (domain, limit),
@@ -1630,13 +1704,8 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
         else:
             rows = con.execute(
                 base + """
-                ORDER BY
-                    ((COALESCE(sc.profitability_index, 0) * 0.34)
-                    + (COALESCE(sc.margin_score, 0) * 0.18)
-                    + (COALESCE(sc.gap_score, gr.composite_gap_score, gs.gap_score, 0) * 0.18)
-                    + (COALESCE(sc.demand_score, 0) * 0.14)
-                    + (COALESCE(sc.market_evidence_score, gr.market_evidence_score, 0) * 0.10)
-                    + (COALESCE(sc.revenue_per_listing, gr.revenue_per_listing, 0) * 0.06)) DESC
+                ORDER BY COALESCE(sc.profitability_index, sc.opportunity_score,
+                                  sc.gap_score, gr.composite_gap_score) DESC
                 LIMIT ?
                 """,
                 (limit,),
@@ -1658,13 +1727,20 @@ def get_stats() -> dict:
             JOIN scans sc ON sc.id=latest.id
             WHERE sc.opportunity_score IS NOT NULL
         """).fetchone()
-        avg_opp = avg_opp_row[0] if avg_opp_row[0] else 0
+        avg_opp = avg_opp_row[0]
 
-        avg_gap_row = con.execute("SELECT AVG(gap_score) FROM gap_scores WHERE gap_score IS NOT NULL").fetchone()
-        avg_gap = avg_gap_row[0] if avg_gap_row[0] else 0
+        avg_gap_row = con.execute("""
+            SELECT AVG(composite_gap_score) FROM gap_reports
+            WHERE evidence_status='verified' AND score_version IS NOT NULL
+              AND composite_gap_score IS NOT NULL
+        """).fetchone()
+        avg_gap = avg_gap_row[0]
 
         top_gap = con.execute("""
-            SELECT gs.keyword, gs.gap_score FROM gap_scores gs ORDER BY gs.gap_score DESC LIMIT 1
+            SELECT keyword, composite_gap_score AS gap_score FROM gap_reports
+            WHERE evidence_status='verified' AND score_version IS NOT NULL
+              AND composite_gap_score IS NOT NULL
+            ORDER BY composite_gap_score DESC LIMIT 1
         """).fetchone()
 
         domains = con.execute(
@@ -1690,9 +1766,9 @@ def get_stats() -> dict:
             "scanned":          scanned,
             "unscanned":        total_seeds - scanned,
             "total_scans":      total_scans,
-            "coverage_pct":     round(scanned / total_seeds * 100, 1) if total_seeds else 0,
-            "avg_opportunity":  round(avg_opp, 1),
-            "avg_gap_score":    round(avg_gap, 1),
+            "coverage_pct":     round(scanned / total_seeds * 100, 1) if total_seeds else None,
+            "avg_opportunity":  round(avg_opp, 1) if avg_opp is not None else None,
+            "avg_gap_score":    round(avg_gap, 1) if avg_gap is not None else None,
             "breakout_count":   breakouts,
             "expansion_edges":  expansion_edges,
             "top_gap_keyword":  dict(top_gap) if top_gap else None,
@@ -1763,6 +1839,100 @@ def get_domains() -> list[str]:
     with _conn() as con:
         rows = con.execute("SELECT DISTINCT domain FROM seeds ORDER BY domain").fetchall()
         return [r["domain"] for r in rows]
+
+
+def record_product_economics(
+    keyword: str,
+    product_type: str,
+    sale_price_usd: float,
+    production_cost_usd: float,
+    shipping_cost_usd: float,
+    marketplace_fees_usd: float,
+    advertising_cost_usd: float,
+    refund_allowance_usd: float,
+    source: str,
+    observed_at: str | None = None,
+) -> float:
+    """Store auditable unit economics and return exact contribution profit."""
+    values = (
+        sale_price_usd, production_cost_usd, shipping_cost_usd,
+        marketplace_fees_usd, advertising_cost_usd, refund_allowance_usd,
+    )
+    if not keyword.strip() or not product_type.strip() or not source.strip():
+        raise ValueError("keyword, product_type, and source are required")
+    if any(not math.isfinite(float(value)) or float(value) < 0 for value in values):
+        raise ValueError("economics values must be finite and non-negative")
+    if sale_price_usd <= 0:
+        raise ValueError("sale_price_usd must be greater than zero")
+
+    contribution = round(float(sale_price_usd) - sum(float(value) for value in values[1:]), 4)
+    add_seed(keyword, source="economics")
+    timestamp = observed_at or datetime.utcnow().isoformat()
+    with _conn() as con:
+        con.execute("""
+            INSERT OR REPLACE INTO keyword_product_economics
+              (keyword, product_type, observed_at, source, sale_price_usd,
+               production_cost_usd, shipping_cost_usd, marketplace_fees_usd,
+               advertising_cost_usd, refund_allowance_usd, contribution_profit_usd)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            keyword.strip().lower(), product_type.strip().lower(), timestamp, source.strip(),
+            sale_price_usd, production_cost_usd, shipping_cost_usd,
+            marketplace_fees_usd, advertising_cost_usd, refund_allowance_usd,
+            contribution,
+        ))
+    return contribution
+
+
+def record_keyword_outcome(
+    *,
+    keyword: str,
+    listing_id: str,
+    product_type: str,
+    period_start: str,
+    period_end: str,
+    impressions: int,
+    clicks: int,
+    orders: int,
+    revenue_usd: float,
+    marketplace_fees_usd: float,
+    advertising_cost_usd: float,
+    production_cost_usd: float,
+    shipping_cost_usd: float,
+    refunds_usd: float,
+    source: str,
+) -> float:
+    """Store observed listing outcomes without estimating missing values."""
+    required = (keyword, listing_id, product_type, period_start, period_end, source)
+    counts = (impressions, clicks, orders)
+    money = (
+        revenue_usd, marketplace_fees_usd, advertising_cost_usd,
+        production_cost_usd, shipping_cost_usd, refunds_usd,
+    )
+    if not all(str(value).strip() for value in required):
+        raise ValueError("keyword, listing, product, period, and source fields are required")
+    if any(int(value) < 0 for value in counts):
+        raise ValueError("outcome counts must be non-negative")
+    if any(not math.isfinite(float(value)) or float(value) < 0 for value in money):
+        raise ValueError("outcome money values must be finite and non-negative")
+
+    contribution = round(float(revenue_usd) - sum(float(value) for value in money[1:]), 4)
+    add_seed(keyword, source="outcome")
+    with _conn() as con:
+        con.execute("""
+            INSERT OR REPLACE INTO keyword_outcomes
+              (keyword, listing_id, product_type, period_start, period_end,
+               impressions, clicks, orders, revenue_usd, marketplace_fees_usd,
+               advertising_cost_usd, production_cost_usd, shipping_cost_usd,
+               refunds_usd, contribution_profit_usd, source)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            keyword.strip().lower(), listing_id.strip(), product_type.strip().lower(),
+            period_start, period_end, impressions, clicks, orders, revenue_usd,
+            marketplace_fees_usd, advertising_cost_usd, production_cost_usd,
+            shipping_cost_usd, refunds_usd, contribution, source.strip(),
+        ))
+    return contribution
 
 
 # ── Scheduler log ─────────────────────────────────────────────────────────────
@@ -1896,36 +2066,49 @@ def vacuum() -> None:
 
 def save_gap_report(
     keyword: str,
-    volume_gap: float = 0.0,
-    quality_gap: float = 0.0,
-    tag_gap: float = 0.0,
-    style_gap: float = 0.0,
-    price_gap: float = 0.0,
-    recency_gap: float = 0.0,
-    buyer_intent: float = 0.0,
-    profit_gap: float = 0.0,
-    composite_gap: float = 0.0,
+    volume_gap: float | None = None,
+    quality_gap: float | None = None,
+    tag_gap: float | None = None,
+    style_gap: float | None = None,
+    price_gap: float | None = None,
+    recency_gap: float | None = None,
+    buyer_intent: float | None = None,
+    profit_gap: float | None = None,
+    composite_gap: float | None = None,
     entry_angle: str = "",
-    recommended_price_min: float = 0.0,
-    recommended_price_max: float = 0.0,
+    recommended_price_min: float | None = None,
+    recommended_price_max: float | None = None,
     untagged_searches: Optional[list] = None,
     dominant_competitor_tags: Optional[list] = None,
     recommended_tags: Optional[list] = None,
     listings_analyzed: int = 0,
-    avg_listing_age_months: float = 0.0,
-    price_p25_usd: float = 0.0,
-    price_median_usd: float = 0.0,
-    price_p75_usd: float = 0.0,
-    avg_favorites: float = 0.0,
-    pct_high_favorites: float = 0.0,
-    pct_star_sellers: float = 0.0,
-    pct_bestsellers: float = 0.0,
-    revenue_per_listing: float = 0.0,
-    market_evidence_score: float = 0.0,
+    avg_listing_age_months: float | None = None,
+    price_p25_usd: float | None = None,
+    price_median_usd: float | None = None,
+    price_p75_usd: float | None = None,
+    avg_favorites: float | None = None,
+    pct_high_favorites: float | None = None,
+    pct_star_sellers: float | None = None,
+    pct_bestsellers: float | None = None,
+    revenue_per_listing: float | None = None,
+    market_evidence_score: float | None = None,
+    score_version: str | None = None,
 ) -> int:
-    """Insert a gap report row. Returns the new row ID."""
+    """Persist observed gap inputs; only an explicit complete score is rankable."""
     now = datetime.utcnow().isoformat()
     kw = keyword.strip().lower()
+    evidence_status = "verified" if listings_analyzed >= MIN_LISTING_SAMPLE else (
+        "partial" if listings_analyzed > 0 else "unverified"
+    )
+    accepted_score_version = (
+        score_version if evidence_status == "verified" and composite_gap is not None else None
+    )
+    evidence_details = {
+        "listings_analyzed": listings_analyzed,
+        "minimum_listing_sample": MIN_LISTING_SAMPLE,
+        "score_available": accepted_score_version is not None,
+        "missing": [] if listings_analyzed >= MIN_LISTING_SAMPLE else ["minimum_listing_sample"],
+    }
     with _conn() as con:
         cur = con.execute("""
             INSERT INTO gap_reports
@@ -1939,8 +2122,9 @@ def save_gap_report(
                recommended_tags_json, listings_analyzed, avg_listing_age_months,
                price_p25_usd, price_median_usd, price_p75_usd,
                avg_favorites, pct_high_favorites, pct_star_sellers, pct_bestsellers,
-               revenue_per_listing, market_evidence_score)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               revenue_per_listing, market_evidence_score,
+               score_version, evidence_status, evidence_details_json)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             kw, now,
             volume_gap, quality_gap, tag_gap,
@@ -1961,32 +2145,11 @@ def save_gap_report(
             pct_bestsellers,
             revenue_per_listing,
             market_evidence_score,
+            accepted_score_version,
+            evidence_status,
+            json.dumps(evidence_details),
         ))
         row_id = cur.lastrowid
-
-    with _conn() as con:
-        latest = con.execute("""
-            SELECT demand_score, trend_score, competition_quality, margin_score,
-                   monthly_revenue_usd, listing_count
-            FROM scans
-            WHERE keyword=?
-            ORDER BY scanned_at DESC
-            LIMIT 1
-        """, (kw,)).fetchone()
-
-    if latest:
-        gap, listing_eff = _calculate_gap_score(
-            kw,
-            demand=latest["demand_score"] or 0,
-            trend=latest["trend_score"] or 0,
-            comp_quality=latest["competition_quality"] or 0,
-            margin=latest["margin_score"] or 0,
-            monthly_rev=latest["monthly_revenue_usd"] or 0,
-            listing_count=latest["listing_count"],
-            full_gap_score=composite_gap,
-        )
-        _update_gap_score(kw, gap, listing_efficiency=listing_eff)
-
     return row_id
 
 
@@ -2010,13 +2173,16 @@ def get_gap_report(keyword: str) -> Optional[dict]:
 
 
 def get_top_gap_reports(limit: int = 100, min_score: float = 0.0) -> list[dict]:
-    """Most recent gap report per keyword, ranked by composite_gap_score."""
+    """Most recent versioned, verified gap report per keyword."""
     with _conn() as con:
         rows = con.execute("""
             SELECT gr.* FROM gap_reports gr
             WHERE gr.id = (
                 SELECT MAX(id) FROM gap_reports gr2 WHERE gr2.keyword = gr.keyword
             )
+            AND gr.evidence_status='verified'
+            AND gr.score_version IS NOT NULL
+            AND gr.composite_gap_score IS NOT NULL
             AND gr.composite_gap_score >= ?
             ORDER BY gr.composite_gap_score DESC
             LIMIT ?

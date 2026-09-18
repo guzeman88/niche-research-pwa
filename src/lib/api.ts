@@ -24,7 +24,6 @@ const DEV_BACKEND_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_D
 const USE_STATIC_DATA = import.meta.env.VITE_ALLOW_STATIC_DATA !== '0';
 const LIVE_API_FIRST = import.meta.env.VITE_LIVE_API_FIRST === '1';
 const WAKE_BACKEND = import.meta.env.VITE_WAKE_BACKEND === '1';
-const MIN_SCORED_STATIC_ROWS = 1000;
 let lastBackendWake = 0;
 
 function parseApiUrls(value: string): string[] {
@@ -131,26 +130,12 @@ async function fetchApi(path: string, options?: RequestInit, timeoutMs = 8000): 
   return null;
 }
 
-function scoredRowCount(data: unknown): number {
-  if (!Array.isArray(data)) return 0;
-  return data.filter((item) => {
-    if (!item || typeof item !== 'object') return false;
-    const row = item as Record<string, unknown>;
-    return Number(row.primary_score ?? row.opportunity_score ?? row.gap_score) > 0;
-  }).length;
-}
-
 function needsStaticFallback(path: string, data: unknown): boolean {
   if (path === '/api/stats') {
-    if (!data || typeof data !== 'object') return true;
-    const row = data as Record<string, unknown>;
-    return Number(row.avg_opportunity || 0) <= 0 && Number(row.avg_gap_score || 0) <= 0;
+    return !data || typeof data !== 'object';
   }
-  if (path === '/api/keywords/opportunities') {
-    return !Array.isArray(data) || data.length === 0;
-  }
-  if (path === '/api/keywords') {
-    return Array.isArray(data) && scoredRowCount(data) < MIN_SCORED_STATIC_ROWS;
+  if (path === '/api/keywords/opportunities' || path === '/api/keywords') {
+    return !Array.isArray(data);
   }
   return false;
 }

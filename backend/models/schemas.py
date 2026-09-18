@@ -25,11 +25,11 @@ class ReportListItem(BaseModel):
     report_id: str
     store_slug: str
     seed_keywords: list[str]
-    opportunity_score: float
-    demand_score: float
-    competition_score: float
-    margin_score: float
-    trend_velocity_score: float
+    opportunity_score: float | None = None
+    demand_score: float | None = None
+    competition_score: float | None = None
+    margin_score: float | None = None
+    trend_velocity_score: float | None = None
     generated_at: str
     sources_used: list[str]
 
@@ -48,6 +48,15 @@ class KeywordItem(BaseModel):
     gap_score: float | None = None
     trajectory: str | None = None
     breakout: bool = False
+    scan_status: str | None = None
+    scan_error: str | None = None
+    evidence_status: str = "unverified"
+    score_version: str | None = None
+    evidence_details_json: str | None = None
+    observed_search_volume: float | None = None
+    listing_count: int | None = None
+    sampled_listing_count: int | None = None
+    avg_price_usd: float | None = None
 
 
 class DiscoveryRequest(BaseModel):
@@ -70,20 +79,22 @@ class DiscoveryResponse(BaseModel):
 class GapReportItem(BaseModel):
     keyword: str
     analyzed_at: str
-    volume_gap_score: float
-    quality_gap_score: float
-    tag_gap_score: float
-    style_gap_score: float
-    price_gap_score: float
-    recency_gap_score: float
-    buyer_intent_score: float = 0.0
-    profit_gap_score: float = 0.0
-    composite_gap_score: float
+    volume_gap_score: float | None = None
+    quality_gap_score: float | None = None
+    tag_gap_score: float | None = None
+    style_gap_score: float | None = None
+    price_gap_score: float | None = None
+    recency_gap_score: float | None = None
+    buyer_intent_score: float | None = None
+    profit_gap_score: float | None = None
+    composite_gap_score: float | None = None
     entry_angle: str
-    recommended_price_min: float
-    recommended_price_max: float
+    recommended_price_min: float | None = None
+    recommended_price_max: float | None = None
     listings_analyzed: int
-    avg_listing_age_months: float
+    avg_listing_age_months: float | None = None
+    evidence_status: str = "unverified"
+    score_version: str | None = None
 
 
 # ── Scheduler ───────────────────────────────────────────────────────────────
@@ -123,9 +134,9 @@ class StatsResponse(BaseModel):
     scanned: int
     unscanned: int
     total_scans: int
-    coverage_pct: float
-    avg_opportunity: float
-    avg_gap_score: float
+    coverage_pct: float | None
+    avg_opportunity: float | None
+    avg_gap_score: float | None
     breakout_count: int
     expansion_edges: int
     top_gap_keyword: dict | None
@@ -166,4 +177,4 @@ class SSEProgressEvent(BaseModel):
 
 class SSECompleteEvent(BaseModel):
     report_id: str
-    opportunity_score: float = 0.0
+    opportunity_score: float | None = None
