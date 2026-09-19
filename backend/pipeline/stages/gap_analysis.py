@@ -177,7 +177,11 @@ def run(
     report.recommended_tags = recommended_tags
 
     # ── Step 3: Recency gap (average listing age) ─────────────────────────────
-    ages = [d.listing_age_months for d in valid_details if d.listing_age_months > 0]
+    ages = [
+        d.listing_age_months
+        for d in valid_details
+        if d.listing_age_months is not None and d.listing_age_months > 0
+    ]
     report.avg_listing_age_months = round(sum(ages) / len(ages), 1) if ages else None
 
     # ── Step 4: Volume gap (supply/demand ratio) ──────────────────────────────

@@ -52,10 +52,3 @@ niche_scoring:
   margin_weight: null
   trend_weight: null
   opportunity_threshold: null
-
-pod_cost_estimates:
-  printify_tshirt_usd: null
-  printify_hoodie_usd: null
-  printify_mug_usd: null
-  printify_poster_usd: null
-  digital_production_usd: null

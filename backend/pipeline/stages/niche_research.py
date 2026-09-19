@@ -43,24 +43,24 @@ WORKSPACE = ROOT / "workspace"
 class KeywordSearchData:
     """Real Etsy listing data scraped for a single keyword."""
     keyword: str
-    total_listing_count: int
-    avg_price_usd: float
-    price_min: float
-    price_p25: float
-    price_median: float
-    price_p75: float
-    price_max: float
-    price_sweet_spot: str           # "$12–$28 (middle 50%)"
-    avg_review_count: float
-    pct_star_sellers: float
-    pct_bestsellers: float
+    total_listing_count: int | None
+    avg_price_usd: float | None
+    price_min: float | None
+    price_p25: float | None
+    price_median: float | None
+    price_p75: float | None
+    price_max: float | None
+    price_sweet_spot: str | None
+    avg_review_count: float | None
+    pct_star_sellers: float | None
+    pct_bestsellers: float | None
     competition_quality_score: float | None
     estimated_market_monthly_revenue_usd: float | None
     sampled_listing_count: int = 0
     top_listing_titles: list[str] = field(default_factory=list)
-    avg_favorites: float = 0.0          # avg favorites across sampled listings
-    max_favorites: int = 0              # peak single-listing favorites
-    pct_high_favorites: float = 0.0     # % listings with ≥100 favorites
+    avg_favorites: float | None = None
+    max_favorites: int | None = None
+    pct_high_favorites: float | None = None
 
 @dataclass
 class SeasonalityPoint:
@@ -186,11 +186,19 @@ def run(
     market_revenue: float | None = None
     avg_comp_quality: float | None = None
     if keyword_search_data:
-        observed_prices = [k.avg_price_usd for k in keyword_search_data if k.avg_price_usd > 0]
+        observed_prices = [
+            k.avg_price_usd
+            for k in keyword_search_data
+            if k.avg_price_usd is not None and k.avg_price_usd > 0
+        ]
         avg_price = sum(observed_prices) / len(observed_prices) if observed_prices else None
         # Use the keyword with most data for sweet spot
-        best = max(keyword_search_data, key=lambda k: k.total_listing_count, default=None)
-        price_sweet = best.price_sweet_spot if best else ""
+        best = max(
+            keyword_search_data,
+            key=lambda k: k.total_listing_count if k.total_listing_count is not None else -1,
+            default=None,
+        )
+        price_sweet = best.price_sweet_spot if best and best.price_sweet_spot else ""
         # Historical revenue and competition-quality fields are heuristic, not
         # observations. Keep them out of the report-level evidence contract.
 
@@ -299,9 +307,9 @@ def _run_scraper(
             )
             results.append(ksd)
             log_fn(
-                f"[niche_research] '{kw}': {sr.total_listing_count:,} listings  "
-                f"{len(sr.listings)} sampled  avg ${pd.mean:.2f}  sweet spot {pd.sweet_spot}  "
-                f"avg favs {sr.avg_favorites:.0f}"
+                f"[niche_research] '{kw}': {_format_count(sr.total_listing_count)} listings  "
+                f"{len(sr.listings)} sampled  avg {_format_usd(pd.mean)}  "
+                f"sweet spot {pd.sweet_spot or 'TBD'}  avg favs {_format_count(sr.avg_favorites)}"
             )
         except Exception as exc:
             log_fn(f"[niche_research] scraper error '{kw}': {exc}")
@@ -363,9 +371,9 @@ def _run_etsy_open_api_search(
             )
             results.append(ksd)
             log_fn(
-                f"[niche_research] '{kw}': Etsy API {sr.total_listing_count:,} listings  "
-                f"{len(sr.listings)} sampled  avg ${pd.mean:.2f}  sweet spot {pd.sweet_spot}  "
-                f"avg favs {sr.avg_favorites:.0f}"
+                f"[niche_research] '{kw}': Etsy API {_format_count(sr.total_listing_count)} listings  "
+                f"{len(sr.listings)} sampled  avg {_format_usd(pd.mean)}  "
+                f"sweet spot {pd.sweet_spot or 'TBD'}  avg favs {_format_count(sr.avg_favorites)}"
             )
     finally:
         client.close()
@@ -409,12 +417,11 @@ def _get_seasonality(
                 for m in range(1, 13)
             ]
 
-            # Peak months = months with interest ≥ 80% of max
-            max_interest = max(p.relative_interest for p in points) or 1
-            peak = [p.month for p in points if p.relative_interest >= max_interest * 0.8]
-
-            log_fn(f"[niche_research] Seasonality peaks: months {peak}")
-            return points, peak
+            # Preserve the provider's observations without inventing a cutoff for
+            # what qualifies as a "peak" month. A validated model can populate
+            # peak_months later; until then the value remains explicitly unknown.
+            log_fn("[niche_research] Seasonality observations collected; peak months TBD")
+            return points, []
 
         except Exception as exc:
             err_str = str(exc).lower()
@@ -502,7 +509,9 @@ def _llm_synthesis(
         top_signals = sorted(signals, key=lambda s: s.monthly_searches or -1, reverse=True)[:8]
         signals_summary = [
             {"kw": s.keyword, "searches": s.monthly_searches,
-             "comp": s.competition_score, "price": s.avg_price_usd, "trend": s.trend_direction}
+             "comp": s.competition_score, "price": s.avg_price_usd,
+             "trend": s.trend_direction, "relative_interest": s.relative_interest,
+             "relative_interest_period": s.relative_interest_period}
             for s in top_signals
         ]
 
@@ -532,9 +541,9 @@ Signals: {json.dumps(signals_summary)}
 Seasonality: {season_str or 'n/a'}
 
 Return ONLY this JSON (no explanation, no markdown):
-{{"keyword_clusters":[{{"cluster_name":"","keywords":[],"opportunity_score":0,"avg_competition_quality":0,"estimated_monthly_revenue_potential_usd":0,"rationale":""}}],"underserved_angles":[],"winning_styles":[],"recommended_product_types":[],"competitor_gaps":[],"pricing_insights":"","entry_strategy":""}}
+{{"keyword_clusters":[{{"cluster_name":"","keywords":[],"rationale":""}}],"underserved_angles":[],"winning_styles":[],"recommended_product_types":[],"competitor_gaps":[],"pricing_insights":"","entry_strategy":""}}
 
-Fill in real values. Return ONLY valid JSON."""
+Use only the observations supplied above. Do not estimate scores, demand, sales, revenue, or profitability. Return ONLY valid JSON."""
 
         llm = get_llm_with_fallback()
         if not llm.health_check():
@@ -585,7 +594,17 @@ def _signal_to_dict(s: NicheSignal) -> dict:
         "keyword": s.keyword, "monthly_searches": s.monthly_searches,
         "competition_score": s.competition_score, "avg_price_usd": s.avg_price_usd,
         "trend_direction": s.trend_direction, "source": s.source,
+        "relative_interest": s.relative_interest,
+        "relative_interest_period": s.relative_interest_period,
     }
+
+
+def _format_count(value: int | float | None) -> str:
+    return f"{value:,.0f}" if value is not None else "TBD"
+
+
+def _format_usd(value: float | None) -> str:
+    return f"${value:.2f}" if value is not None else "TBD"
 
 
 def _minimal_report(seed_keywords: list[str], store_slug: str, sources: list[str]) -> NicheReport:

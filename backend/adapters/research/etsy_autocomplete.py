@@ -1,20 +1,14 @@
 """
 Etsy autocomplete research adapter — no API key required.
-Hits the public Etsy autocomplete endpoint to gather keyword suggestions
-and estimates competition/demand from listing count queries.
+Hits the public Etsy autocomplete endpoint to gather keyword suggestions.
 """
 
-import os
-import time
 import httpx
 from adapters.base.research import BaseResearchAdapter, NicheSignal
-from adapters.research.etsy_search_scraper import is_etsy_html_blocked, mark_etsy_html_blocked
 
 
 # Etsy changed their autocomplete endpoint — using the current suggestions API
 _AUTOCOMPLETE_URL = "https://www.etsy.com/api/v3/ajax/suggest/keywords"
-_SEARCH_URL = "https://www.etsy.com/search"
-
 import random
 _USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -34,7 +28,7 @@ def _get_headers():
 
 
 class EtsyAutocompleteAdapter(BaseResearchAdapter):
-    """Scrapes Etsy autocomplete + listing counts for demand/competition signals."""
+    """Collects Etsy autocomplete suggestions without inventing rank metrics."""
 
     def __init__(self, request_delay: float = 0.5):
         self._delay = request_delay
@@ -51,12 +45,7 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
         suggestions = self._get_suggestions(keyword)
         if not suggestions:
             return []
-        results: list[NicheSignal] = []
-        for kw in suggestions[:10]:
-            count = self._get_listing_count(kw)
-            results.append(self._build_signal(kw, count if count > 0 else None))
-            time.sleep(self._delay)
-        return results
+        return [self._build_signal(kw) for kw in suggestions[:10]]
 
     def bulk_search(self, keywords: list[str]) -> list[NicheSignal]:
         results: list[NicheSignal] = []
@@ -85,47 +74,12 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
             pass
         return []
 
-    def _get_listing_count(self, keyword: str) -> int:
-        """Returns approximate listing count from Etsy search page."""
-        html_enabled = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
-        if not html_enabled:
-            return 0
-        if is_etsy_html_blocked():
-            return 0
-        try:
-            resp = self._client.get(
-                _SEARCH_URL,
-                params={"q": keyword, "explicit": "1"},
-            )
-            if resp.status_code == 200:
-                text = resp.text
-                # look for "X,XXX results" or "X results"
-                import re
-                m = re.search(r'"num_listings_available":(\d+)', text)
-                if m:
-                    return int(m.group(1))
-                m = re.search(r'([\d,]+)\s+results', text)
-                if m:
-                    return int(m.group(1).replace(",", ""))
-            if resp.status_code in (403, 429):
-                mark_etsy_html_blocked(f"Etsy listing-count search returned HTTP {resp.status_code}")
-        except Exception:
-            pass
-        return 0
-
     @staticmethod
-    def _build_signal(keyword: str, listing_count: int | None) -> NicheSignal:
-        # competition score: log-scale capped at 100
-        # <5k listings = low competition; >500k = very high
-        import math
-        comp = (
-            min(100.0, math.log10(listing_count) / math.log10(500_000) * 100)
-            if listing_count is not None and listing_count > 0 else None
-        )
+    def _build_signal(keyword: str) -> NicheSignal:
         return NicheSignal(
             keyword=keyword,
             monthly_searches=None,
-            competition_score=round(comp, 1) if comp is not None else None,
+            competition_score=None,
             avg_price_usd=None,
             trend_direction=None,
             source="etsy_autocomplete",

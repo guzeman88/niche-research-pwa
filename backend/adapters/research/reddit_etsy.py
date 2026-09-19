@@ -50,16 +50,12 @@ class RedditEtsyAdapter(BaseResearchAdapter):
                 )
                 if not posts:
                     continue
-                # aggregate: upvote avg as demand proxy, comment count as engagement
-                avg_score = sum(p.score for p in posts) / len(posts)
-                avg_comments = sum(p.num_comments for p in posts) / len(posts)
-                demand = min(100.0, avg_score / 10)  # rough scale
                 results.append(NicheSignal(
                     keyword=kw,
                     monthly_searches=None,
                     competition_score=None,
                     avg_price_usd=None,
-                    trend_direction=_trend_from_posts(posts),
+                    trend_direction=None,
                     source="reddit_etsy",
                 ))
             except Exception:
@@ -71,16 +67,3 @@ class RedditEtsyAdapter(BaseResearchAdapter):
             from adapters.integrations.reddit import RedditClient
             self._client = RedditClient()
         return self._client
-
-
-def _trend_from_posts(posts) -> str:
-    if not posts:
-        return "stable"
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).timestamp()
-    recent = [p for p in posts if (now - p.created_utc) < 86400 * 30]
-    if len(recent) >= len(posts) * 0.6:
-        return "rising"
-    if len(recent) <= len(posts) * 0.2:
-        return "declining"
-    return "stable"

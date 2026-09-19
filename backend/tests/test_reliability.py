@@ -154,6 +154,52 @@ def test_store_ideas_require_versioned_evidence_and_keep_derived_scores_tbd():
     assert idea["feeModel"] is None
 
 
+def test_etsy_listing_evidence_never_infers_sales_revenue_or_rank():
+    from adapters.research.etsy_search_scraper import EtsyListingData, EtsySearchResult
+
+    listing = EtsyListingData(
+        listing_id="123",
+        title="Observed listing",
+        price_usd=25.0,
+        review_count=10,
+        is_star_seller=None,
+        is_bestseller=None,
+        shop_name="shop",
+        url="https://www.etsy.com/listing/123/",
+    )
+    result = EtsySearchResult(keyword="observed", total_listing_count=None, listings=[listing])
+    result.compute_aggregates()
+
+    assert not hasattr(listing, "estimated_lifetime_sales")
+    assert not hasattr(listing, "estimated_monthly_revenue_usd")
+    assert result.estimated_total_monthly_revenue_usd is None
+    assert result.competition_quality_score is None
+    assert result.avg_review_count == 10.0
+    assert result.avg_favorites is None
+
+
+def test_schema_v12_clears_unversioned_derived_business_values(database):
+    database.add_seed("legacy estimate", source="test")
+    with database._conn() as con:
+        con.execute("""
+            INSERT INTO scans
+                (keyword, scanned_at, opportunity_score, monthly_revenue_usd,
+                 competition_quality, profitability_index, pct_high_favorites, evidence_status)
+            VALUES ('legacy estimate', '2026-09-01', 88, 9999, 77, 66, 50, 'unverified')
+        """)
+        con.execute("DELETE FROM schema_version")
+        con.execute("INSERT INTO schema_version(version) VALUES (10)")
+    database.init_db()
+    with database._conn() as con:
+        row = con.execute("""
+            SELECT opportunity_score, monthly_revenue_usd, competition_quality,
+                   profitability_index, pct_high_favorites
+            FROM scans WHERE keyword='legacy estimate'
+        """).fetchone()
+    assert database.SCHEMA_VERSION == 12
+    assert tuple(row) == (None, None, None, None, None)
+
+
 def test_local_origin_cannot_bypass_tunnel_auth(monkeypatch):
     from starlette.requests import Request
     from security import is_authorized

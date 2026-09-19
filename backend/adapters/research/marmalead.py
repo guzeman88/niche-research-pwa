@@ -43,10 +43,8 @@ class MarmaleadAdapter(BaseResearchAdapter):
                 if resp.status_code == 200:
                     data = resp.json()
                     results.append(self._parse(kw, data))
-                else:
-                    results.append(_zero_signal(kw))
             except Exception:
-                results.append(_zero_signal(kw))
+                continue
         return results
 
     @staticmethod
@@ -58,21 +56,11 @@ class MarmaleadAdapter(BaseResearchAdapter):
         comp = float(comp_raw) if isinstance(comp_raw, (int, float)) else None
         avg_price_raw = kw_data.get("avg_price")
         avg_price = float(avg_price_raw) if avg_price_raw is not None else None
-        engagement = kw_data.get("engagement")
-        trend = {"high": "rising", "medium": "stable", "low": "declining"}.get(
-            str(engagement).lower(), None
-        )
         return NicheSignal(
             keyword=keyword,
             monthly_searches=int(searches) if searches is not None else None,
-            competition_score=min(100.0, comp) if comp is not None else None,
+            competition_score=comp,
             avg_price_usd=avg_price,
-            trend_direction=trend,
+            trend_direction=None,
             source="marmalead",
         )
-
-
-def _zero_signal(keyword: str) -> NicheSignal:
-    return NicheSignal(keyword=keyword, monthly_searches=None,
-                       competition_score=None, avg_price_usd=None,
-                       trend_direction=None, source="marmalead")

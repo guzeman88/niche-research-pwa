@@ -1755,28 +1755,29 @@ function csvCell(value: string): string {
 
 interface WorkspacePerformanceSummary {
   hasData: boolean
-  views: number
-  favorites: number
-  orders: number
-  revenue: number
+  views: number | null
+  favorites: number | null
+  orders: number | null
+  revenue: number | null
   tracked: number
 }
 
 function workspacePerformance(workspace: StoreWorkspace): WorkspacePerformanceSummary {
-  const initial: WorkspacePerformanceSummary = { hasData: false, views: 0, favorites: 0, orders: 0, revenue: 0, tracked: 0 }
-  return workspace.listings.reduce<WorkspacePerformanceSummary>((summary, listing) => {
-    const perf = listing.performance
-    const hasData = !!perf && [perf.views, perf.favorites, perf.orders, perf.revenue].some((value) => Number.isFinite(value))
-    if (!hasData) return summary
-    return {
-      hasData: true,
-      tracked: summary.tracked + 1,
-      views: summary.views + Number(perf?.views || 0),
-      favorites: summary.favorites + Number(perf?.favorites || 0),
-      orders: summary.orders + Number(perf?.orders || 0),
-      revenue: summary.revenue + Number(perf?.revenue || 0),
-    }
-  }, initial)
+  const tracked = workspace.listings
+    .map((listing) => listing.performance)
+    .filter((performance) => performance && [performance.views, performance.favorites, performance.orders, performance.revenue].some((value) => Number.isFinite(value)))
+  const total = (field: 'views' | 'favorites' | 'orders' | 'revenue'): number | null => {
+    if (!tracked.length || tracked.some((performance) => !Number.isFinite(performance?.[field]))) return null
+    return tracked.reduce((sum, performance) => sum + Number(performance?.[field]), 0)
+  }
+  return {
+    hasData: tracked.length > 0,
+    tracked: tracked.length,
+    views: total('views'),
+    favorites: total('favorites'),
+    orders: total('orders'),
+    revenue: total('revenue'),
+  }
 }
 
 function PerformanceSummaryPanel({ performance }: { performance: WorkspacePerformanceSummary }) {
@@ -1784,10 +1785,10 @@ function PerformanceSummaryPanel({ performance }: { performance: WorkspacePerfor
     <div className="panel-soft p-4">
       <div className="section-label mb-3">Performance</div>
       <div className="grid grid-cols-2 gap-2">
-        <MiniMetric label="Views" value={`${performance.views}`} />
-        <MiniMetric label="Favorites" value={`${performance.favorites}`} />
-        <MiniMetric label="Orders" value={`${performance.orders}`} />
-        <MiniMetric label="Revenue" value={performance.revenue ? fmtPrice(performance.revenue) : '0'} />
+        <MiniMetric label="Views" value={performance.views == null ? 'TBD' : `${performance.views}`} />
+        <MiniMetric label="Favorites" value={performance.favorites == null ? 'TBD' : `${performance.favorites}`} />
+        <MiniMetric label="Orders" value={performance.orders == null ? 'TBD' : `${performance.orders}`} />
+        <MiniMetric label="Revenue" value={performance.revenue == null ? 'TBD' : fmtPrice(performance.revenue)} />
       </div>
       <div className="mt-2 text-[11px] font-semibold text-surface-400">{performance.tracked} listings tracked</div>
     </div>

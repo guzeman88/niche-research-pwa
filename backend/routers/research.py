@@ -44,21 +44,16 @@ def _json_list(value) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
-def _price_sweet_spot(avg_price: float | None) -> str:
-    if avg_price is None or avg_price <= 0:
-        return ""
-    low = max(1.0, avg_price * 0.8)
-    high = avg_price * 1.2
-    return f"${low:.0f}-${high:.0f}"
-
-
 def _db_report_from_opportunity(row: dict, store_slug: str) -> dict:
     keyword = row.get("keyword", "")
     avg_price = _as_float(row.get("avg_price_usd"))
-    monthly_revenue = _as_float(row.get("monthly_revenue_usd"))
-    competition_quality = _as_float(row.get("competition_quality"))
     listing_count = _as_int(row.get("listing_count"))
-    price_sweet_spot = _price_sweet_spot(avg_price)
+    price_p25 = _as_float(row.get("price_p25_usd"))
+    price_p75 = _as_float(row.get("price_p75_usd"))
+    price_sweet_spot = (
+        f"${price_p25:.0f}-${price_p75:.0f}"
+        if price_p25 is not None and price_p75 is not None else ""
+    )
     report_id = _report_id_for_row(row)
 
     return {
@@ -70,7 +65,7 @@ def _db_report_from_opportunity(row: dict, store_slug: str) -> dict:
             "monthly_searches": row.get("observed_search_volume"),
             "competition_score": _as_float(row.get("competition_score")),
             "avg_price_usd": avg_price,
-            "trend_direction": row.get("trajectory"),
+            "trend_direction": None,
             "source": "keyword_database",
         }],
         "keyword_search_data": [{
@@ -78,15 +73,15 @@ def _db_report_from_opportunity(row: dict, store_slug: str) -> dict:
             "total_listing_count": listing_count,
             "avg_price_usd": avg_price,
             "price_min": row.get("price_min_usd"),
-            "price_p25": row.get("price_p25_usd"),
-            "price_median": avg_price,
-            "price_p75": row.get("price_p75_usd"),
+            "price_p25": price_p25,
+            "price_median": row.get("price_median_usd"),
+            "price_p75": price_p75,
             "price_max": row.get("price_max_usd"),
             "price_sweet_spot": price_sweet_spot,
             "avg_review_count": None,
             "pct_star_sellers": row.get("pct_star_sellers"),
             "pct_bestsellers": row.get("pct_bestsellers"),
-            "competition_quality_score": competition_quality,
+            "competition_quality_score": None,
             "estimated_market_monthly_revenue_usd": None,
             "top_listing_titles": [],
             "avg_favorites": row.get("avg_favorites"),
@@ -100,8 +95,8 @@ def _db_report_from_opportunity(row: dict, store_slug: str) -> dict:
         "opportunity_score": _as_float(row.get("opportunity_score")),
         "avg_price_usd": avg_price,
         "price_sweet_spot": price_sweet_spot,
-        "estimated_market_monthly_revenue_usd": monthly_revenue,
-        "avg_competition_quality": competition_quality,
+        "estimated_market_monthly_revenue_usd": None,
+        "avg_competition_quality": None,
         "seasonality": [],
         "peak_months": _json_list(row.get("peak_months")),
         "keyword_clusters": [],

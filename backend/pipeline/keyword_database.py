@@ -36,9 +36,7 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 10
-SCORE_VERSION = "evidence-v1"
-MIN_LISTING_SAMPLE = 5
+SCHEMA_VERSION = 12
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -149,7 +147,7 @@ def _migrate_v2(con: sqlite3.Connection) -> None:
             keyword                 TEXT PRIMARY KEY,
             gap_score               REAL,
             listing_efficiency      REAL,
-            score_delta             REAL DEFAULT 0,
+            score_delta             REAL,
             previous_gap_score      REAL,
             trajectory              TEXT DEFAULT 'stable',
             breakout_flag           INTEGER DEFAULT 0,
@@ -176,7 +174,7 @@ def _migrate_v3(con: sqlite3.Connection) -> None:
     for col, typedef in [
         ("gap_score",           "REAL"),
         ("listing_efficiency",  "REAL"),
-        ("score_delta",         "REAL DEFAULT 0"),
+        ("score_delta",         "REAL"),
         ("trajectory",          "TEXT DEFAULT 'stable'"),
     ]:
         try:
@@ -192,21 +190,21 @@ def _migrate_v4(con: sqlite3.Connection) -> None:
             id                          INTEGER PRIMARY KEY AUTOINCREMENT,
             keyword                     TEXT NOT NULL,
             analyzed_at                 TEXT NOT NULL,
-            volume_gap_score            REAL DEFAULT 0,
-            quality_gap_score           REAL DEFAULT 0,
-            tag_gap_score               REAL DEFAULT 0,
-            style_gap_score             REAL DEFAULT 0,
-            price_gap_score             REAL DEFAULT 0,
-            recency_gap_score           REAL DEFAULT 0,
-            composite_gap_score         REAL DEFAULT 0,
+            volume_gap_score            REAL,
+            quality_gap_score           REAL,
+            tag_gap_score               REAL,
+            style_gap_score             REAL,
+            price_gap_score             REAL,
+            recency_gap_score           REAL,
+            composite_gap_score         REAL,
             entry_angle                 TEXT DEFAULT '',
-            recommended_price_min       REAL DEFAULT 0,
-            recommended_price_max       REAL DEFAULT 0,
+            recommended_price_min       REAL,
+            recommended_price_max       REAL,
             untagged_searches_json      TEXT DEFAULT '[]',
             dominant_competitor_tags_json TEXT DEFAULT '[]',
             recommended_tags_json       TEXT DEFAULT '[]',
             listings_analyzed           INTEGER DEFAULT 0,
-            avg_listing_age_months      REAL DEFAULT 0
+            avg_listing_age_months      REAL
         );
 
         CREATE INDEX IF NOT EXISTS idx_gap_reports_keyword ON gap_reports(keyword);
@@ -217,8 +215,8 @@ def _migrate_v4(con: sqlite3.Connection) -> None:
 def _migrate_v5(con: sqlite3.Connection) -> None:
     """Add profit and buyer-intent signals to full gap reports."""
     for col, typedef in [
-        ("buyer_intent_score", "REAL DEFAULT 0"),
-        ("profit_gap_score", "REAL DEFAULT 0"),
+        ("buyer_intent_score", "REAL"),
+        ("profit_gap_score", "REAL"),
     ]:
         try:
             con.execute(f"ALTER TABLE gap_reports ADD COLUMN {col} {typedef}")
@@ -229,30 +227,30 @@ def _migrate_v5(con: sqlite3.Connection) -> None:
 def _migrate_v6(con: sqlite3.Connection) -> None:
     """Add deeper profitability and market-evidence fields."""
     scan_cols = [
-        ("price_min_usd", "REAL DEFAULT 0"),
-        ("price_p25_usd", "REAL DEFAULT 0"),
-        ("price_median_usd", "REAL DEFAULT 0"),
-        ("price_p75_usd", "REAL DEFAULT 0"),
-        ("price_max_usd", "REAL DEFAULT 0"),
-        ("avg_favorites", "REAL DEFAULT 0"),
-        ("max_favorites", "INTEGER DEFAULT 0"),
-        ("pct_high_favorites", "REAL DEFAULT 0"),
-        ("pct_star_sellers", "REAL DEFAULT 0"),
-        ("pct_bestsellers", "REAL DEFAULT 0"),
-        ("revenue_per_listing", "REAL DEFAULT 0"),
-        ("market_evidence_score", "REAL DEFAULT 0"),
-        ("profitability_index", "REAL DEFAULT 0"),
+        ("price_min_usd", "REAL"),
+        ("price_p25_usd", "REAL"),
+        ("price_median_usd", "REAL"),
+        ("price_p75_usd", "REAL"),
+        ("price_max_usd", "REAL"),
+        ("avg_favorites", "REAL"),
+        ("max_favorites", "INTEGER"),
+        ("pct_high_favorites", "REAL"),
+        ("pct_star_sellers", "REAL"),
+        ("pct_bestsellers", "REAL"),
+        ("revenue_per_listing", "REAL"),
+        ("market_evidence_score", "REAL"),
+        ("profitability_index", "REAL"),
     ]
     gap_cols = [
-        ("price_p25_usd", "REAL DEFAULT 0"),
-        ("price_median_usd", "REAL DEFAULT 0"),
-        ("price_p75_usd", "REAL DEFAULT 0"),
-        ("avg_favorites", "REAL DEFAULT 0"),
-        ("pct_high_favorites", "REAL DEFAULT 0"),
-        ("pct_star_sellers", "REAL DEFAULT 0"),
-        ("pct_bestsellers", "REAL DEFAULT 0"),
-        ("revenue_per_listing", "REAL DEFAULT 0"),
-        ("market_evidence_score", "REAL DEFAULT 0"),
+        ("price_p25_usd", "REAL"),
+        ("price_median_usd", "REAL"),
+        ("price_p75_usd", "REAL"),
+        ("avg_favorites", "REAL"),
+        ("pct_high_favorites", "REAL"),
+        ("pct_star_sellers", "REAL"),
+        ("pct_bestsellers", "REAL"),
+        ("revenue_per_listing", "REAL"),
+        ("market_evidence_score", "REAL"),
     ]
     for col, typedef in scan_cols:
         try:
@@ -310,6 +308,12 @@ def init_db() -> None:
         if version < 10:
             _migrate_v10(con)
             _set_version(con, 10)
+        if version < 11:
+            _migrate_v11(con)
+            _set_version(con, 11)
+        if version < 12:
+            _migrate_v12(con)
+            _set_version(con, 12)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
 
@@ -450,19 +454,21 @@ def _migrate_v10(con: sqlite3.Connection) -> None:
         SELECT keyword, source, added_at, ?, 1 FROM seeds
     """, (now,))
 
-    # A retained score must prove that it came from an actual listing sample.
+    # A retained score must prove that it came from actual observations. No
+    # global sample-size cutoff is imposed here; model-specific validation must
+    # be declared by the versioned scoring model that produced the score.
     con.execute("""
         DELETE FROM gap_reports
-        WHERE COALESCE(listings_analyzed, 0) < ?
+        WHERE COALESCE(listings_analyzed, 0) <= 0
            OR COALESCE(market_evidence_score, 0) <= 0
-    """, (MIN_LISTING_SAMPLE,))
+    """)
     con.execute("""
         DELETE FROM scans
-        WHERE COALESCE(sampled_listing_count, 0) < ?
+        WHERE COALESCE(sampled_listing_count, 0) <= 0
            OR COALESCE(listing_count, 0) <= 0
            OR COALESCE(avg_price_usd, 0) <= 0
            OR COALESCE(market_evidence_score, 0) <= 0
-    """, (MIN_LISTING_SAMPLE,))
+    """)
     con.execute("""
         DELETE FROM gap_scores
         WHERE NOT EXISTS (
@@ -472,6 +478,52 @@ def _migrate_v10(con: sqlite3.Connection) -> None:
         )
     """)
     con.execute("DELETE FROM scheduler_log")
+
+
+def _migrate_v11(con: sqlite3.Connection) -> None:
+    """Clear legacy derived values that have no accepted score provenance."""
+    con.execute("""
+        UPDATE scans
+        SET opportunity_score=NULL,
+            demand_score=NULL,
+            competition_score=NULL,
+            margin_score=NULL,
+            trend_score=NULL,
+            monthly_revenue_usd=NULL,
+            competition_quality=NULL,
+            gap_score=NULL,
+            listing_efficiency=NULL,
+            score_delta=NULL,
+            trajectory=NULL,
+            revenue_per_listing=NULL,
+            market_evidence_score=NULL,
+            profitability_index=NULL
+        WHERE score_version IS NULL OR evidence_status != 'verified'
+    """)
+    con.execute("""
+        UPDATE gap_reports
+        SET volume_gap_score=NULL,
+            quality_gap_score=NULL,
+            tag_gap_score=NULL,
+            style_gap_score=NULL,
+            price_gap_score=NULL,
+            recency_gap_score=NULL,
+            buyer_intent_score=NULL,
+            profit_gap_score=NULL,
+            composite_gap_score=NULL,
+            recommended_price_min=NULL,
+            recommended_price_max=NULL,
+            revenue_per_listing=NULL,
+            market_evidence_score=NULL
+        WHERE score_version IS NULL OR evidence_status != 'verified'
+    """)
+    con.execute("DELETE FROM gap_scores")
+
+
+def _migrate_v12(con: sqlite3.Connection) -> None:
+    """Remove the legacy arbitrary definition of a high-favorite listing."""
+    con.execute("UPDATE scans SET pct_high_favorites=NULL")
+    con.execute("UPDATE gap_reports SET pct_high_favorites=NULL")
 
 
 # ── Seed management ───────────────────────────────────────────────────────────
@@ -849,6 +901,11 @@ def _present_number(value) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def _present_int(value) -> int | None:
+    number = _present_number(value)
+    return int(number) if number is not None and number.is_integer() else None
+
+
 def _extract_market_metrics(keyword: str, report_data: dict) -> dict:
     """Extract only observations for the requested keyword; never borrow defaults."""
     raw_rows = report_data.get("keyword_search_data", []) or []
@@ -870,7 +927,32 @@ def _extract_market_metrics(keyword: str, report_data: dict) -> dict:
         and str(item.get("keyword", "")).strip().lower() == normalized
         and str(item.get("source", "")).lower() in {"erank", "marmalead"}
     ]
-    volume_observations = [value for value in volume_observations if value is not None and value > 0]
+    volume_observations = [value for value in volume_observations if value is not None and value >= 0]
+    relative_interest_observations = {
+        source: [
+            _present_number(item.get("relative_interest"))
+            for item in signals
+            if isinstance(item, dict)
+            and str(item.get("keyword", "")).strip().lower() == normalized
+            and str(item.get("source", "")).lower() == source
+        ]
+        for source in ("google_trends", "pinterest_trends")
+    }
+    relative_interest_observations = {
+        source: [value for value in values if value is not None]
+        for source, values in relative_interest_observations.items()
+    }
+    relative_interest_periods = {
+        source: [
+            str(item.get("relative_interest_period"))
+            for item in signals
+            if isinstance(item, dict)
+            and str(item.get("keyword", "")).strip().lower() == normalized
+            and str(item.get("source", "")).lower() == source
+            and item.get("relative_interest_period")
+        ]
+        for source in ("google_trends", "pinterest_trends")
+    }
 
     if row is None:
         return {
@@ -888,11 +970,31 @@ def _extract_market_metrics(keyword: str, report_data: dict) -> dict:
             "pct_star_sellers": None,
             "pct_bestsellers": None,
             "observed_search_volume": volume_observations[0] if len(volume_observations) == 1 else None,
+            "google_trends_relative_interest": (
+                relative_interest_observations["google_trends"][0]
+                if len(relative_interest_observations["google_trends"]) == 1 else None
+            ),
+            "pinterest_relative_interest": (
+                relative_interest_observations["pinterest_trends"][0]
+                if len(relative_interest_observations["pinterest_trends"]) == 1 else None
+            ),
+            "google_trends_relative_interest_period": (
+                relative_interest_periods["google_trends"][0]
+                if len(relative_interest_periods["google_trends"]) == 1 else None
+            ),
+            "pinterest_relative_interest_period": (
+                relative_interest_periods["pinterest_trends"][0]
+                if len(relative_interest_periods["pinterest_trends"]) == 1 else None
+            ),
         }
 
     return {
-        "sampled_listings": int(row.get("sampled_listing_count") or len(row.get("top_listing_titles") or [])) or None,
-        "listing_count": int(row.get("listing_count") or row.get("total_listing_count") or 0) or None,
+        "sampled_listings": _present_int(row.get("sampled_listing_count")),
+        "listing_count": _present_int(
+            row.get("listing_count")
+            if row.get("listing_count") is not None
+            else row.get("total_listing_count")
+        ),
         "avg_price_usd": _present_number(row.get("avg_price_usd")),
         "price_min_usd": _present_number(row.get("price_min")),
         "price_p25_usd": _present_number(row.get("price_p25")),
@@ -901,16 +1003,33 @@ def _extract_market_metrics(keyword: str, report_data: dict) -> dict:
         "price_max_usd": _present_number(row.get("price_max")),
         "avg_favorites": _present_number(row.get("avg_favorites")),
         "max_favorites": int(row["max_favorites"]) if row.get("max_favorites") is not None else None,
-        "pct_high_favorites": _present_number(row.get("pct_high_favorites")),
+        # No global favorite-count threshold is treated as meaningful evidence.
+        "pct_high_favorites": None,
         "pct_star_sellers": _present_number(row.get("pct_star_sellers")),
         "pct_bestsellers": _present_number(row.get("pct_bestsellers")),
         "observed_search_volume": volume_observations[0] if len(volume_observations) == 1 else None,
+        "google_trends_relative_interest": (
+            relative_interest_observations["google_trends"][0]
+            if len(relative_interest_observations["google_trends"]) == 1 else None
+        ),
+        "pinterest_relative_interest": (
+            relative_interest_observations["pinterest_trends"][0]
+            if len(relative_interest_observations["pinterest_trends"]) == 1 else None
+        ),
+        "google_trends_relative_interest_period": (
+            relative_interest_periods["google_trends"][0]
+            if len(relative_interest_periods["google_trends"]) == 1 else None
+        ),
+        "pinterest_relative_interest_period": (
+            relative_interest_periods["pinterest_trends"][0]
+            if len(relative_interest_periods["pinterest_trends"]) == 1 else None
+        ),
     }
 
 
 def _classify_market_evidence(metrics: dict, scan_error: str | None = None) -> tuple[str, dict]:
     requirements = {
-        "listing_sample": (metrics.get("sampled_listings") or 0) >= MIN_LISTING_SAMPLE,
+        "listing_sample": (metrics.get("sampled_listings") or 0) > 0,
         "listing_count": metrics.get("listing_count") is not None,
         "average_price": metrics.get("avg_price_usd") is not None,
     }
@@ -963,6 +1082,21 @@ def _record_scan_observations(con: sqlite3.Connection, keyword: str, observed_at
                 (keyword, source, observed_at, metric, value, unit, sample_size, metadata_json)
             VALUES (?, 'external_keyword_provider', ?, 'monthly_searches', ?, 'searches_per_month', NULL, NULL)
         """, (keyword, observed_at, metrics["observed_search_volume"]))
+
+    for source, metric_key, period_key in (
+        ("google_trends", "google_trends_relative_interest", "google_trends_relative_interest_period"),
+        ("pinterest_trends", "pinterest_relative_interest", "pinterest_relative_interest_period"),
+    ):
+        value = metrics.get(metric_key)
+        if value is None:
+            continue
+        period = metrics.get(period_key)
+        metadata = json.dumps({"period": period}) if period else None
+        con.execute("""
+            INSERT OR REPLACE INTO keyword_observations
+                (keyword, source, observed_at, metric, value, unit, sample_size, metadata_json)
+            VALUES (?, ?, ?, 'relative_interest', ?, 'provider_index', NULL, ?)
+        """, (keyword, source, observed_at, value, metadata))
 
 
 def save_scan(keyword: str, report) -> None:
@@ -1122,7 +1256,7 @@ def get_breakouts(limit: int = 20) -> list[str]:
 
 
 def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[str]:
-    """Old attempts missing the explicit minimum market observations."""
+    """Old attempts missing one or more required market observations."""
     cutoff = (datetime.utcnow() - timedelta(hours=min_age_hours)).isoformat()
     with _conn() as con:
         rows = con.execute("""
@@ -1134,13 +1268,13 @@ def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[s
               AND (
                 sc.evidence_status != 'verified'
                 OR sc.sampled_listing_count IS NULL
-                OR sc.sampled_listing_count < ?
+                OR sc.sampled_listing_count <= 0
                 OR sc.avg_price_usd IS NULL
                 OR sc.listing_count IS NULL
               )
             ORDER BY sc.scanned_at ASC
             LIMIT ?
-        """, (cutoff, MIN_LISTING_SAMPLE, limit)).fetchall()
+        """, (cutoff, limit)).fetchall()
         return [r[0] for r in rows]
 
 
@@ -1221,6 +1355,11 @@ def get_top_opportunities(limit: int = 100, domain: Optional[str] = None) -> lis
                    sc.avg_price_usd, sc.monthly_revenue_usd, sc.competition_quality,
                    sc.listing_count, sc.scanned_at, sc.entry_strategy, sc.peak_months,
                    sc.gap_score, sc.score_delta, sc.trajectory, sc.profitability_index,
+                   sc.price_min_usd, sc.price_p25_usd, sc.price_median_usd,
+                   sc.price_p75_usd, sc.price_max_usd, sc.avg_favorites,
+                   sc.max_favorites, sc.pct_high_favorites, sc.pct_star_sellers,
+                   sc.pct_bestsellers, sc.observed_search_volume,
+                   sc.sampled_listing_count, sc.sources_used,
                    sc.evidence_status, sc.score_version, sc.evidence_details_json,
                    COALESCE(sc.profitability_index, sc.opportunity_score, sc.gap_score) AS primary_score,
                    CASE
@@ -1817,17 +1956,26 @@ def save_gap_report(
     """Persist observed gap inputs; only an explicit complete score is rankable."""
     now = datetime.utcnow().isoformat()
     kw = keyword.strip().lower()
-    evidence_status = "verified" if listings_analyzed >= MIN_LISTING_SAMPLE else (
-        "partial" if listings_analyzed > 0 else "unverified"
-    )
+    evidence_status = "verified" if listings_analyzed > 0 else "unverified"
     accepted_score_version = (
         score_version if evidence_status == "verified" and composite_gap is not None else None
     )
+    if accepted_score_version is None:
+        volume_gap = None
+        quality_gap = None
+        tag_gap = None
+        style_gap = None
+        price_gap = None
+        recency_gap = None
+        buyer_intent = None
+        profit_gap = None
+        composite_gap = None
+        market_evidence_score = None
+    pct_high_favorites = None
     evidence_details = {
         "listings_analyzed": listings_analyzed,
-        "minimum_listing_sample": MIN_LISTING_SAMPLE,
         "score_available": accepted_score_version is not None,
-        "missing": [] if listings_analyzed >= MIN_LISTING_SAMPLE else ["minimum_listing_sample"],
+        "missing": [] if listings_analyzed > 0 else ["listing_sample"],
     }
     with _conn() as con:
         cur = con.execute("""
