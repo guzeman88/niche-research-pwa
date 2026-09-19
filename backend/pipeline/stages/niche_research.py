@@ -558,7 +558,8 @@ Fill in real values. Return ONLY valid JSON."""
             else:
                 raise ValueError("No JSON object found in LLM response")
 
-        log_fn(f"[niche_research] LLM synthesis done (${resp.cost_usd:.4f})")
+        cost_label = f"${resp.cost_usd:.4f}" if resp.cost_usd is not None else "TBD"
+        log_fn(f"[niche_research] LLM synthesis done (cost: {cost_label})")
         return data
     except Exception as exc:
         log_fn(f"[niche_research] LLM synthesis failed: {exc}")

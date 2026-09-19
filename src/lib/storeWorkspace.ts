@@ -48,7 +48,7 @@ export interface ProductTypeFit {
 
 export interface ProductGapEvidence {
   score: number | null
-  level: 'thin' | 'developing' | 'solid' | 'deep'
+  level: 'unverified' | 'thin' | 'developing' | 'solid' | 'deep'
   reasons: string[]
   cautions: string[]
   missing: string[]
@@ -354,7 +354,7 @@ export function extractStoreKeywords(store: StoreItem): StoreKeywordCandidate[] 
       strength: null,
       source: current?.source ? `${current.source}, ${source}` : source,
     }
-    merged.strength = keywordStrength(merged)
+    merged.strength = keywordStrength()
     byKeyword.set(key, merged)
   }
 
@@ -364,18 +364,15 @@ export function extractStoreKeywords(store: StoreItem): StoreKeywordCandidate[] 
     arrayOfRecords(cluster.keywords).forEach((keyword) => addKeyword(keyword as Partial<StoreIdeaKeyword>, String(cluster.label || 'cluster')))
   })
   arrayOfRecords(snapshot.listing_blueprints).forEach((blueprint) => {
-    const quality = numberOrNull(blueprint.profitabilityScore) ?? numberOrNull(blueprint.listingQualityScore)
     addKeyword({
       keyword: String(blueprint.primaryKeyword || ''),
       product: String(blueprint.productType || 'Keyword'),
-      sourceStrength: quality,
       buyerIntent: numberOrNull(blueprint.buyerIntent) ?? undefined,
       priceRange: recordOrNull(blueprint.priceBand) as StoreIdeaKeyword['priceRange'],
     }, 'blueprint')
     arrayOfStrings(blueprint.supportingKeywords).forEach((keyword) => addKeyword({
       keyword,
       product: String(blueprint.productType || 'Keyword'),
-      sourceStrength: quality,
       buyerIntent: numberOrNull(blueprint.buyerIntent) ?? undefined,
     }, 'blueprint'))
   })
@@ -399,7 +396,7 @@ export function extractKeywordClusters(store: StoreItem): Array<{ id: string; la
           ...item,
           keyword: String(item.keyword || ''),
           product: item.product || 'Keyword',
-          strength: keywordStrength(item as StoreIdeaKeyword),
+          strength: keywordStrength(),
           source: String(cluster.label || 'cluster'),
         } as StoreKeywordCandidate
       })
@@ -414,34 +411,28 @@ export function scoreProductTypeFit(store: StoreItem, keyword: StoreKeywordCandi
   const storeTypes = (store.product_types || []).map(normalizeProductType)
   const reasons: string[] = []
   const missing: string[] = []
-  const values: number[] = []
 
   const textMatch = productTypeTerms(normalizedType).some((term) => keywordText.includes(term))
   if (textMatch) {
-    values.push(92)
     reasons.push('keyword names product type')
   }
   if (declaredType && declaredType === normalizedType) {
-    values.push(88)
     reasons.push('source product match')
   }
   if (storeTypes.includes(normalizedType)) {
-    values.push(76)
     reasons.push('fits store mix')
   }
 
   const buyerIntent = numberOrNull(keyword.buyerIntent)
   if (buyerIntent !== null) {
-    values.push(clampScore(buyerIntent))
-    if (buyerIntent >= 70) reasons.push('strong buyer intent')
+    reasons.push('buyer intent recorded')
   } else {
     missing.push('buyer intent')
   }
 
   const margin = numberOrNull(keyword.margin)
   if (margin !== null) {
-    values.push(clampScore(margin))
-    if (margin >= 65) reasons.push('margin signal')
+    reasons.push('margin evidence recorded')
   } else {
     missing.push('margin')
   }
@@ -455,17 +446,14 @@ export function scoreProductTypeFit(store: StoreItem, keyword: StoreKeywordCandi
   }
 
   if (!textMatch && declaredType && declaredType !== normalizedType) {
-    values.push(45)
     reasons.push(`source says ${titleCase(declaredType)}`)
   }
   if (normalizedType.includes('digital') && /mug|shirt|tee|tote|sticker|decal|apparel|wall art|poster|print/.test(keywordText)) {
-    values.push(42)
     reasons.push('possible product mismatch')
   }
 
-  const score = values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null
   return {
-    score,
+    score: null,
     reasons: reasons.length ? dedupe(reasons).slice(0, 4) : ['no product fit signal'],
     expectedPriceBand: priceRange || avgPrice !== null ? { min: priceRange?.min ?? null, max: priceRange?.max ?? null, avg: avgPrice } : null,
     expectedMargin: margin,
@@ -596,7 +584,7 @@ export function workspaceExport(store: StoreItem, workspace: StoreWorkspace): Re
 export function validationItems(store: StoreItem, workspace: StoreWorkspace): Array<{ label: string; complete: boolean; detail: string }> {
   const keywords = extractStoreKeywords(store)
   const clusters = extractKeywordClusters(store)
-  const topKeywordCount = keywords.filter((keyword) => (keyword.strength || 0) >= 70).length
+  const rankedKeywordCount = keywords.filter((keyword) => keyword.strength !== null).length
   const qualityProducts = workspace.products.filter((product) => product.designQuality?.passed)
   const qualityListings = workspace.listings.filter((listing) => {
     const product = workspace.products.find((item) => item.id === listing.productId)
@@ -611,12 +599,12 @@ export function validationItems(store: StoreItem, workspace: StoreWorkspace): Ar
     },
     {
       label: 'Strong keyword base',
-      complete: topKeywordCount >= 3,
-      detail: topKeywordCount >= 3 ? `${topKeywordCount} keywords score 70+ strength` : `${topKeywordCount} keywords score 70+ strength`,
+      complete: rankedKeywordCount > 0,
+      detail: rankedKeywordCount ? `${rankedKeywordCount} verified keyword rankings` : 'No verified keyword rankings',
     },
     {
       label: 'Product ideas saved',
-      complete: workspace.products.length >= 3,
+      complete: workspace.products.length > 0,
       detail: `${workspace.products.length} product ideas saved`,
     },
     {
@@ -933,7 +921,6 @@ function relatedKeywordNames(store: StoreItem, keyword: StoreKeywordCandidate, l
 }
 
 function scoreProductGap(keyword: StoreKeywordCandidate, productType: string, supportingKeywords: string[], title: string): ProductGapEvidence {
-  const values: number[] = []
   const reasons: string[] = []
   const cautions: string[] = []
   const missing: string[] = []
@@ -955,13 +942,11 @@ function scoreProductGap(keyword: StoreKeywordCandidate, productType: string, su
       missing.push(label)
       continue
     }
-    values.push(clampScore(value))
-    if (value >= 70) reasons.push(`strong ${label}`)
+    reasons.push(`${label} recorded`)
   }
 
   const words = meaningfulWords(`${keyword.keyword} ${title}`).length
   if (words >= 4) {
-    values.push(76)
     reasons.push('specific phrase')
   } else {
     cautions.push('broad phrase')
@@ -982,10 +967,9 @@ function scoreProductGap(keyword: StoreKeywordCandidate, productType: string, su
     cautions.push('needs sharper buyer angle')
   }
 
-  const score = values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null
   return {
-    score,
-    level: evidenceLevel(score),
+    score: null,
+    level: 'unverified',
     reasons: dedupe(reasons).slice(0, 5),
     cautions: dedupe(cautions).slice(0, 5),
     missing: dedupe(missing).slice(0, 6),
@@ -1005,19 +989,11 @@ function productTypeTerms(productType: string): string[] {
 }
 
 function normalizeProductType(value: string): string {
-  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'digital_download'
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unspecified'
 }
 
 function meaningfulWords(value: string): string[] {
   return value.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 2 && !['and', 'for', 'the', 'with', 'gift', 'gifts', 'set'].includes(word))
-}
-
-function evidenceLevel(score: number | null): ProductGapEvidence['level'] {
-  if (score === null) return 'thin'
-  if (score >= 82) return 'deep'
-  if (score >= 70) return 'solid'
-  if (score >= 55) return 'developing'
-  return 'thin'
 }
 
 function listingQualityGrade(score: number | null): StoreListingQuality['grade'] {
@@ -1033,42 +1009,14 @@ function hasPerformanceData(performance?: StoreListingPerformance): boolean {
   return [performance.views, performance.favorites, performance.orders, performance.revenue].some((value) => Number.isFinite(value))
 }
 
-function clampScore(value: number): number {
-  return Math.round(Math.max(0, Math.min(100, value)))
-}
-
-function keywordStrength(keyword: Partial<StoreIdeaKeyword>): number | null {
-  const factors: Array<[number | null | undefined, number]> = [
-    [keyword.profitabilityIndex, 1.35],
-    [keyword.opportunity, 1.25],
-    [keyword.gap, 1.2],
-    [keyword.sourceStrength, 1.1],
-    [keyword.specificityScore, 0.95],
-    [keyword.marketEvidenceScore, 0.95],
-    [keyword.buyerIntent, 0.85],
-    [keyword.demand, 0.75],
-    [keyword.margin, 0.65],
-    [keyword.competitionEase, 0.6],
-    [keyword.profitGap, 0.6],
-  ]
-  let weighted = 0
-  let weight = 0
-  for (const [value, factor] of factors) {
-    if (!Number.isFinite(value)) continue
-    weighted += Number(value) * factor
-    weight += factor
-  }
-  if (weight === 0) return null
-  const revenueBoost = keyword.estimatedRevenue
-    ? Math.min(8, Math.log10(Math.max(10, keyword.estimatedRevenue)) * 2)
-    : 0
-  return Math.round(Math.min(100, weighted / weight + revenueBoost))
+function keywordStrength(): number | null {
+  return null
 }
 
 function bestNumber(a?: number | null, b?: number | null): number | undefined {
   const aOk = Number.isFinite(a)
   const bOk = Number.isFinite(b)
-  if (aOk && bOk) return Math.max(Number(a), Number(b))
+  if (aOk && bOk) return Number(a) === Number(b) ? Number(a) : undefined
   if (aOk) return Number(a)
   if (bOk) return Number(b)
   return undefined

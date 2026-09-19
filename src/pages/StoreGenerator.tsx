@@ -342,18 +342,18 @@ function RankedKeywordList({
     <div className="min-w-0 space-y-2">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="section-label">Keywords by strength</div>
+          <div className="section-label">Keywords</div>
           <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-surface-400">
             {totalCount > 0
-              ? (isExpanded ? `${visibleKeywords.length} shown` : `${totalCount} ranked keywords`)
-              : 'No ranked keywords'}
+              ? (isExpanded ? `${visibleKeywords.length} shown` : `${totalCount} keywords`)
+              : 'No keywords'}
           </div>
         </div>
         <button
           type="button"
           aria-expanded={isExpanded}
           aria-controls={listId}
-          aria-label={`${isExpanded ? 'Collapse' : 'Show'} ranked keywords for ${conceptName}`}
+          aria-label={`${isExpanded ? 'Collapse' : 'Show'} keywords for ${conceptName}`}
           onClick={onToggle}
           disabled={!canToggle}
           className="inline-flex min-h-8 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-surface-500/50 bg-surface-900/30 px-2.5 text-[11px] font-bold text-surface-100 transition-all duration-150 hover:bg-surface-700/45 disabled:cursor-not-allowed disabled:opacity-50"
@@ -393,7 +393,7 @@ function MetricValue({ label, value, hideOnMobile = false }: { label: string; va
   return (
     <div className={`text-right ${hideOnMobile ? 'hidden sm:block' : ''}`}>
       <div className={`text-[12px] font-extrabold tabular-nums ${hasValue ? scoreColor(value as number) : 'text-surface-500'}`}>
-        {hasValue ? Math.round(value as number) : 'n/a'}
+        {hasValue ? Math.round(value as number) : 'TBD'}
       </div>
       <div className="text-[9px] uppercase text-surface-500">{label}</div>
     </div>
@@ -429,25 +429,22 @@ function rankedStoreIdeaKeywords(concept: StoreIdea): RankedKeyword[] {
       priceRange: existing?.priceRange || keyword.priceRange || null,
       strength: null,
     }
-    merged.strength = keywordStrength(merged)
+    merged.strength = keywordStrength()
     byKeyword.set(key, merged)
   }
 
   concept.keywords.forEach(addKeyword)
   ;(concept.keywordClusters || []).forEach((cluster) => cluster.keywords.forEach(addKeyword))
   ;(concept.listingBlueprints || []).forEach((blueprint) => {
-    const blueprintStrength = blueprint.profitabilityScore ?? blueprint.listingQualityScore ?? null
     addKeyword({
       keyword: blueprint.primaryKeyword,
       product: blueprint.productType,
-      sourceStrength: blueprintStrength,
       buyerIntent: blueprint.buyerIntent,
       priceRange: blueprint.priceBand || null,
     })
     blueprint.supportingKeywords.forEach((keyword) => addKeyword({
       keyword,
       product: blueprint.productType,
-      sourceStrength: blueprintStrength,
       buyerIntent: blueprint.buyerIntent,
     }))
   })
@@ -460,39 +457,14 @@ function rankedStoreIdeaKeywords(concept: StoreIdea): RankedKeyword[] {
   })
 }
 
-function keywordStrength(keyword: StoreIdeaKeyword): number | null {
-  const factors: Array<[number | null | undefined, number]> = [
-    [keyword.profitabilityIndex, 1.35],
-    [keyword.opportunity, 1.25],
-    [keyword.gap, 1.2],
-    [keyword.sourceStrength, 1.1],
-    [keyword.specificityScore, 0.95],
-    [keyword.marketEvidenceScore, 0.95],
-    [keyword.buyerIntent, 0.85],
-    [keyword.demand, 0.75],
-    [keyword.margin, 0.65],
-    [keyword.competitionEase, 0.6],
-    [keyword.profitGap, 0.6],
-  ]
-  let weighted = 0
-  let weight = 0
-  for (const [value, factor] of factors) {
-    if (!Number.isFinite(value)) continue
-    weighted += Number(value) * factor
-    weight += factor
-  }
-  if (weight === 0) return null
-
-  const revenueBoost = keyword.estimatedRevenue
-    ? Math.min(8, Math.log10(Math.max(10, keyword.estimatedRevenue)) * 2)
-    : 0
-  return Math.round(Math.min(100, weighted / weight + revenueBoost))
+function keywordStrength(): number | null {
+  return null
 }
 
 function bestNumber(a?: number | null, b?: number | null): number | undefined {
   const aOk = Number.isFinite(a)
   const bOk = Number.isFinite(b)
-  if (aOk && bOk) return Math.max(Number(a), Number(b))
+  if (aOk && bOk) return Number(a) === Number(b) ? Number(a) : undefined
   if (aOk) return Number(a)
   if (bOk) return Number(b)
   return undefined
@@ -505,40 +477,35 @@ function toStorePayload(concept: StoreIdea, mode: AppMode) {
     ...keywordNames.slice(0, 5),
     ...(concept.keywordClusters || []).slice(0, 4).map((cluster) => cluster.label),
   ].filter((item, index, list) => item && list.indexOf(item) === index)
-  const profit = concept.profitScore ?? null
-  const keywordFit = concept.storeQualityScore ?? primaryScore(concept)
-
   return {
     name: concept.name,
     niche: concept.focus,
     niche_secondary: secondary,
     target_audience: audienceFor(concept),
     product_types: concept.productTypes.map(toProductType),
-    brand_voice: voiceFor(concept),
+    brand_voice: voiceFor(),
     aesthetic: aestheticFor(concept),
-    pricing_strategy: profit && (profit >= 78 || (concept.estimatedGrossMargin || 0) >= 58) ? 'premium' : (concept.avgGap || 0) >= 60 ? 'competitive' : 'penetration',
-    listing_target: profit && profit >= 78 ? 75 : 50,
     research_snapshot: {
       app_mode: mode,
       source: mode === 'user' ? 'user_keyword_scan' : 'source_backed_store_quality_engine',
-      profit_score: concept.profitScore,
-      recommendation_score: concept.recommendationScore,
-      store_quality_score: concept.storeQualityScore,
-      commercial_potential_score: concept.commercialPotentialScore,
-      keyword_fit_score: keywordFit,
-      profit_grade: concept.profitGrade || null,
-      quality_grade: concept.qualityGrade || null,
-      niche_score: concept.nicheScore,
-      specificity_score: concept.specificityScore,
-      source_diversity_score: concept.sourceDiversityScore,
-      product_mix_score: concept.productMixScore,
-      keyword_depth_score: concept.keywordDepthScore,
-      demand_score: concept.demandScore,
-      margin_score: concept.marginScore,
-      competition_ease: concept.competitionEase,
-      confidence_score: concept.confidenceScore,
-      estimated_gross_margin: concept.estimatedGrossMargin,
-      estimated_monthly_revenue: concept.estimatedMonthlyRevenue,
+      profit_score: null,
+      recommendation_score: null,
+      store_quality_score: null,
+      commercial_potential_score: null,
+      keyword_fit_score: null,
+      profit_grade: null,
+      quality_grade: null,
+      niche_score: null,
+      specificity_score: null,
+      source_diversity_score: null,
+      product_mix_score: null,
+      keyword_depth_score: null,
+      demand_score: null,
+      margin_score: null,
+      competition_ease: null,
+      confidence_score: null,
+      estimated_gross_margin: null,
+      estimated_monthly_revenue: null,
       profitability_evidence: concept.profitabilityEvidence,
       score_breakdown: concept.scoreBreakdown,
       price_range: concept.priceRange,
@@ -557,7 +524,7 @@ function toStorePayload(concept: StoreIdea, mode: AppMode) {
 }
 
 function toProductType(product: string): string {
-  return product.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'digital_download'
+  return product.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unspecified'
 }
 
 function audienceFor(concept: StoreIdea): string {
@@ -566,16 +533,11 @@ function audienceFor(concept: StoreIdea): string {
   return `Etsy shoppers interested in ${concept.focus} across ${concept.productTypes.slice(0, 3).join(', ')}`
 }
 
-function voiceFor(concept: StoreIdea): string {
-  const strength = (concept.profitScore || concept.storeQualityScore || 0) >= 72 ? 'premium' : 'focused'
-  return [strength, 'data-led', 'commercial', 'giftable'].join(', ')
+function voiceFor(): string {
+  return ['focused', 'data-led'].join(', ')
 }
 
 function aestheticFor(concept: StoreIdea): string {
   const focusTerms = concept.focus.split('/').map((term) => term.trim().toLowerCase()).filter(Boolean)
   return [...focusTerms, 'cohesive', 'etsy-ready'].slice(0, 5).join(', ')
-}
-
-function primaryScore(concept: StoreIdea): number {
-  return Math.round(concept.profitScore ?? concept.recommendationScore ?? concept.storeQualityScore ?? concept.commercialPotentialScore ?? concept.nicheScore)
 }

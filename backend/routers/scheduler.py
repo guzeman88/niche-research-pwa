@@ -22,9 +22,11 @@ def status():
 @router.post("/start")
 def start(action: SchedulerAction = SchedulerAction()):
     """Start the scheduler."""
+    if not action.mode or action.batch_size is None:
+        raise HTTPException(status_code=400, detail="mode and batch_size are required for a controlled start")
     result = start_scheduler(
-        mode=action.mode or "performance",
-        batch_size=action.batch_size or 5,
+        mode=action.mode,
+        batch_size=action.batch_size,
     )
     return result
 

@@ -42,7 +42,10 @@ class _CostLoggingAdapter(BaseLLMAdapter):
 
 
 def _print_cost(resp: LLMResponse) -> None:
-    if resp.cost_usd == 0.0:
+    if resp.cost_usd is None:
+        tag = "TBD (pricing not verified)"
+        cost_str = f"  [{resp.input_tokens:,} in + {resp.output_tokens:,} out tokens]"
+    elif resp.cost_usd == 0.0:
         tag = "FREE (local)"
         cost_str = ""
     else:

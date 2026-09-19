@@ -19,7 +19,7 @@ from services.runtime_safety import safe_log, initialize_workspace
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
-from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace
+from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace, evidence
 
 # ── App factory ─────────────────────────────────────────────────────────────
 
@@ -54,6 +54,7 @@ app.include_router(stores.router)
 app.include_router(store_ideas.router)
 app.include_router(designs.router)
 app.include_router(workspace.router)
+app.include_router(evidence.router)
 
 
 async def _scheduler_watchdog() -> None:
@@ -92,7 +93,7 @@ async def startup():
     count = kdb.load_seeds_from_library()
     safe_log(f"[startup] Keyword DB initialized. {count} library seeds loaded.")
 
-    auto_start_scheduler = os.environ.get("AUTO_START_SCHEDULER", "1") != "0"
+    auto_start_scheduler = os.environ.get("AUTO_START_SCHEDULER", "0") == "1"
     if auto_start_scheduler:
         try:
             from services.scheduler_service import start_scheduler

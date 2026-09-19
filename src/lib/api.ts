@@ -348,8 +348,8 @@ export function getSchedulerStatus(): Promise<Record<string, unknown>> {
 export interface StoreItem {
   slug: string; name: string; niche: string; niche_secondary: string[];
   target_audience: string; product_types: string[]; active: boolean;
-  created_at: string; listing_target: number;
-  brand_voice: string; aesthetic: string; pricing_strategy: string;
+  created_at: string; listing_target: number | null;
+  brand_voice: string; aesthetic: string; pricing_strategy: string | null;
   research_snapshot?: Record<string, unknown>;
 }
 
@@ -441,13 +441,13 @@ function storeFromPayload(payload: CreateStorePayload, existing: StoreItem[] = [
     niche: payload.niche.trim(),
     niche_secondary: payload.niche_secondary || [],
     target_audience: payload.target_audience || '',
-    product_types: payload.product_types?.length ? payload.product_types : ['digital_download'],
+    product_types: payload.product_types || [],
     active: true,
     created_at: new Date().toISOString(),
-    listing_target: payload.listing_target || 50,
+    listing_target: payload.listing_target ?? null,
     brand_voice: payload.brand_voice || '',
     aesthetic: payload.aesthetic || '',
-    pricing_strategy: payload.pricing_strategy || 'competitive',
+    pricing_strategy: payload.pricing_strategy ?? null,
     research_snapshot: {
       ...(payload.research_snapshot || {}),
       saved_offline: true,

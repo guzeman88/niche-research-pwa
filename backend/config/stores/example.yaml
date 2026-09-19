@@ -7,7 +7,7 @@ display_name: "My Etsy Store"
 etsy_shop_id: ""          # Filled in after store is live on Etsy
 active: true
 created_at: ""
-listing_count_target: 50
+listing_count_target: null
 airtable_store_record_id: ""
 
 niche:
@@ -37,11 +37,11 @@ adapters:
     fallback: []
 
 pricing:
-  strategy: penetration         # penetration | premium | competitive
-  apparel_base_multiplier: 2.5  # pod_cost × multiplier = price
-  digital_fixed_price: 3.99
-  wall_art_base_multiplier: 3.0
-  round_to_cent: 0.99           # price ends in .99
+  strategy: null
+  apparel_base_multiplier: null
+  digital_fixed_price: null
+  wall_art_base_multiplier: null
+  round_to_cent: null
 
 branding:
   style_keywords:

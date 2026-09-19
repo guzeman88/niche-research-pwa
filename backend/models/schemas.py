@@ -121,6 +121,39 @@ class SchedulerAction(BaseModel):
     batch_size: int | None = None
 
 
+# ── Evidence operations ────────────────────────────────────────────────────
+
+class ProductEconomicsRequest(BaseModel):
+    keyword: str = Field(min_length=1, max_length=200)
+    product_type: str = Field(min_length=1, max_length=120)
+    observed_at: str | None = None
+    source: str = Field(min_length=1, max_length=120)
+    sale_price_usd: float = Field(ge=0)
+    production_cost_usd: float = Field(ge=0)
+    shipping_cost_usd: float = Field(ge=0)
+    marketplace_fees_usd: float = Field(ge=0)
+    advertising_cost_usd: float = Field(ge=0)
+    refund_allowance_usd: float = Field(ge=0)
+
+
+class KeywordOutcomeRequest(BaseModel):
+    keyword: str = Field(min_length=1, max_length=200)
+    listing_id: str = Field(min_length=1, max_length=200)
+    product_type: str = Field(min_length=1, max_length=120)
+    period_start: str = Field(min_length=1)
+    period_end: str = Field(min_length=1)
+    impressions: int = Field(ge=0)
+    clicks: int = Field(ge=0)
+    orders: int = Field(ge=0)
+    revenue_usd: float = Field(ge=0)
+    marketplace_fees_usd: float = Field(ge=0)
+    advertising_cost_usd: float = Field(ge=0)
+    production_cost_usd: float = Field(ge=0)
+    shipping_cost_usd: float = Field(ge=0)
+    refunds_usd: float = Field(ge=0)
+    source: str = Field(min_length=1, max_length=120)
+
+
 # ── Stats ───────────────────────────────────────────────────────────────────
 
 class StatsResponse(BaseModel):

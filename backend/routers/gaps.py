@@ -12,11 +12,11 @@ def _ensure_db():
 
 
 @router.get("")
-def top_gaps(limit: int = Query(default=100, le=500), min_score: float = 0.0):
+def top_gaps(limit: int = Query(default=100, le=500)):
     """Get top gap reports ranked by composite gap score."""
     _ensure_db()
     from pipeline import keyword_database as kdb
-    return kdb.get_top_gap_reports(limit=limit, min_score=min_score)
+    return kdb.get_top_gap_reports(limit=limit)
 
 
 @router.get("/{keyword}")
