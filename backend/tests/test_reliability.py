@@ -178,7 +178,7 @@ def test_etsy_listing_evidence_never_infers_sales_revenue_or_rank():
     assert result.avg_favorites is None
 
 
-def test_schema_v12_clears_unversioned_derived_business_values(database):
+def test_schema_v13_clears_unversioned_values_and_seed_priorities(database):
     database.add_seed("legacy estimate", source="test")
     with database._conn() as con:
         con.execute("""
@@ -196,8 +196,10 @@ def test_schema_v12_clears_unversioned_derived_business_values(database):
                    profitability_index, pct_high_favorites
             FROM scans WHERE keyword='legacy estimate'
         """).fetchone()
-    assert database.SCHEMA_VERSION == 12
+        seed_columns = {item[1] for item in con.execute("PRAGMA table_info(seeds)").fetchall()}
+    assert database.SCHEMA_VERSION == 13
     assert tuple(row) == (None, None, None, None, None)
+    assert "priority" not in seed_columns
 
 
 def test_local_origin_cannot_bypass_tunnel_auth(monkeypatch):

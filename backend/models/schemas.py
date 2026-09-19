@@ -40,7 +40,6 @@ class KeywordItem(BaseModel):
     keyword: str
     domain: str
     source: str
-    priority: int
     added_at: str
     scanned: bool = False
     last_scanned_at: str | None = None

@@ -36,7 +36,7 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -97,8 +97,7 @@ def _migrate_v1(con: sqlite3.Connection) -> None:
             keyword     TEXT PRIMARY KEY,
             domain      TEXT NOT NULL DEFAULT 'unknown',
             source      TEXT NOT NULL DEFAULT 'library',
-            added_at    TEXT NOT NULL,
-            priority    INTEGER NOT NULL DEFAULT 5
+            added_at    TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS scans (
@@ -314,6 +313,9 @@ def init_db() -> None:
         if version < 12:
             _migrate_v12(con)
             _set_version(con, 12)
+        if version < 13:
+            _migrate_v13(con)
+            _set_version(con, 13)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
 
@@ -526,6 +528,13 @@ def _migrate_v12(con: sqlite3.Connection) -> None:
     con.execute("UPDATE gap_reports SET pct_high_favorites=NULL")
 
 
+def _migrate_v13(con: sqlite3.Connection) -> None:
+    """Remove hand-assigned seed priorities from storage and scheduling."""
+    columns = {row[1] for row in con.execute("PRAGMA table_info(seeds)").fetchall()}
+    if "priority" in columns:
+        con.execute("ALTER TABLE seeds DROP COLUMN priority")
+
+
 # ── Seed management ───────────────────────────────────────────────────────────
 
 def load_seeds_from_library() -> int:
@@ -537,28 +546,28 @@ def load_seeds_from_library() -> int:
     rows = []
     for domain, keywords in data.get("domains", {}).items():
         for kw in keywords:
-            rows.append((kw.strip().lower(), domain, "library", now, 5))
+            rows.append((kw.strip().lower(), domain, "library", now))
     with _conn() as con:
         cur = con.executemany(
-            "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at, priority) VALUES (?,?,?,?,?)",
+            "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at) VALUES (?,?,?,?)",
             rows,
         )
         con.executemany("""
             INSERT OR IGNORE INTO keyword_sources
                 (keyword, source, first_seen_at, last_seen_at, observation_count)
             VALUES (?, 'library', ?, ?, 1)
-        """, [(keyword, now, now) for keyword, _domain, _source, _added, _priority in rows])
+        """, [(keyword, now, now) for keyword, _domain, _source, _added in rows])
         return cur.rowcount
 
 
-def add_seed(keyword: str, domain: str = "discovered", source: str = "auto",
-             priority: int = 5) -> bool:
+def add_seed(keyword: str, domain: str = "discovered", source: str = "auto") -> bool:
+    """Add an unranked discovery candidate."""
     now = datetime.utcnow().isoformat()
     normalized = keyword.strip().lower()
     with _conn() as con:
         cur = con.execute(
-            "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at, priority) VALUES (?,?,?,?,?)",
-            (normalized, domain, source, now, priority),
+            "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at) VALUES (?,?,?,?)",
+            (normalized, domain, source, now),
         )
         con.execute("""
             INSERT INTO keyword_sources
@@ -568,23 +577,19 @@ def add_seed(keyword: str, domain: str = "discovered", source: str = "auto",
                 last_seen_at=excluded.last_seen_at,
                 observation_count=keyword_sources.observation_count + 1
         """, (normalized, source, now, now))
-        con.execute(
-            "UPDATE seeds SET priority=MAX(priority, ?) WHERE keyword=?",
-            (priority, normalized),
-        )
         return cur.rowcount > 0
 
 
-def add_seeds_bulk(keywords: list[str], domain: str = "discovered", source: str = "auto",
-                   priority: int = 5) -> int:
+def add_seeds_bulk(keywords: list[str], domain: str = "discovered", source: str = "auto") -> int:
+    """Add unranked discovery candidates."""
     now = datetime.utcnow().isoformat()
-    rows = [(kw.strip().lower(), domain, source, now, priority)
+    rows = [(kw.strip().lower(), domain, source, now)
             for kw in keywords if kw.strip()]
     if not rows:
         return 0
     with _conn() as con:
         cur = con.executemany(
-            "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at, priority) VALUES (?,?,?,?,?)",
+            "INSERT OR IGNORE INTO seeds (keyword, domain, source, added_at) VALUES (?,?,?,?)",
             rows,
         )
         con.executemany("""
@@ -594,11 +599,7 @@ def add_seeds_bulk(keywords: list[str], domain: str = "discovered", source: str 
             ON CONFLICT(keyword, source) DO UPDATE SET
                 last_seen_at=excluded.last_seen_at,
                 observation_count=keyword_sources.observation_count + 1
-        """, [(keyword, source, now, now) for keyword, _domain, _source, _added, _priority in rows])
-        con.executemany(
-            "UPDATE seeds SET priority=MAX(priority, ?) WHERE keyword=?",
-            [(priority, keyword) for keyword, _domain, _source, _added, _priority in rows],
-        )
+        """, [(keyword, source, now, now) for keyword, _domain, _source, _added in rows])
         return cur.rowcount
 
 
@@ -623,10 +624,8 @@ def record_expansion(parent: str, children: list[str], source: str,
             child_rows,
         )
 
-    # Estimate scan depth of parent to set child depth priority
-    priority = max(3, 7 - depth)  # deeper expansions get lower priority
     return add_seeds_bulk([c.strip().lower() for c in children],
-                          domain="discovered", source=f"expand_{source}", priority=priority)
+                          domain="discovered", source=f"expand_{source}")
 
 
 def get_expansion_children(keyword: str) -> list[str]:
@@ -649,133 +648,6 @@ def get_expansion_depth(keyword: str) -> int:
 
 
 # ── Scan storage ──────────────────────────────────────────────────────────────
-
-_BUYER_INTENT_TERMS = {
-    "gift": 15,
-    "gifts": 15,
-    "personalized": 15,
-    "custom": 14,
-    "editable": 13,
-    "printable": 12,
-    "template": 11,
-    "download": 11,
-    "digital": 10,
-    "instant": 9,
-    "svg": 10,
-    "bundle": 9,
-    "set": 8,
-    "for": 7,
-    "appreciation": 7,
-    "memorial": 10,
-    "retirement": 9,
-    "graduation": 9,
-    "bachelorette": 8,
-    "bridesmaid": 8,
-    "shower": 7,
-    "party": 7,
-}
-
-_PRODUCT_TERMS = {
-    "shirt",
-    "t-shirt",
-    "tee",
-    "tank",
-    "sweatshirt",
-    "hoodie",
-    "apparel",
-    "hat",
-    "cap",
-    "socks",
-    "mug",
-    "tumbler",
-    "glass",
-    "cup",
-    "sticker",
-    "stickers",
-    "wall art",
-    "poster",
-    "canvas",
-    "portrait",
-    "print",
-    "prints",
-    "tote",
-    "bag",
-    "ornament",
-    "planner",
-    "journal",
-    "binder",
-    "worksheet",
-    "calendar",
-    "invitation",
-    "invite",
-    "card",
-    "label",
-    "tag",
-    "game",
-    "sign",
-    "decor",
-    "doormat",
-    "pillow",
-    "blanket",
-    "candle",
-    "keychain",
-    "badge reel",
-    "phone case",
-    "case",
-    "clipart",
-    "png",
-    "svg",
-}
-
-_PASSION_TERMS = {
-    "mom",
-    "dad",
-    "teacher",
-    "nurse",
-    "bride",
-    "wedding",
-    "birthday",
-    "christmas",
-    "halloween",
-    "valentine",
-    "graduation",
-    "cat",
-    "dog",
-    "book",
-    "reader",
-    "coffee",
-    "wine",
-    "pickleball",
-    "golf",
-    "dance",
-    "dancer",
-    "runner",
-    "yoga",
-    "hiking",
-    "camping",
-    "fishing",
-    "gardening",
-    "plant",
-    "zodiac",
-    "librarian",
-    "counselor",
-    "therapist",
-    "realtor",
-    "coach",
-    "grandma",
-    "grandpa",
-}
-
-_RETAILER_NOISE_TERMS = {
-    "amazon",
-    "walmart",
-    "target",
-    "five below",
-    "temu",
-    "shein",
-    "costco",
-    "etsy.com",
-}
 
 _IP_RISK_TERMS = {
     "disney",
@@ -800,69 +672,6 @@ _IP_RISK_TERMS = {
     "minecraft",
 }
 
-_LOCAL_NOISE_TERMS = {
-    "near me",
-    "nearby",
-    "local",
-    "in store",
-    "same day",
-}
-
-_LOW_BUYER_INTENT_PHRASES = {
-    "how to",
-    "tutorial",
-    "ideas for",
-    "meaning of",
-    "definition",
-    "reddit",
-    "pinterest",
-}
-
-_LOW_VALUE_WORDS = {
-    "free",
-    "cheap",
-}
-
-_STYLE_TERMS = {
-    "aesthetic",
-    "vintage",
-    "retro",
-    "minimalist",
-    "boho",
-    "western",
-    "coquette",
-    "cottagecore",
-    "dark academia",
-    "gothic",
-    "botanical",
-    "celestial",
-    "coastal",
-    "rustic",
-    "funny",
-    "sarcastic",
-    "cute",
-    "spooky",
-}
-
-_OCCASION_TERMS = {
-    "birthday",
-    "wedding",
-    "graduation",
-    "retirement",
-    "christmas",
-    "halloween",
-    "valentine",
-    "mother's day",
-    "father's day",
-    "teacher appreciation",
-    "housewarming",
-    "memorial",
-    "anniversary",
-    "baby shower",
-    "bridal shower",
-    "first christmas",
-}
-
 def _contains_any_phrase(keyword: str, phrases: set[str]) -> bool:
     return any(phrase in keyword for phrase in phrases)
 
@@ -870,23 +679,14 @@ def _contains_any_phrase(keyword: str, phrases: set[str]) -> bool:
 def is_scanworthy_seed(
     keyword: str,
     domain: str | None = None,
-    priority: int | None = None,
     source: str | None = None,
 ) -> bool:
     """Apply only explicit safety/noise exclusions; do not guess market quality."""
-    del domain, priority, source
+    del domain, source
     kw = " ".join(keyword.lower().split())
     if not kw:
         return False
-    if _contains_any_phrase(kw, _LOCAL_NOISE_TERMS):
-        return False
-    if _contains_any_phrase(kw, _RETAILER_NOISE_TERMS):
-        return False
     if _contains_any_phrase(kw, _IP_RISK_TERMS):
-        return False
-    if _contains_any_phrase(kw, _LOW_BUYER_INTENT_PHRASES):
-        return False
-    if any(word in _LOW_VALUE_WORDS for word in kw.split()):
         return False
     return True
 
@@ -1202,20 +1002,20 @@ def _unscanned_candidate_rows(domain: Optional[str], candidate_limit: int) -> li
     with _conn() as con:
         if domain:
             return con.execute("""
-                SELECT s.keyword, s.domain, s.source, s.priority, s.added_at FROM seeds s
+                SELECT s.keyword, s.domain, s.source, s.added_at FROM seeds s
                 WHERE s.domain=?
                   AND NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
-                ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
+                ORDER BY s.added_at ASC, s.keyword ASC LIMIT ?
             """, (domain, candidate_limit)).fetchall()
         return con.execute("""
-            SELECT s.keyword, s.domain, s.source, s.priority, s.added_at FROM seeds s
+            SELECT s.keyword, s.domain, s.source, s.added_at FROM seeds s
             WHERE NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
-            ORDER BY s.priority DESC, s.added_at ASC LIMIT ?
+            ORDER BY s.added_at ASC, s.keyword ASC LIMIT ?
         """, (candidate_limit,)).fetchall()
 
 
 def get_unscanned_portfolio(limit: int = 20, domain: Optional[str] = None) -> list[str]:
-    """Return the explicit-priority queue; do not infer market quality from wording."""
+    """Return unranked candidates in deterministic discovery order."""
     rows = _unscanned_candidate_rows(domain, limit)
     return [row["keyword"] for row in rows]
 
@@ -1311,7 +1111,7 @@ def get_all_seeds_with_status(limit: int = 2000) -> list[dict]:
             SELECT s.keyword, s.domain,
                    COALESCE((SELECT GROUP_CONCAT(ks.source, ', ')
                              FROM keyword_sources ks WHERE ks.keyword=s.keyword), s.source) AS source,
-                   s.priority, s.added_at,
+                   s.added_at,
                    attempt.scanned_at,
                    attempt.scan_status,
                    attempt.scan_error,
@@ -1619,7 +1419,7 @@ def get_all_seeds(domain: Optional[str] = None) -> list[dict]:
         extra = "WHERE s.domain=?" if domain else ""
         args = (domain,) if domain else ()
         rows = con.execute(f"""
-            SELECT s.keyword, s.domain, s.source, s.added_at, s.priority,
+            SELECT s.keyword, s.domain, s.source, s.added_at,
                    sc.opportunity_score, sc.scanned_at, gs.gap_score, gs.trajectory
             FROM seeds s
             LEFT JOIN (SELECT keyword, MAX(id) as id FROM scans GROUP BY keyword) latest

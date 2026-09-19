@@ -162,7 +162,7 @@ async function supabaseStats() {
 async function supabaseKeywords() {
   const [seeds, attempts, evidence] = await Promise.all([
     supabaseRows('keyword_seeds', {
-      select: 'keyword,domain,source,priority,added_at',
+      select: 'keyword,domain,source,added_at',
       order: 'keyword.asc',
     }, Infinity, 1000),
     supabaseRows('keyword_latest_attempts', {
@@ -183,7 +183,6 @@ async function supabaseKeywords() {
       keyword: seed.keyword,
       domain: seed.domain || 'unknown',
       source: seed.source || 'library',
-      priority: numeric(seed.priority),
       added_at: seed.added_at || '',
       scanned: Boolean(attempt.scanned_at),
       last_scanned_at: attempt.scanned_at || null,

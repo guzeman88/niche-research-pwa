@@ -50,27 +50,25 @@ _SEASONAL_EVENTS: dict[int, list[str]] = {
         "new year eve", "secret santa", "ugly sweater", "stocking stuffer"],
 }
 
-# Upcoming N months always get priority boost
+# Discover the current month and a short future window without assigning rank.
 _LOOKAHEAD_MONTHS = 3
 
 
 def get_seasonal_seeds() -> list[dict]:
     """
     Return keyword seeds for the current and next 3 months.
-    Returns list of dicts: {keyword, domain, source, priority}
+    Returns unranked candidate records with keyword, domain, and source.
     """
     now = datetime.now()
     seeds = []
     for offset in range(_LOOKAHEAD_MONTHS + 1):
         month = ((now.month - 1 + offset) % 12) + 1
-        priority = 9 - offset  # current month = priority 9, lookahead gets 8, 7, 6
         label = month_name[month]
         for kw in _SEASONAL_EVENTS.get(month, []):
             seeds.append({
                 "keyword": kw,
                 "domain": "occasions_holidays",
                 "source": f"seasonal_{label.lower()}",
-                "priority": priority,
             })
     return seeds
 
@@ -80,18 +78,18 @@ def get_seasonal_seeds() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 _LLM_SYSTEM = (
-    "You are an expert Etsy and print-on-demand niche analyst. "
-    "You know what sells on Etsy and what has low competition."
+    "You generate Etsy and print-on-demand search-phrase candidates. "
+    "Do not claim that a phrase has demand, low competition, or profit potential."
 )
 
 _LLM_PROMPT_TEMPLATE = """
-Today is {today}. Generate {count} high-opportunity Etsy print-on-demand niche keywords.
+Today is {today}. Generate {count} unranked Etsy print-on-demand search-phrase candidates.
 
 Requirements:
 - Each keyword should be 2-5 words, the kind someone types into Etsy search
-- Prefer niches with passionate buyers, gift-giving occasions, or strong identity/aesthetic angles
+- Include gift-giving occasions, identities, aesthetics, and product-specific phrases
 - Mix product types: apparel, wall art, mugs, digital downloads, tote bags, stickers
-- Avoid oversaturated niches (e.g. "dog mom" alone is oversaturated — be more specific)
+- Prefer specific phrases over broad phrases
 - Think about: micro-identities, specific pet breeds, specific professions, trending aesthetics,
   specific humor styles, specific life stages, specific hobbies
 
@@ -113,7 +111,7 @@ pop_culture_themes, life_stages, home_decor_themes
 def get_llm_seeds(count: int = 30, log_fn=None) -> list[dict]:
     """
     Use local LLM to brainstorm new seed keywords not already in the library.
-    Returns list of dicts: {keyword, domain, source, priority}
+    Returns unranked candidate records with keyword, domain, and source.
     """
     _log = log_fn or print
 
@@ -151,7 +149,6 @@ def get_llm_seeds(count: int = 30, log_fn=None) -> list[dict]:
                     "keyword": kw,
                     "domain": item.get("domain", "trending_micro_niches"),
                     "source": "llm_brainstorm",
-                    "priority": 7,
                 })
         _log(f"[seed_discovery] LLM brainstorm: {len(seeds)} new keyword ideas")
         return seeds
@@ -289,33 +286,25 @@ _WILD_DISCOVERY_ROOTS = [
 ]
 
 _GOOGLE_SUGGEST_DISCOVERY_LANES = {
-    "proven": {
+    "buyer_terms": {
         "roots": _BUYER_INTENT_ROOTS,
-        "source": "google_suggest_proven",
+        "source": "google_suggest_buyer_terms",
         "domain": "discovered",
-        "priority": 8,
-        "share": 0.50,
     },
     "adjacent": {
         "roots": _ADJACENT_DISCOVERY_ROOTS,
         "source": "google_suggest_adjacent",
         "domain": "discovered",
-        "priority": 7,
-        "share": 0.25,
     },
-    "trend": {
+    "aesthetic": {
         "roots": _TREND_DISCOVERY_ROOTS,
-        "source": "google_suggest_trend",
+        "source": "google_suggest_aesthetic",
         "domain": "trending_micro_niches",
-        "priority": 7,
-        "share": 0.15,
     },
-    "wild": {
+    "exploratory": {
         "roots": _WILD_DISCOVERY_ROOTS,
-        "source": "google_suggest_wild",
+        "source": "google_suggest_exploratory",
         "domain": "trending_micro_niches",
-        "priority": 6,
-        "share": 0.10,
     },
 }
 
@@ -330,25 +319,16 @@ def _daily_rotated_roots(roots: list[str], limit: int, lane: str) -> list[str]:
 
 def _lane_root_limits(total_limit: int) -> dict[str, int]:
     lanes = list(_GOOGLE_SUGGEST_DISCOVERY_LANES.keys())
-    limits = {
-        lane: int(total_limit * float(cfg["share"]))
-        for lane, cfg in _GOOGLE_SUGGEST_DISCOVERY_LANES.items()
-    }
-    limits["proven"] += total_limit - sum(limits.values())
-    if total_limit >= len(lanes):
-        for lane in lanes:
-            if limits[lane] == 0:
-                donor = max(lanes, key=lambda key: limits[key])
-                if limits[donor] > 1:
-                    limits[donor] -= 1
-                    limits[lane] = 1
-    return limits
+    if not lanes:
+        return {}
+    base, remainder = divmod(max(total_limit, 0), len(lanes))
+    return {lane: base + (1 if index < remainder else 0) for index, lane in enumerate(lanes)}
 
 
 def get_autocomplete_seeds(log_fn=None) -> list[dict]:
     """
     Feed broad bootstrap terms through Etsy autocomplete to discover specific niche keywords.
-    Returns list of dicts: {keyword, domain, source, priority}
+    Returns unranked candidate records with keyword, domain, and source.
     """
     _log = log_fn or print
 
@@ -380,7 +360,6 @@ def get_autocomplete_seeds(log_fn=None) -> list[dict]:
                         "keyword": kw,
                         "domain": "discovered",
                         "source": "etsy_autocomplete_bootstrap",
-                        "priority": 6,
                     }
             time.sleep(0.3)  # polite delay between autocomplete calls
         except Exception:
@@ -392,8 +371,8 @@ def get_autocomplete_seeds(log_fn=None) -> list[dict]:
 
 def get_google_suggest_bootstrap_seeds(log_fn=None) -> list[dict]:
     """
-    Use Google Suggest against buyer-intent roots to find real search phrases.
-    This is the primary free source for new high-quality terms.
+    Use Google Suggest against several equally sampled root sets to collect
+    provider-returned search phrases without assigning market quality.
     """
     _log = log_fn or print
 
@@ -412,9 +391,10 @@ def get_google_suggest_bootstrap_seeds(log_fn=None) -> list[dict]:
 
     lane_limits = _lane_root_limits(max_roots)
     for lane, cfg in _GOOGLE_SUGGEST_DISCOVERY_LANES.items():
-        roots = _daily_rotated_roots(cfg["roots"], lane_limits.get(lane, 0), lane)
+        lane_roots = list(cfg["roots"])
         if lane == "adjacent":
-            roots.extend(get_high_value_adjacent_roots(limit=max(4, lane_limits.get(lane, 0) // 2)))
+            lane_roots = get_verified_adjacent_roots(limit=len(lane_roots)) + lane_roots
+        roots = _daily_rotated_roots(list(dict.fromkeys(lane_roots)), lane_limits.get(lane, 0), lane)
         for root in roots:
             try:
                 signals = adapter.search(root)
@@ -433,7 +413,6 @@ def get_google_suggest_bootstrap_seeds(log_fn=None) -> list[dict]:
                             "keyword": kw,
                             "domain": cfg["domain"],
                             "source": cfg["source"],
-                            "priority": cfg["priority"],
                         }
             except Exception:
                 continue
@@ -442,10 +421,10 @@ def get_google_suggest_bootstrap_seeds(log_fn=None) -> list[dict]:
     return list(discovered.values())
 
 
-def get_high_value_adjacent_roots(limit: int = 20) -> list[str]:
+def get_verified_adjacent_roots(limit: int = 20) -> list[str]:
     """
-    Turn the current best real-scored keywords back into suggestion roots.
-    This keeps discovery following winners without locking into the seed library.
+    Turn versioned, evidence-backed keywords back into suggestion roots.
+    Unscored candidates never enter this feedback path.
     """
     roots: list[str] = []
     seen: set[str] = set()
@@ -532,7 +511,7 @@ def get_etsy_trending_seeds(log_fn=None) -> list[dict]:
     """
     Scrape etsy.com/trending and category pages for trending search terms.
     No API key required.
-    Returns list of dicts: {keyword, domain, source, priority}
+    Returns unranked candidate records with keyword, domain, and source.
     """
     _log = log_fn or print
     html_enabled = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
@@ -573,7 +552,6 @@ def get_etsy_trending_seeds(log_fn=None) -> list[dict]:
                         "keyword": kw,
                         "domain": "trending_micro_niches",
                         "source": "etsy_trending_page",
-                        "priority": 8,  # high priority — Etsy itself signals these
                     }
             time.sleep(1.0)
         except Exception as e:
@@ -680,7 +658,6 @@ class SeedDiscovery:
                 keyword=s["keyword"],
                 domain=s.get("domain", "discovered"),
                 source=s.get("source", "auto"),
-                priority=s.get("priority", 5),
             )
             if ok:
                 added += 1
@@ -1011,7 +988,6 @@ def generate_compound_keywords(
                 compounds,
                 domain="compound",
                 source=f"compound_{domain_a}x{domain_b}",
-                priority=4,
             )
             total_added += added
 
