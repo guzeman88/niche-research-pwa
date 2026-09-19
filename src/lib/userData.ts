@@ -265,7 +265,6 @@ function toUserKeywords(rows: ParsedRow[], batch: { id: string; source: UserScan
       keyword: row.keyword,
       domain: row.domain,
       source: `user:${batch.source}`,
-      priority: 0,
       added_at: batch.createdAt,
       scanned: hasObservation,
       last_scanned_at: hasObservation ? batch.createdAt : null,

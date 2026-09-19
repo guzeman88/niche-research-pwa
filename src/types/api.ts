@@ -32,7 +32,6 @@ export interface KeywordItem {
   keyword: string;
   domain: string;
   source: string;
-  priority: number;
   added_at: string;
   scanned: boolean;
   last_scanned_at: string | null;
