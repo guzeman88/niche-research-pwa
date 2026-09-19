@@ -84,13 +84,74 @@ def test_private_api_requires_token_and_settings_are_redacted(monkeypatch):
     def generate(): return {"ok": True}
     @app.get("/api/workspace/backups")
     def backups(): return []
+    @app.get("/api/evidence/example")
+    def evidence(): return {}
     client = TestClient(app)
-    for route in ["/api/settings", "/api/workspace/backups"]:
+    for route in ["/api/settings", "/api/workspace/backups", "/api/evidence/example"]:
         assert client.get(route).status_code == 401
     assert client.post("/api/designs/generate").status_code == 401
     response = client.get("/api/settings", headers={"Authorization": "Bearer test-only-secret"})
     assert response.status_code == 200
     assert "private" not in response.text
+
+
+def test_evidence_bundle_returns_exact_economics_and_outcomes(database):
+    database.record_product_economics(
+        keyword="exact keyword", product_type="mug", sale_price_usd=24,
+        production_cost_usd=8, shipping_cost_usd=4, marketplace_fees_usd=2,
+        advertising_cost_usd=1, refund_allowance_usd=0, source="invoice",
+        observed_at="2026-09-01T00:00:00Z",
+    )
+    database.record_keyword_outcome(
+        keyword="exact keyword", listing_id="listing-1", product_type="mug",
+        period_start="2026-09-01", period_end="2026-09-07", impressions=100,
+        clicks=10, orders=2, revenue_usd=48, marketplace_fees_usd=4,
+        advertising_cost_usd=2, production_cost_usd=16, shipping_cost_usd=8,
+        refunds_usd=0, source="etsy-export",
+    )
+    bundle = database.get_keyword_evidence("exact keyword")
+    assert bundle is not None
+    assert bundle["product_economics"][0]["contribution_profit_usd"] == 9
+    assert bundle["outcomes"][0]["contribution_profit_usd"] == 18
+    assert bundle["latest_verified_evidence"] is None
+
+
+def test_scheduler_requires_explicit_operating_settings():
+    from fastapi import HTTPException
+    from models.schemas import SchedulerAction
+    from routers.scheduler import start
+    with pytest.raises(HTTPException, match="mode and batch_size"):
+        start(SchedulerAction())
+
+
+def test_new_store_configuration_has_no_business_defaults():
+    from pipeline.store_config import StoreConfig
+    store = StoreConfig(store_slug="test", display_name="Test")
+    assert store.listing_count_target is None
+    assert store.pricing.strategy is None
+    assert store.pricing.digital_fixed_price is None
+
+
+def test_store_ideas_require_versioned_evidence_and_keep_derived_scores_tbd():
+    from pipeline.store_idea_profitability import generate_store_ideas_from_rows
+
+    unverified = {"keyword": "teacher mug", "domain": "teachers", "opportunity_score": 91}
+    assert generate_store_ideas_from_rows([unverified]) == []
+
+    verified = {
+        **unverified,
+        "evidence_status": "verified",
+        "score_version": "calibrated-v1",
+        "avg_price_usd": 24.0,
+        "listing_count": 125,
+    }
+    idea = generate_store_ideas_from_rows([verified])[0]
+    assert idea["keywords"][0]["opportunity"] == 91
+    assert idea["avgPrice"] == 24.0
+    assert idea["nicheScore"] is None
+    assert idea["profitScore"] is None
+    assert idea["confidenceScore"] is None
+    assert idea["feeModel"] is None
 
 
 def test_local_origin_cannot_bypass_tunnel_auth(monkeypatch):

@@ -146,7 +146,6 @@ def get_llm_seeds(count: int = 30, log_fn=None) -> list[dict]:
                 kw,
                 domain=item.get("domain", "trending_micro_niches"),
                 source="llm_brainstorm",
-                min_score=54,
             ):
                 seeds.append({
                     "keyword": kw,
@@ -295,7 +294,6 @@ _GOOGLE_SUGGEST_DISCOVERY_LANES = {
         "source": "google_suggest_proven",
         "domain": "discovered",
         "priority": 8,
-        "min_score": 60,
         "share": 0.50,
     },
     "adjacent": {
@@ -303,7 +301,6 @@ _GOOGLE_SUGGEST_DISCOVERY_LANES = {
         "source": "google_suggest_adjacent",
         "domain": "discovered",
         "priority": 7,
-        "min_score": 58,
         "share": 0.25,
     },
     "trend": {
@@ -311,7 +308,6 @@ _GOOGLE_SUGGEST_DISCOVERY_LANES = {
         "source": "google_suggest_trend",
         "domain": "trending_micro_niches",
         "priority": 7,
-        "min_score": 56,
         "share": 0.15,
     },
     "wild": {
@@ -319,7 +315,6 @@ _GOOGLE_SUGGEST_DISCOVERY_LANES = {
         "source": "google_suggest_wild",
         "domain": "trending_micro_niches",
         "priority": 6,
-        "min_score": 54,
         "share": 0.10,
     },
 }
@@ -379,7 +374,6 @@ def get_autocomplete_seeds(log_fn=None) -> list[dict]:
                         kw,
                         domain="discovered",
                         source="etsy_autocomplete_bootstrap",
-                        min_score=54,
                     )
                 ):
                     discovered[kw] = {
@@ -432,7 +426,6 @@ def get_google_suggest_bootstrap_seeds(log_fn=None) -> list[dict]:
                         kw,
                         domain=str(cfg["domain"]),
                         source=str(cfg["source"]),
-                        min_score=float(cfg["min_score"]),
                     ):
                         continue
                     if kw not in discovered:
@@ -575,7 +568,6 @@ def get_etsy_trending_seeds(log_fn=None) -> list[dict]:
                     kw,
                     domain="trending_micro_niches",
                     source="etsy_trending_page",
-                    min_score=54,
                 ):
                     collected[kw] = {
                         "keyword": kw,
@@ -810,7 +802,6 @@ def _phrase_has_buyer_shape(phrase: str) -> bool:
         phrase,
         domain="discovered",
         source="expand_competitor_terms",
-        min_score=62,
     ):
         return False
     return True
@@ -1007,7 +998,6 @@ def generate_compound_keywords(
                         compound,
                         domain="compound",
                         source=f"compound_{domain_a}x{domain_b}",
-                        min_score=54,
                     )
                 ):
                     compounds.append(compound)

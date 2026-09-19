@@ -75,8 +75,11 @@ class GeminiAdapter(BaseLLMAdapter):
         input_tokens = getattr(usage, "prompt_token_count", 0) or 0
         output_tokens = getattr(usage, "candidates_token_count", 0) or 0
 
-        pricing = _PRICING.get(self._model, {"input": 0.10, "output": 0.40})
-        cost = (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
+        pricing = _PRICING.get(self._model)
+        cost = (
+            (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
+            if pricing is not None else None
+        )
 
         return LLMResponse(
             content=content,

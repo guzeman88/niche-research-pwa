@@ -8,7 +8,7 @@ class LLMResponse:
     model: str
     input_tokens: int
     output_tokens: int
-    cost_usd: float  # 0.0 for local models
+    cost_usd: float | None  # None when current provider pricing is not verified
 
 
 class BaseLLMAdapter(ABC):

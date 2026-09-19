@@ -18,8 +18,8 @@ class StoreCreateRequest(BaseModel):
     product_types: list[str] = Field(default_factory=list)
     brand_voice: str = ""
     aesthetic: str = ""
-    pricing_strategy: str = "competitive"
-    listing_target: int = Field(default=50, ge=1, le=1000)
+    pricing_strategy: str | None = None
+    listing_target: int | None = Field(default=None, ge=1, le=1000)
     research_snapshot: dict = Field(default_factory=dict)
 
 
@@ -36,7 +36,7 @@ def _store_response(store):
         "listing_target": store.listing_count_target,
         "brand_voice": ", ".join(store.branding.mood_keywords) if store.branding and store.branding.mood_keywords else "",
         "aesthetic": ", ".join(store.branding.style_keywords) if store.branding and store.branding.style_keywords else "",
-        "pricing_strategy": store.pricing.strategy if store.pricing else "competitive",
+        "pricing_strategy": store.pricing.strategy if store.pricing else None,
         "research_snapshot": getattr(store, "research_snapshot", {}) or {},
     }
 
@@ -83,7 +83,7 @@ def create_store(req: StoreCreateRequest):
 
         products = [item.strip() for item in req.product_types if item.strip()]
         if not products:
-            products = ["digital_download"]
+            raise HTTPException(status_code=400, detail="At least one explicit product type is required")
 
         store = StoreConfig(
             store_slug=slug,

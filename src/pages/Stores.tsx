@@ -416,8 +416,8 @@ function StoreDashboard({ store, workspace, onTabChange }: { store: StoreItem; w
           <DetailRow label="Target audience" value={store.target_audience || 'Not specified'} />
           <DetailRow label="Brand voice" value={store.brand_voice || 'Not specified'} />
           <DetailRow label="Aesthetic" value={store.aesthetic || 'Not specified'} />
-          <DetailRow label="Pricing strategy" value={titleCase(store.pricing_strategy || 'competitive')} />
-          <DetailRow label="Listing target" value={`${store.listing_target || 0} listings`} />
+          <DetailRow label="Pricing strategy" value={store.pricing_strategy ? titleCase(store.pricing_strategy) : 'TBD'} />
+          <DetailRow label="Listing target" value={store.listing_target != null ? `${store.listing_target} listings` : 'TBD'} />
           <DetailRow label="Created" value={store.created_at ? new Date(store.created_at).toLocaleDateString() : 'Unknown'} />
         </div>
       </div>

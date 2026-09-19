@@ -811,187 +811,8 @@ _OCCASION_TERMS = {
     "first christmas",
 }
 
-_SOURCE_QUALITY_BOOST = {
-    "expand_google_suggest": 8.0,
-    "expand_competitor_terms": 9.0,
-    "expand_trends_related": 6.0,
-    "expand_etsy_autocomplete": 7.0,
-    "google_suggest_bootstrap": 8.0,
-    "google_suggest_proven": 9.0,
-    "google_suggest_adjacent": 8.0,
-    "google_suggest_trend": 7.0,
-    "google_suggest_wild": 4.0,
-    "etsy_autocomplete_bootstrap": 7.0,
-    "etsy_trending_page": 10.0,
-    "library": 3.0,
-    "llm_brainstorm": -30.0,
-}
-
-_DOMAIN_PRIORITY_BOOST = {
-    "professions": 9,
-    "occasions_holidays": 8,
-    "relationships": 8,
-    "hobbies": 7,
-    "pets": 7,
-    "life_stages": 7,
-    "trending_micro_niches": 6,
-    "compound": 8,
-    "discovered": 5,
-}
-
-_SCAN_LANE_ALLOCATION = {
-    "proven": 0.50,
-    "adjacent": 0.25,
-    "trend": 0.15,
-    "wild": 0.10,
-}
-
-
-def _clamp_score(value: float) -> float:
-    return round(max(0.0, min(100.0, value)), 1)
-
-
-def score_keyword_buyer_intent(keyword: str) -> float:
-    """Estimate how close a keyword is to a buyer-ready Etsy search."""
-    kw = " ".join(keyword.lower().split())
-    words = kw.split()
-    if not words:
-        return 0.0
-
-    score = 20.0
-    score += min(25.0, sum(points for term, points in _BUYER_INTENT_TERMS.items() if term in words or term in kw))
-    score += 18.0 if any(term in kw for term in _PRODUCT_TERMS) else 0.0
-    score += min(16.0, sum(4.0 for term in _PASSION_TERMS if term in words or term in kw))
-    score += min(10.0, sum(3.0 for term in _STYLE_TERMS if term in words or term in kw))
-    score += min(10.0, sum(4.0 for term in _OCCASION_TERMS if term in kw))
-
-    word_count = len(words)
-    if 2 <= word_count <= 5:
-        score += 18.0
-    elif word_count == 1:
-        score -= 18.0
-    elif word_count <= 7:
-        score += 8.0
-    else:
-        score -= 10.0
-
-    if any(ch.isdigit() for ch in kw):
-        score += 4.0
-    if kw.startswith(("cute ", "funny ", "vintage ", "retro ", "minimalist ", "personalized ")):
-        score += 5.0
-    if kw in {"gift", "custom", "personalized", "shirt", "mug", "sticker", "wall art"}:
-        score -= 25.0
-
-    return _clamp_score(score)
-
-
 def _contains_any_phrase(keyword: str, phrases: set[str]) -> bool:
     return any(phrase in keyword for phrase in phrases)
-
-
-def _source_quality_boost(source_key: str) -> float:
-    if source_key in _SOURCE_QUALITY_BOOST:
-        return _SOURCE_QUALITY_BOOST[source_key]
-    if source_key.startswith("google_suggest_"):
-        return 7.0
-    if source_key.startswith("compound_"):
-        return 4.0
-    if source_key.startswith("expand_"):
-        return -4.0
-    return 0.0
-
-
-def _keyword_signal_flags(keyword: str) -> dict[str, bool]:
-    kw = " ".join(keyword.lower().split())
-    words = set(kw.split())
-    return {
-        "product": any(term in kw for term in _PRODUCT_TERMS),
-        "intent": any(term in words or term in kw for term in _BUYER_INTENT_TERMS),
-        "passion": any(term in words or term in kw for term in _PASSION_TERMS),
-        "style": any(term in words or term in kw for term in _STYLE_TERMS),
-        "occasion": any(term in kw for term in _OCCASION_TERMS),
-    }
-
-
-def keyword_scan_lane(keyword: str, domain: str | None = None, source: str | None = None) -> str:
-    """Classify a seed into a scanner portfolio lane."""
-    kw = " ".join(keyword.lower().split())
-    source_key = (source or "").lower()
-    domain_key = (domain or "").lower()
-    flags = _keyword_signal_flags(kw)
-    signal_count = sum(1 for value in flags.values() if value)
-    word_count = len(kw.split())
-
-    if source_key.startswith("expand_") or source_key.startswith("compound_") or domain_key == "compound":
-        return "adjacent"
-    if "trend" in source_key or "trend" in domain_key or domain_key in {"aesthetics", "nature_themes"}:
-        return "trend"
-    if source_key.endswith("_wild") or (word_count >= 4 and flags["product"] and signal_count >= 2 and score_keyword_buyer_intent(kw) < 72):
-        return "wild"
-    if flags["product"] and (flags["intent"] or flags["passion"] or flags["occasion"]) and score_keyword_buyer_intent(kw) >= 58:
-        return "proven"
-    return "wild" if word_count >= 3 else "proven"
-
-
-def score_keyword_scan_priority(
-    keyword: str,
-    domain: str | None = None,
-    priority: int | None = None,
-    source: str | None = None,
-) -> float:
-    """
-    Pre-scan quality score for deciding what deserves scanner time.
-
-    This intentionally favors buyer-ready Etsy searches and pushes noisy
-    retailer/local/research phrases out of the high-throughput queue.
-    """
-    kw = " ".join(keyword.lower().split())
-    words = kw.split()
-    score = _score_seed_priority(keyword, domain, priority)
-
-    if _contains_any_phrase(kw, _RETAILER_NOISE_TERMS):
-        score -= 42.0
-    if _contains_any_phrase(kw, _IP_RISK_TERMS):
-        score -= 55.0
-    if _contains_any_phrase(kw, _LOCAL_NOISE_TERMS):
-        score -= 38.0
-    if _contains_any_phrase(kw, _LOW_BUYER_INTENT_PHRASES):
-        score -= 28.0
-    if any(word in _LOW_VALUE_WORDS for word in words):
-        score -= 36.0
-    if ":" in kw:
-        score -= 18.0
-
-    word_count = len(words)
-    if 2 <= word_count <= 5:
-        score += 8.0
-    elif word_count == 1:
-        score -= 22.0
-    elif word_count > 7:
-        score -= 24.0
-
-    if any(term in kw for term in _PRODUCT_TERMS):
-        score += 9.0
-    if any(term in kw for term in _BUYER_INTENT_TERMS):
-        score += 7.0
-    if any(term in kw for term in _PASSION_TERMS):
-        score += 5.0
-    if any(term in kw for term in _STYLE_TERMS):
-        score += 4.0
-    if any(term in kw for term in _OCCASION_TERMS):
-        score += 5.0
-
-    flags = _keyword_signal_flags(kw)
-    signal_count = sum(1 for value in flags.values() if value)
-    if flags["product"] and signal_count >= 2:
-        score += 9.0
-    elif signal_count == 0:
-        score -= 12.0
-
-    source_key = (source or "").lower()
-    score += _source_quality_boost(source_key)
-
-    return _clamp_score(score)
 
 
 def is_scanworthy_seed(
@@ -999,10 +820,11 @@ def is_scanworthy_seed(
     domain: str | None = None,
     priority: int | None = None,
     source: str | None = None,
-    min_score: float = 58.0,
 ) -> bool:
+    """Apply only explicit safety/noise exclusions; do not guess market quality."""
+    del domain, priority, source
     kw = " ".join(keyword.lower().split())
-    if not kw or len(kw) < 4:
+    if not kw:
         return False
     if _contains_any_phrase(kw, _LOCAL_NOISE_TERMS):
         return False
@@ -1010,145 +832,11 @@ def is_scanworthy_seed(
         return False
     if _contains_any_phrase(kw, _IP_RISK_TERMS):
         return False
+    if _contains_any_phrase(kw, _LOW_BUYER_INTENT_PHRASES):
+        return False
     if any(word in _LOW_VALUE_WORDS for word in kw.split()):
         return False
-    return score_keyword_scan_priority(kw, domain, priority, source) >= min_score
-
-
-def _score_supply_gap(listing_count: int | None) -> float:
-    """Lower supply is better, but zero/unknown supply should not look perfect."""
-    if not listing_count or listing_count <= 0:
-        return 35.0
-    pressure = math.log10(max(1, listing_count)) / math.log10(750_000) * 100
-    return _clamp_score(100.0 - pressure)
-
-
-def _score_listing_efficiency(monthly_rev: float, listing_count: int | None) -> float:
-    """Revenue density proxy: more revenue per listing means a better gap."""
-    if not listing_count or listing_count <= 0 or monthly_rev <= 0:
-        return 0.0
-    revenue_per_listing = monthly_rev / listing_count
-    return _clamp_score(math.log10(max(1.0, revenue_per_listing)) / math.log10(250.0) * 100)
-
-
-def _score_seed_priority(keyword: str, domain: str | None, priority: int | None) -> float:
-    """Rank unscanned seeds by likely gap quality instead of age alone."""
-    base_priority = (priority or 5) * 7.0
-    domain_boost = _DOMAIN_PRIORITY_BOOST.get((domain or "").lower(), 4)
-    return _clamp_score(
-        base_priority
-        + score_keyword_buyer_intent(keyword) * 0.45
-        + domain_boost * 2.0
-    )
-
-
-def _calculate_gap_score(
-    keyword: str,
-    demand: float,
-    trend: float,
-    comp_quality: float,
-    margin: float,
-    monthly_rev: float,
-    listing_count: int | None,
-    full_gap_score: float | None = None,
-) -> tuple[float, float]:
-    """
-    Composite gap score used by fast keyword rankings.
-
-    It favors buyer-ready, revenue-dense, margin-friendly keywords with weak
-    incumbents, and blends in the full gap report when deeper evidence exists.
-    """
-    buyer_intent = score_keyword_buyer_intent(keyword)
-    supply_gap = _score_supply_gap(listing_count)
-    listing_eff = _score_listing_efficiency(monthly_rev or 0, listing_count)
-    quality_gap = 100.0 - comp_quality if comp_quality and comp_quality > 0 else 0.0
-
-    lightweight = (
-        (demand or 0) * 0.18
-        + (trend or 0) * 0.12
-        + quality_gap * 0.17
-        + (margin or 0) * 0.13
-        + listing_eff * 0.14
-        + buyer_intent * 0.14
-        + supply_gap * 0.12
-    )
-
-    if full_gap_score is not None and full_gap_score > 0:
-        lightweight = lightweight * 0.55 + full_gap_score * 0.45
-
-    return _clamp_score(lightweight), listing_eff
-
-
-def _avg(values: list[float]) -> float:
-    usable = [float(v) for v in values if isinstance(v, (int, float)) and math.isfinite(float(v)) and float(v) > 0]
-    return sum(usable) / len(usable) if usable else 0.0
-
-
-def _price_viability_score(avg_price: float) -> float:
-    if avg_price <= 0:
-        return 0.0
-    if 12 <= avg_price <= 45:
-        return 92.0
-    if 8 <= avg_price < 12:
-        return 72.0
-    if 45 < avg_price <= 70:
-        return 68.0
-    if 4 <= avg_price < 8:
-        return 48.0
-    if avg_price > 70:
-        return 52.0
-    return 25.0
-
-
-def _score_market_evidence(metrics: dict) -> float:
-    ksd_count = metrics.get("keyword_market_rows", 0) or 0
-    sampled = metrics.get("sampled_listings", 0) or 0
-    return _clamp_score(
-        min(ksd_count, 4) / 4 * 12
-        + min(sampled, 60) / 60 * 22
-        + (16 if metrics.get("avg_price_usd", 0) > 0 else 0)
-        + (16 if metrics.get("monthly_revenue_usd", 0) > 0 else 0)
-        + (10 if metrics.get("listing_count", 0) > 0 else 0)
-        + (10 if metrics.get("competition_quality", 0) > 0 else 0)
-        + (8 if metrics.get("avg_favorites", 0) > 0 else 0)
-        + (6 if metrics.get("price_p25_usd", 0) > 0 and metrics.get("price_p75_usd", 0) > 0 else 0)
-    )
-
-
-def _score_profitability_index(
-    keyword: str,
-    demand: float,
-    margin: float,
-    comp_quality: float,
-    monthly_rev: float,
-    listing_count: int | None,
-    avg_price: float,
-    revenue_per_listing: float,
-    avg_favorites: float,
-    market_evidence_score: float,
-) -> float:
-    buyer_intent = score_keyword_buyer_intent(keyword)
-    competition_ease = 100.0 - comp_quality if comp_quality > 0 else _score_supply_gap(listing_count)
-    revenue_density = _score_listing_efficiency(monthly_rev, listing_count)
-    if revenue_per_listing > 0:
-        revenue_density = max(revenue_density, _clamp_score(math.log10(max(1.0, revenue_per_listing)) / math.log10(350.0) * 100))
-    favorite_signal = _clamp_score(math.log10(max(1.0, avg_favorites)) / math.log10(5000.0) * 100) if avg_favorites > 0 else 0.0
-    price_viability = _price_viability_score(avg_price)
-    raw = (
-        (demand or 0) * 0.18
-        + (margin or 0) * 0.20
-        + competition_ease * 0.14
-        + revenue_density * 0.18
-        + price_viability * 0.12
-        + buyer_intent * 0.10
-        + favorite_signal * 0.04
-        + market_evidence_score * 0.04
-    )
-    if market_evidence_score < 35:
-        raw = min(raw, 68.0)
-    elif market_evidence_score < 55:
-        raw = min(raw, 78.0)
-    return _clamp_score(raw)
+    return True
 
 
 def _present_number(value) -> float | None:
@@ -1392,43 +1080,13 @@ def _unscanned_candidate_rows(domain: Optional[str], candidate_limit: int) -> li
         """, (candidate_limit,)).fetchall()
 
 
-def _rank_seed_rows(rows: list[sqlite3.Row]) -> list[tuple[float, str, sqlite3.Row]]:
-    ranked = [
-        (
-            score_keyword_scan_priority(r["keyword"], r["domain"], r["priority"], r["source"]),
-            keyword_scan_lane(r["keyword"], r["domain"], r["source"]),
-            r,
-        )
-        for r in rows
-    ]
-    return sorted(ranked, key=lambda item: (item[0], item[2]["added_at"] or ""), reverse=True)
-
-
-def _lane_quotas(limit: int) -> dict[str, int]:
-    if limit <= 0:
-        return {lane: 0 for lane in _SCAN_LANE_ALLOCATION}
-
-    lanes = list(_SCAN_LANE_ALLOCATION.keys())
-    quotas = {lane: int(limit * _SCAN_LANE_ALLOCATION[lane]) for lane in lanes}
-    quotas["proven"] += limit - sum(quotas.values())
-
-    if limit >= len(lanes):
-        for lane in lanes:
-            if quotas[lane] == 0:
-                donor = max(lanes, key=lambda key: quotas[key])
-                if quotas[donor] > 1:
-                    quotas[donor] -= 1
-                    quotas[lane] = 1
-    return quotas
-
-
-def get_unscanned_portfolio(limit: int = 20, domain: Optional[str] = None, min_quality: float = 58.0) -> list[str]:
+def get_unscanned_portfolio(limit: int = 20, domain: Optional[str] = None) -> list[str]:
     """Return the explicit-priority queue; do not infer market quality from wording."""
     rows = _unscanned_candidate_rows(domain, limit)
     return [row["keyword"] for row in rows]
 
 
-def get_unscanned(limit: int = 20, domain: Optional[str] = None, min_quality: float = 58.0) -> list[str]:
+def get_unscanned(limit: int = 20, domain: Optional[str] = None) -> list[str]:
     rows = _unscanned_candidate_rows(domain, limit)
     return [row["keyword"] for row in rows]
 
@@ -1502,11 +1160,11 @@ def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
 
     remaining = count - len(result)
     if remaining > 0:
-        _add(get_unscanned_portfolio(limit=remaining, min_quality=58.0))
+        _add(get_unscanned_portfolio(limit=remaining))
 
     remaining = count - len(result)
     if remaining > 0:
-        _add(get_unscanned(limit=remaining, min_quality=54.0))
+        _add(get_unscanned(limit=remaining))
 
     _add(get_stale(days=stale_days, limit=count))
     return result[:count]
@@ -1935,6 +1593,68 @@ def record_keyword_outcome(
     return contribution
 
 
+def get_keyword_evidence(keyword: str, limit: int = 100) -> dict | None:
+    """Return auditable evidence for one exact keyword without inferred values."""
+    normalized = keyword.strip().lower()
+    if not normalized:
+        return None
+    row_limit = max(1, min(int(limit), 500))
+    with _conn() as con:
+        seed = con.execute(
+            "SELECT * FROM seeds WHERE keyword = ?",
+            (normalized,),
+        ).fetchone()
+        if seed is None:
+            return None
+        latest_attempt = con.execute(
+            "SELECT * FROM scans WHERE keyword = ? ORDER BY scanned_at DESC, id DESC LIMIT 1",
+            (normalized,),
+        ).fetchone()
+        latest_verified = con.execute(
+            """
+            SELECT * FROM scans
+            WHERE keyword = ? AND evidence_status = 'verified' AND score_version IS NOT NULL
+            ORDER BY scanned_at DESC, id DESC LIMIT 1
+            """,
+            (normalized,),
+        ).fetchone()
+        sources = con.execute(
+            "SELECT * FROM keyword_sources WHERE keyword = ? ORDER BY source",
+            (normalized,),
+        ).fetchall()
+        observations = con.execute(
+            """
+            SELECT * FROM keyword_observations
+            WHERE keyword = ? ORDER BY observed_at DESC, id DESC LIMIT ?
+            """,
+            (normalized, row_limit),
+        ).fetchall()
+        economics = con.execute(
+            """
+            SELECT * FROM keyword_product_economics
+            WHERE keyword = ? ORDER BY observed_at DESC, id DESC LIMIT ?
+            """,
+            (normalized, row_limit),
+        ).fetchall()
+        outcomes = con.execute(
+            """
+            SELECT * FROM keyword_outcomes
+            WHERE keyword = ? ORDER BY period_end DESC, id DESC LIMIT ?
+            """,
+            (normalized, row_limit),
+        ).fetchall()
+    return {
+        "keyword": normalized,
+        "seed": dict(seed),
+        "latest_attempt": dict(latest_attempt) if latest_attempt else None,
+        "latest_verified_evidence": dict(latest_verified) if latest_verified else None,
+        "sources": [dict(row) for row in sources],
+        "observations": [dict(row) for row in observations],
+        "product_economics": [dict(row) for row in economics],
+        "outcomes": [dict(row) for row in outcomes],
+    }
+
+
 # ── Scheduler log ─────────────────────────────────────────────────────────────
 
 def log_scheduler_run(mode: str = "continuous") -> int:
@@ -2172,7 +1892,7 @@ def get_gap_report(keyword: str) -> Optional[dict]:
         return d
 
 
-def get_top_gap_reports(limit: int = 100, min_score: float = 0.0) -> list[dict]:
+def get_top_gap_reports(limit: int = 100) -> list[dict]:
     """Most recent versioned, verified gap report per keyword."""
     with _conn() as con:
         rows = con.execute("""
@@ -2183,10 +1903,9 @@ def get_top_gap_reports(limit: int = 100, min_score: float = 0.0) -> list[dict]:
             AND gr.evidence_status='verified'
             AND gr.score_version IS NOT NULL
             AND gr.composite_gap_score IS NOT NULL
-            AND gr.composite_gap_score >= ?
             ORDER BY gr.composite_gap_score DESC
             LIMIT ?
-        """, (min_score, limit)).fetchall()
+        """, (limit,)).fetchall()
         results = []
         for row in rows:
             d = dict(row)

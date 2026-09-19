@@ -44,7 +44,7 @@ def update_settings(req: SettingsUpdate):
 
 @router.get("/adapters")
 def adapter_status():
-    """Check which adapters are configured and healthy."""
+    """Report provider readiness without exposing credentials or inventing evidence."""
     results = {}
 
     # LLM adapters
@@ -59,27 +59,64 @@ def adapter_status():
         except Exception as e:
             results[f"llm_{name}"] = {"available": False, "error": str(e)}
 
-    # Research adapters
     research_adapters = {
-        "etsy_autocomplete": "EtsyAutocompleteAdapter",
-        "google_trends": "GoogleTrendsAdapter",
-        "reddit_etsy": "RedditEtsyAdapter",
+        "google_suggest": {
+            "loader": lambda: __import__("adapters.research.google_suggest", fromlist=["GoogleSuggestAdapter"]).GoogleSuggestAdapter(),
+            "requires_credentials": False,
+            "evidence": ["source phrases"],
+        },
+        "etsy_autocomplete": {
+            "loader": lambda: __import__("adapters.research.etsy_autocomplete", fromlist=["EtsyAutocompleteAdapter"]).EtsyAutocompleteAdapter(),
+            "requires_credentials": False,
+            "evidence": ["source phrases"],
+        },
+        "etsy_open_api": {
+            "loader": lambda: __import__("adapters.research.etsy_open_api", fromlist=["EtsyOpenAPIAdapter"]).EtsyOpenAPIAdapter(),
+            "requires_credentials": True,
+            "evidence": ["listing count", "sampled prices", "listing sample"],
+        },
+        "erank": {
+            "loader": lambda: __import__("adapters.research.erank", fromlist=["ERankAdapter"]).ERankAdapter(),
+            "requires_credentials": True,
+            "evidence": ["provider search volume", "provider competition", "provider trend"],
+        },
+        "marmalead": {
+            "loader": lambda: __import__("adapters.research.marmalead", fromlist=["MarmaleadAdapter"]).MarmaleadAdapter(),
+            "requires_credentials": True,
+            "evidence": ["provider search volume", "provider competition", "provider trend"],
+        },
+        "google_trends": {
+            "loader": lambda: __import__("adapters.research.google_trends", fromlist=["GoogleTrendsAdapter"]).GoogleTrendsAdapter(),
+            "requires_credentials": False,
+            "evidence": ["relative trend interest"],
+        },
+        "pinterest_trends": {
+            "loader": lambda: __import__("adapters.research.pinterest_trends", fromlist=["PinterestTrendsAdapter"]).PinterestTrendsAdapter(),
+            "requires_credentials": True,
+            "evidence": ["relative trend interest"],
+        },
+        "reddit_etsy": {
+            "loader": lambda: __import__("adapters.research.reddit_etsy", fromlist=["RedditEtsyAdapter"]).RedditEtsyAdapter(),
+            "requires_credentials": True,
+            "evidence": ["observed discussion activity"],
+        },
     }
-    for key, cls_name in research_adapters.items():
+    for key, definition in research_adapters.items():
         try:
-            if key == "etsy_autocomplete":
-                from adapters.research.etsy_autocomplete import EtsyAutocompleteAdapter
-                a = EtsyAutocompleteAdapter()
-            elif key == "google_trends":
-                from adapters.research.google_trends import GoogleTrendsAdapter
-                a = GoogleTrendsAdapter()
-            elif key == "reddit_etsy":
-                from adapters.research.reddit_etsy import RedditEtsyAdapter
-                a = RedditEtsyAdapter()
-            else:
-                continue
-            results[key] = {"available": True, "healthy": a.is_configured()}
+            adapter = definition["loader"]()
+            results[key] = {
+                "available": True,
+                "configured": bool(adapter.is_configured()),
+                "requires_credentials": definition["requires_credentials"],
+                "evidence": definition["evidence"],
+            }
         except Exception as e:
-            results[key] = {"available": False, "error": str(e)}
+            results[key] = {
+                "available": False,
+                "configured": False,
+                "requires_credentials": definition["requires_credentials"],
+                "evidence": definition["evidence"],
+                "error": str(e),
+            }
 
     return results

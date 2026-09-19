@@ -51,8 +51,11 @@ class ClaudeAdapter(BaseLLMAdapter):
 
         input_tokens = response.usage.input_tokens
         output_tokens = response.usage.output_tokens
-        pricing = _PRICING.get(self._model, {"input": 3.00, "output": 15.00})
-        cost = (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
+        pricing = _PRICING.get(self._model)
+        cost = (
+            (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
+            if pricing is not None else None
+        )
 
         return LLMResponse(
             content=content,

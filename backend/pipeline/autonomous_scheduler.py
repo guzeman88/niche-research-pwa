@@ -47,7 +47,6 @@ DISCOVER_EVERY_N_SCANS = max(25, int(os.environ.get("DISCOVER_EVERY_N_SCANS", "1
 # Max expansion depth — don't expand keywords that are already 3 levels deep
 MAX_EXPANSION_DEPTH = max(1, int(os.environ.get("MAX_EXPANSION_DEPTH", "2")))
 
-MIN_EXPANSION_QUALITY = float(os.environ.get("SCANNER_MIN_EXPANSION_QUALITY", "62"))
 
 
 class AutonomousScheduler:
@@ -323,7 +322,6 @@ class AutonomousScheduler:
             try:
                 competitor_terms = self._rank_expansion_candidates(
                     _extract_competitor_tags(report_dict),
-                    min_quality=MIN_EXPANSION_QUALITY + 3,
                     source="expand_competitor_terms",
                 )
                 if competitor_terms:
@@ -339,19 +337,11 @@ class AutonomousScheduler:
             from adapters.research.google_suggest import GoogleSuggestAdapter
             gs = GoogleSuggestAdapter()
             sigs = gs.search(keyword)
-            keyword_quality = kdb.score_keyword_scan_priority(
-                keyword,
-                domain="discovered",
-                source="scheduler_expansion",
-            )
             gs_kws = self._rank_expansion_candidates(
                 [s.keyword for s in sigs if s.keyword != keyword.lower()],
-                min_quality=MIN_EXPANSION_QUALITY if has_market_data else max(56.0, MIN_EXPANSION_QUALITY - 4),
                 source="expand_google_suggest",
             )
-            expansion_limit = 14 if has_market_data else (6 if keyword_quality >= 72 else 4)
-            if not has_market_data and keyword_quality < 56:
-                gs_kws = []
+            expansion_limit = 14 if has_market_data else 6
             if gs_kws:
                 added = kdb.record_expansion(keyword, gs_kws[:expansion_limit], "google_suggest", depth + 1)
                 new_seeds_total += added
@@ -364,7 +354,6 @@ class AutonomousScheduler:
             try:
                 trends_terms = self._rank_expansion_candidates(
                     _extract_trends_related(keyword),
-                    min_quality=MIN_EXPANSION_QUALITY + 5,
                     source="expand_trends_related",
                 )
                 if trends_terms:
@@ -393,7 +382,6 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                                 for k in related
                                 if isinstance(k, str) and len(k.strip()) > 3 and k.strip().lower() != keyword.lower()
                             ],
-                            min_quality=MIN_EXPANSION_QUALITY + 5,
                             source="expand_llm_related",
                         )
                         if valid:
@@ -409,10 +397,9 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
     def _rank_expansion_candidates(
         self,
         candidates: list[str],
-        min_quality: float,
         source: str,
     ) -> list[str]:
-        ranked: list[tuple[float, str]] = []
+        accepted: list[str] = []
         seen: set[str] = set()
         for candidate in candidates:
             kw = " ".join(str(candidate).lower().split())
@@ -423,17 +410,10 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                 kw,
                 domain="discovered",
                 source=source,
-                min_score=min_quality,
             ):
                 continue
-            score = kdb.score_keyword_scan_priority(
-                kw,
-                domain="discovered",
-                source=source,
-            )
-            ranked.append((score, kw))
-        ranked.sort(reverse=True)
-        return [kw for _, kw in ranked]
+            accepted.append(kw)
+        return accepted
 
     def _report_to_dict(self, report) -> dict:
         if hasattr(report, "__dataclass_fields__"):
@@ -567,12 +547,19 @@ def _report_has_market_data(report) -> bool:
         data = dict(report)
     for row in data.get("keyword_search_data", []) or []:
         if (
-            (row.get("sampled_listing_count") or 0) > 0
-            or (row.get("avg_price_usd") or 0) > 0
-            or (row.get("total_listing_count") or 0) > 0
+            _is_positive_observation(row.get("sampled_listing_count"))
+            or _is_positive_observation(row.get("avg_price_usd"))
+            or _is_positive_observation(row.get("total_listing_count"))
         ):
             return True
     return False
+
+
+def _is_positive_observation(value) -> bool:
+    try:
+        return value is not None and float(value) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _scheduler_research_adapters() -> list[str]:

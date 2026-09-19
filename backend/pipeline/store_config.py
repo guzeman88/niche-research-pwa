@@ -35,11 +35,11 @@ class AdapterConfig:
 
 @dataclass
 class PricingStrategy:
-    strategy: str = "penetration"          # "penetration" | "premium" | "competitive"
-    apparel_base_multiplier: float = 2.5   # pod_cost × multiplier = listing price
-    digital_fixed_price: float = 3.99
-    wall_art_base_multiplier: float = 3.0
-    round_to_cent: float = 0.99            # e.g. 24.99 not 25.00
+    strategy: str | None = None
+    apparel_base_multiplier: float | None = None
+    digital_fixed_price: float | None = None
+    wall_art_base_multiplier: float | None = None
+    round_to_cent: float | None = None
 
 
 @dataclass
@@ -59,9 +59,9 @@ class StoreConfig:
     adapters: AdapterConfig = field(default_factory=AdapterConfig)
     pricing: PricingStrategy = field(default_factory=PricingStrategy)
     branding: BrandingConfig = field(default_factory=BrandingConfig)
-    product_types: list[str] = field(default_factory=lambda: ["digital_download"])
+    product_types: list[str] = field(default_factory=list)
     airtable_store_record_id: str = ""
-    listing_count_target: int = 50
+    listing_count_target: int | None = None
     active: bool = True
     created_at: str = ""
     research_snapshot: dict[str, Any] = field(default_factory=dict)
@@ -100,11 +100,11 @@ class StoreConfig:
 
         pricing_raw = data.get("pricing", {})
         pricing = PricingStrategy(
-            strategy=pricing_raw.get("strategy", "penetration"),
-            apparel_base_multiplier=pricing_raw.get("apparel_base_multiplier", 2.5),
-            digital_fixed_price=pricing_raw.get("digital_fixed_price", 3.99),
-            wall_art_base_multiplier=pricing_raw.get("wall_art_base_multiplier", 3.0),
-            round_to_cent=pricing_raw.get("round_to_cent", 0.99),
+            strategy=pricing_raw.get("strategy"),
+            apparel_base_multiplier=pricing_raw.get("apparel_base_multiplier"),
+            digital_fixed_price=pricing_raw.get("digital_fixed_price"),
+            wall_art_base_multiplier=pricing_raw.get("wall_art_base_multiplier"),
+            round_to_cent=pricing_raw.get("round_to_cent"),
         )
 
         branding_raw = data.get("branding", {})
@@ -123,9 +123,9 @@ class StoreConfig:
             adapters=adapters,
             pricing=pricing,
             branding=branding,
-            product_types=data.get("product_types", ["digital_download"]),
+            product_types=data.get("product_types", []),
             airtable_store_record_id=data.get("airtable_store_record_id", ""),
-            listing_count_target=data.get("listing_count_target", 50),
+            listing_count_target=data.get("listing_count_target"),
             active=data.get("active", True),
             created_at=data.get("created_at", ""),
             research_snapshot=data.get("research_snapshot", {}),
@@ -146,7 +146,7 @@ class StoreConfig:
             branding=BrandingConfig(
                 mood_keywords=suggestion.get("brand_voice", "").split(", "),
             ),
-            product_types=suggestion.get("product_mix", ["digital_download"]),
+            product_types=suggestion.get("product_mix", []),
             created_at=datetime.now(timezone.utc).isoformat(),
         )
 

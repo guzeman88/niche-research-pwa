@@ -47,15 +47,15 @@ research:
     - redbubble
 
 niche_scoring:
-  demand_weight: 0.30
-  competition_weight: 0.30
-  margin_weight: 0.20
-  trend_weight: 0.20
-  opportunity_threshold: 60   # minimum score to suggest a store
+  demand_weight: null
+  competition_weight: null
+  margin_weight: null
+  trend_weight: null
+  opportunity_threshold: null
 
 pod_cost_estimates:
-  printify_tshirt_usd: 8.50
-  printify_hoodie_usd: 22.00
-  printify_mug_usd: 7.00
-  printify_poster_usd: 9.00
-  digital_production_usd: 0.10  # image gen cost estimate
+  printify_tshirt_usd: null
+  printify_hoodie_usd: null
+  printify_mug_usd: null
+  printify_poster_usd: null
+  digital_production_usd: null

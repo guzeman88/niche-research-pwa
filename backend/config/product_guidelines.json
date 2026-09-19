@@ -64,16 +64,16 @@
           "id": "strategy",
           "name": "Pricing Strategy",
           "type": "select",
-          "value": "penetration",
-          "enabled": true,
+          "value": null,
+          "enabled": false,
           "options": ["penetration", "premium", "competitive"]
         },
         {
           "id": "apparel_base_multiplier",
           "name": "Apparel Price Multiplier",
           "type": "number",
-          "value": 2.5,
-          "enabled": true,
+          "value": null,
+          "enabled": false,
           "min": 1.5,
           "max": 5.0
         },
@@ -81,8 +81,8 @@
           "id": "digital_fixed_price",
           "name": "Digital Download Base Price (USD)",
           "type": "number",
-          "value": 3.99,
-          "enabled": true,
+          "value": null,
+          "enabled": false,
           "min": 0.99,
           "max": 29.99
         },
@@ -90,8 +90,8 @@
           "id": "wall_art_base_multiplier",
           "name": "Wall Art Price Multiplier",
           "type": "number",
-          "value": 3.0,
-          "enabled": true,
+          "value": null,
+          "enabled": false,
           "min": 1.5,
           "max": 6.0
         },
@@ -99,8 +99,8 @@
           "id": "round_to_cent",
           "name": "Round-to-Cent (e.g. $24.99)",
           "type": "number",
-          "value": 0.99,
-          "enabled": true,
+          "value": null,
+          "enabled": false,
           "min": 0.0,
           "max": 0.99
         }

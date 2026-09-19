@@ -11,6 +11,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Keywords = lazy(() => import('./pages/Keywords'))
 const StoreGenerator = lazy(() => import('./pages/StoreGenerator'))
 const Workspace = lazy(() => import('./pages/Workspace'))
+const EvidenceOperations = lazy(() => import('./pages/EvidenceOperations'))
 const Account = lazy(() => import('./pages/Account'))
 const SignIn = lazy(() => import('./pages/SignIn'))
 const ConfirmAccount = lazy(() => import('./pages/ConfirmAccount'))
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="/keywords" element={page(<Keywords />)} />
         <Route path="/store-generator" element={page(<StoreGenerator />)} />
         <Route path="/workspace" element={page(<Workspace />)} />
+        <Route path="/evidence" element={page(<EvidenceOperations />)} />
         <Route path="/account" element={page(<Account />)} />
         <Route path="/stores" element={page(<Stores />)} />
         <Route path="*" element={page(<NotFound />)} />
