@@ -37,8 +37,8 @@ export default function Keywords() {
   const { mode, isUserMode, userDataVersion, refreshUserData } = useAppMode()
   const [search, setSearch] = useState('')
   const [domain, setDomain] = useState('')
-  const [sortBy, setSortBy] = useState<SortKey>('gap')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [sortBy, setSortBy] = useState<SortKey>('status')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [page, setPage] = useState(1)
 
   const { data: apiDomains } = useQuery<string[]>({
@@ -74,7 +74,7 @@ export default function Keywords() {
       switch (sortBy) {
         case 'keyword': va = a.keyword; vb = b.keyword; break
         case 'domain': va = a.domain; vb = b.domain; break
-        case 'status': va = a.scanned ? 1 : 0; vb = b.scanned ? 1 : 0; break
+        case 'status': va = evidenceOrder(a); vb = evidenceOrder(b); break
         case 'opportunity': va = businessScore(a) ?? -999; vb = businessScore(b) ?? -999; break
         case 'gap': va = a.gap_score ?? -999; vb = b.gap_score ?? -999; break
         case 'trajectory': {
@@ -193,11 +193,7 @@ export default function Keywords() {
                       <div className="truncate text-[13px] font-extrabold text-surface-50">{kw.keyword}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <span className="tag max-w-full truncate bg-accent-violet/10 text-accent-violet border-accent-violet/20">{kw.domain}</span>
-                        {kw.scanned ? (
-                          <span className="text-[10px] font-semibold text-accent-green">Scanned {fmtDate(kw.last_scanned_at)}</span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-accent-amber">Pending</span>
-                        )}
+                        <EvidenceStatus keyword={kw} />
                       </div>
                     </div>
                     <TrajectoryBadge trajectory={kw.trajectory} />
@@ -245,25 +241,25 @@ export default function Keywords() {
                       <td className="px-4 py-3 text-surface-50 font-semibold whitespace-nowrap">{kw.keyword}</td>
                       <td className="px-4 py-3"><span className="tag bg-accent-violet/10 text-accent-violet border-accent-violet/20 whitespace-nowrap">{kw.domain}</span></td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {kw.scanned ? <span className="text-[11px] text-accent-green font-medium">Scanned {fmtDate(kw.last_scanned_at)}</span> : <span className="text-[11px] text-accent-amber font-medium">Pending</span>}
+                        <EvidenceStatus keyword={kw} />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="progress-track w-10 hidden sm:inline-block">{oppScore != null && <span className="block h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, oppScore)}%` }} />}</span>
-                          <span className={`font-bold tabular-nums ${oppColor}`}>{oppScore != null ? oppScore.toFixed(0) : '-'}</span>
+                          <span className={`font-bold tabular-nums ${oppColor}`}>{oppScore != null ? oppScore.toFixed(0) : 'TBD'}</span>
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="progress-track w-10 hidden sm:inline-block">{gapScore != null && <span className="block h-full rounded-full bg-gradient-to-r from-accent-green to-accent-green/80" style={{ width: `${Math.min(100, gapScore)}%` }} />}</span>
-                          <span className={`font-bold tabular-nums ${gapColor}`}>{gapScore != null ? gapScore.toFixed(0) : '-'}</span>
+                          <span className={`font-bold tabular-nums ${gapColor}`}>{gapScore != null ? gapScore.toFixed(0) : 'TBD'}</span>
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         {kw.trajectory === 'rising' && <span className="text-[11px] font-semibold text-accent-green">rising</span>}
                         {kw.trajectory === 'declining' && <span className="text-[11px] font-semibold text-accent-red">declining</span>}
                         {kw.trajectory === 'stable' && <span className="text-[11px] text-surface-300">stable</span>}
-                        {!kw.trajectory && <span className="text-[11px] text-surface-400">-</span>}
+                        {!kw.trajectory && <span className="text-[11px] text-surface-400">TBD</span>}
                       </td>
                     </tr>
                   )
@@ -313,7 +309,32 @@ function finiteScore(value: number | null | undefined): number | null {
 }
 
 function businessScore(keyword: KeywordItem): number | null {
+  if (keyword.evidence_status !== 'verified' || !keyword.score_version) return null
   return finiteScore(keyword.primary_score ?? keyword.opportunity_score ?? keyword.gap_score)
+}
+
+function evidenceOrder(keyword: KeywordItem): number {
+  const order: Record<string, number> = { unverified: 0, partial: 1, failed: 2, imported: 3, verified: 4 }
+  return order[keyword.evidence_status || (keyword.scanned ? 'partial' : 'unverified')] ?? 0
+}
+
+function EvidenceStatus({ keyword }: { keyword: KeywordItem }) {
+  const observations = [
+    keyword.observed_search_volume != null ? `${keyword.observed_search_volume.toLocaleString()} searches/mo` : null,
+    keyword.listing_count != null ? `${keyword.listing_count.toLocaleString()} listings` : null,
+    keyword.avg_price_usd != null ? `$${keyword.avg_price_usd.toFixed(2)} avg` : null,
+  ].filter(Boolean).join(' · ')
+  const detail = observations ? <span className="text-[10px] font-medium text-surface-300">{observations}</span> : null
+  if (keyword.evidence_status === 'verified') {
+    return <span className="inline-flex flex-col"><span className="text-[11px] font-semibold text-accent-green">Verified {fmtDate(keyword.last_scanned_at)}</span>{detail}</span>
+  }
+  if (keyword.evidence_status === 'failed' || keyword.scan_status === 'failed') {
+    return <span className="text-[11px] font-semibold text-accent-red" title={keyword.scan_error || undefined}>Failed</span>
+  }
+  if (keyword.evidence_status === 'partial' || keyword.evidence_status === 'imported') {
+    return <span className="inline-flex flex-col"><span className="text-[11px] font-semibold text-accent-amber">Evidence incomplete</span>{detail}</span>
+  }
+  return <span className="text-[11px] font-semibold text-surface-300">Awaiting data</span>
 }
 
 function MobileScore({ label, value, tone }: { label: string; value: number | null; tone: 'primary' | 'green' }) {
@@ -329,7 +350,7 @@ function MobileScore({ label, value, tone }: { label: string; value: number | nu
     <div className="rounded-md border border-surface-600/45 bg-surface-950/20 px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] font-bold uppercase tracking-wider text-surface-300">{label}</span>
-        <span className={`text-[13px] font-extrabold tabular-nums ${color}`}>{value != null ? value.toFixed(0) : '-'}</span>
+        <span className={`text-[13px] font-extrabold tabular-nums ${color}`}>{value != null ? value.toFixed(0) : 'TBD'}</span>
       </div>
       <div className="progress-track mt-2">
         {value != null && <span className={`block h-full rounded-full bg-gradient-to-r ${bar}`} style={{ width: `${Math.min(100, value)}%` }} />}
@@ -342,7 +363,7 @@ function TrajectoryBadge({ trajectory }: { trajectory?: string | null }) {
   if (trajectory === 'rising') return <span className="rounded-md border border-accent-green/20 bg-accent-green/10 px-2 py-1 text-[10px] font-bold text-accent-green">rising</span>
   if (trajectory === 'declining') return <span className="rounded-md border border-accent-red/20 bg-accent-red/10 px-2 py-1 text-[10px] font-bold text-accent-red">declining</span>
   if (trajectory === 'stable') return <span className="rounded-md border border-surface-600/45 bg-surface-800/60 px-2 py-1 text-[10px] font-bold text-surface-300">stable</span>
-  return <span className="rounded-md border border-surface-600/35 bg-surface-800/40 px-2 py-1 text-[10px] font-bold text-surface-400">-</span>
+  return <span className="rounded-md border border-surface-600/35 bg-surface-800/40 px-2 py-1 text-[10px] font-bold text-surface-400">TBD</span>
 }
 
 function UserScanImporter({

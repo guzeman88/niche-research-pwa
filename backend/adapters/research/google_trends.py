@@ -59,9 +59,9 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
                         trend = _trend_direction(recent, older)
                         results.append(NicheSignal(
                             keyword=kw,
-                            monthly_searches=int(avg * 100),  # 0-10000 scale proxy
-                            competition_score=0.0,            # not from trends
-                            avg_price_usd=0.0,
+                            monthly_searches=None,
+                            competition_score=None,
+                            avg_price_usd=None,
                             trend_direction=trend,
                             source="google_trends",
                         ))
@@ -83,9 +83,9 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
         return results
 
 
-def _trend_direction(recent: float, older: float) -> str:
+def _trend_direction(recent: float, older: float) -> str | None:
     if older == 0:
-        return "stable"
+        return None
     change = (recent - older) / older
     if change > 0.15:
         return "rising"
@@ -97,10 +97,10 @@ def _trend_direction(recent: float, older: float) -> str:
 def _zero_signal(keyword: str) -> NicheSignal:
     return NicheSignal(
         keyword=keyword,
-        monthly_searches=0,
-        competition_score=0.0,
-        avg_price_usd=0.0,
-        trend_direction="stable",
+        monthly_searches=None,
+        competition_score=None,
+        avg_price_usd=None,
+        trend_direction=None,
         source="google_trends",
     )
 

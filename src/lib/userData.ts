@@ -2,6 +2,7 @@ import type { StatsResponse, KeywordItem } from '../types/api'
 import type { GapReport } from '../types/gaps'
 import { generateStoreIdeas, type StoreIdea } from './storeIdeas'
 import { USER_DATA_EVENT } from './appMode'
+import {accountStorage} from './accountWorkspace'
 
 export type UserScanSource = 'erank' | 'semrush' | 'csv' | 'manual'
 
@@ -13,6 +14,7 @@ export interface UserKeywordItem extends KeywordItem, Record<string, unknown> {
   competition_value?: number | null
   competition_kind?: 'score' | 'density' | 'count' | 'unknown'
   cpc?: number | null
+  trend_value?: number | null
   demand_score?: number | null
   competition_ease?: number | null
   buyer_intent_score?: number | null
@@ -76,18 +78,13 @@ export function getUserDomains(): string[] {
 }
 
 export function getUserOpportunities(limit = 100): UserKeywordItem[] {
-  return readUserKeywords()
-    .filter((keyword) => Number(keyword.opportunity_score) > 0 || Number(keyword.gap_score) > 0)
-    .sort((a, b) => userKeywordStrength(b) - userKeywordStrength(a))
-    .slice(0, limit)
+  void limit
+  return []
 }
 
 export function getUserBreakouts(limit = 20): { keyword: string; breakout: boolean }[] {
-  return readUserKeywords()
-    .filter((keyword) => keyword.breakout)
-    .sort((a, b) => userKeywordStrength(b) - userKeywordStrength(a))
-    .slice(0, limit)
-    .map((keyword) => ({ keyword: keyword.keyword, breakout: true }))
+  void limit
+  return []
 }
 
 export function getUserStats(): StatsResponse {
@@ -112,10 +109,10 @@ export function getUserStats(): StatsResponse {
     scanned,
     unscanned: Math.max(0, keywords.length - scanned),
     total_scans: scanned,
-    coverage_pct: keywords.length ? Number(((scanned / keywords.length) * 100).toFixed(1)) : 0,
-    avg_opportunity: roundAverage(opportunities),
-    avg_gap_score: roundAverage(gaps),
-    breakout_count: keywords.filter((keyword) => keyword.breakout).length,
+    coverage_pct: keywords.length ? Number(((scanned / keywords.length) * 100).toFixed(1)) : null,
+    avg_opportunity: opportunities.length ? roundAverage(opportunities) : null,
+    avg_gap_score: gaps.length ? roundAverage(gaps) : null,
+    breakout_count: 0,
     expansion_edges: getUserScanBatches().length,
     top_gap_keyword: topGap?.gap_score == null ? null : { keyword: topGap.keyword, gap_score: topGap.gap_score },
     domains: Array.from(domainCounts.entries())
@@ -125,21 +122,8 @@ export function getUserStats(): StatsResponse {
 }
 
 export function getUserGaps(limit = 100): Array<Partial<GapReport> & { keyword: string; composite_gap_score: number }> {
-  return readUserKeywords()
-    .filter((keyword) => Number.isFinite(keyword.gap_score))
-    .sort((a, b) => Number(b.gap_score) - Number(a.gap_score))
-    .slice(0, limit)
-    .map((keyword) => ({
-      keyword: keyword.keyword,
-      analyzed_at: keyword.last_scanned_at || keyword.added_at,
-      volume_gap_score: keyword.demand_score ?? undefined,
-      quality_gap_score: keyword.competition_ease ?? undefined,
-      buyer_intent_score: keyword.buyer_intent_score ?? undefined,
-      profit_gap_score: keyword.cpc == null ? undefined : keyword.buyer_intent_score ?? undefined,
-      composite_gap_score: Number(keyword.gap_score),
-      entry_angle: 'Imported keyword scan',
-      listings_analyzed: keyword.competition_kind === 'count' ? Number(keyword.competition_value || 0) : 0,
-    }))
+  void limit
+  return []
 }
 
 export function getUserStoreIdeas(limit = 12): StoreIdea[] {
@@ -162,7 +146,7 @@ export function importUserScan(input: { source: UserScanSource; name?: string; t
     const key = keyword.keyword.toLowerCase()
     byKeyword.set(key, mergeKeyword(byKeyword.get(key), keyword))
   }
-  const keywords = Array.from(byKeyword.values()).sort((a, b) => userKeywordStrength(b) - userKeywordStrength(a))
+  const keywords = Array.from(byKeyword.values()).sort((a, b) => a.keyword.localeCompare(b.keyword))
   writeJson(USER_KEYWORDS_KEY, keywords)
 
   const batch: UserScanBatch = {
@@ -186,8 +170,8 @@ export function importUserScan(input: { source: UserScanSource; name?: string; t
 
 export function clearUserKeywordData(): void {
   if (!hasStorage()) return
-  window.localStorage.removeItem(USER_KEYWORDS_KEY)
-  window.localStorage.removeItem(USER_BATCHES_KEY)
+  accountStorage.removeItem(USER_KEYWORDS_KEY)
+  accountStorage.removeItem(USER_BATCHES_KEY)
   emitUserDataChanged()
 }
 
@@ -275,32 +259,22 @@ function rowFromCells(cells: string[], headerMap: Map<string, number>): ParsedRo
 }
 
 function toUserKeywords(rows: ParsedRow[], batch: { id: string; source: UserScanSource; name: string; createdAt: string }): UserKeywordItem[] {
-  const demandScores = normalizedLogScores(rows.map((row) => row.volume))
-  const cpcScores = normalizedLogScores(rows.map((row) => row.cpc))
-  const competitionEaseScores = competitionEase(rows)
-
-  return rows.map((row, index) => {
-    const demand = demandScores[index]
-    const ease = competitionEaseScores[index]
-    const buyerIntent = cpcScores[index]
-    const opportunity = weightedScore([
-      [demand, 0.58],
-      [ease, 0.3],
-      [buyerIntent, 0.12],
-    ])
-    const gap = demand == null || ease == null ? null : Math.round(demand * 0.64 + ease * 0.36)
+  return rows.map((row) => {
+    const hasObservation = [row.volume, row.competition, row.cpc, row.trend].some(Number.isFinite)
     return {
       keyword: row.keyword,
       domain: row.domain,
       source: `user:${batch.source}`,
-      priority: Math.round(userPriority(opportunity, gap)),
+      priority: 0,
       added_at: batch.createdAt,
-      scanned: opportunity != null || gap != null,
-      last_scanned_at: opportunity != null || gap != null ? batch.createdAt : null,
-      opportunity_score: opportunity,
-      gap_score: gap,
-      trajectory: trajectoryFromTrend(row.trend),
-      breakout: Number.isFinite(row.trend) ? Number(row.trend) > 20 : false,
+      scanned: hasObservation,
+      last_scanned_at: hasObservation ? batch.createdAt : null,
+      opportunity_score: null,
+      gap_score: null,
+      trajectory: null,
+      breakout: false,
+      evidence_status: hasObservation ? 'imported' : 'unverified',
+      score_version: null,
       user_scan_id: batch.id,
       user_scan_name: batch.name,
       user_source: batch.source,
@@ -308,90 +282,50 @@ function toUserKeywords(rows: ParsedRow[], batch: { id: string; source: UserScan
       competition_value: row.competition,
       competition_kind: row.competitionKind,
       cpc: row.cpc,
-      demand_score: demand,
-      competition_ease: ease,
-      buyer_intent_score: buyerIntent,
+      trend_value: row.trend,
+      demand_score: null,
+      competition_ease: null,
+      buyer_intent_score: null,
     }
   })
 }
 
 function mergeKeyword(existing: UserKeywordItem | undefined, incoming: UserKeywordItem): UserKeywordItem {
   if (!existing) return incoming
-  const opportunity = bestNumber(existing.opportunity_score, incoming.opportunity_score)
-  const gap = bestNumber(existing.gap_score, incoming.gap_score)
   return {
-    ...existing,
     ...incoming,
     added_at: existing.added_at,
     source: uniqueText([existing.source, incoming.source], ', '),
     user_scan_name: uniqueText([existing.user_scan_name, incoming.user_scan_name], ', '),
-    opportunity_score: opportunity,
-    gap_score: gap,
-    scanned: existing.scanned || incoming.scanned,
-    last_scanned_at: latestDate(existing.last_scanned_at, incoming.last_scanned_at),
-    search_volume: bestNumber(existing.search_volume, incoming.search_volume),
-    competition_value: bestNumber(existing.competition_value, incoming.competition_value),
-    cpc: bestNumber(existing.cpc, incoming.cpc),
-    demand_score: bestNumber(existing.demand_score, incoming.demand_score),
-    competition_ease: bestNumber(existing.competition_ease, incoming.competition_ease),
-    buyer_intent_score: bestNumber(existing.buyer_intent_score, incoming.buyer_intent_score),
-    priority: Math.max(existing.priority || 0, incoming.priority || 0),
-    breakout: existing.breakout || incoming.breakout,
+    opportunity_score: null,
+    gap_score: null,
+    score_version: null,
+    breakout: false,
   }
-}
-
-function competitionEase(rows: ParsedRow[]): Array<number | null> {
-  const countValues = rows.map((row) => row.competitionKind === 'count' ? row.competition : null)
-  const countScores = normalizedLogScores(countValues)
-  return rows.map((row, index) => {
-    if (row.competition == null) return null
-    if (row.competitionKind === 'count') {
-      const score = countScores[index]
-      return score == null ? null : Math.round(100 - score)
-    }
-    if (row.competitionKind === 'density' || row.competition <= 1) {
-      return clampScore(Math.round(100 - row.competition * 100))
-    }
-    if (row.competition <= 100) return clampScore(Math.round(100 - row.competition))
-    const score = countScores[index]
-    return score == null ? null : Math.round(100 - score)
-  })
-}
-
-function normalizedLogScores(values: Array<number | null>): Array<number | null> {
-  const logs = values.map((value) => Number.isFinite(value) && Number(value) > 0 ? Math.log10(Number(value) + 1) : null)
-  const usable = logs.filter((value): value is number => Number.isFinite(value))
-  if (usable.length === 0) return values.map(() => null)
-  const min = Math.min(...usable)
-  const max = Math.max(...usable)
-  return logs.map((value) => {
-    if (value == null) return null
-    if (max === min) return 65
-    return clampScore(Math.round(35 + ((value - min) / (max - min)) * 65))
-  })
-}
-
-function weightedScore(parts: Array<[number | null, number]>): number | null {
-  let weighted = 0
-  let weight = 0
-  for (const [score, factor] of parts) {
-    if (!Number.isFinite(score)) continue
-    weighted += Number(score) * factor
-    weight += factor
-  }
-  return weight ? Math.round(weighted / weight) : null
 }
 
 function readUserKeywords(): UserKeywordItem[] {
   return readJson<UserKeywordItem[]>(USER_KEYWORDS_KEY, [])
     .filter(isUserKeyword)
-    .sort((a, b) => userKeywordStrength(b) - userKeywordStrength(a))
+    .map((keyword) => ({
+      ...keyword,
+      opportunity_score: null,
+      gap_score: null,
+      demand_score: null,
+      competition_ease: null,
+      buyer_intent_score: null,
+      trajectory: null,
+      breakout: false,
+      score_version: null,
+      evidence_status: keyword.scanned ? 'imported' : 'unverified',
+    }))
+    .sort((a, b) => a.keyword.localeCompare(b.keyword))
 }
 
 function readJson<T>(key: string, fallback: T): T {
   if (!hasStorage()) return fallback
   try {
-    const raw = window.localStorage.getItem(key)
+    const raw = accountStorage.getItem(key)
     if (!raw) return fallback
     return JSON.parse(raw) as T
   } catch {
@@ -401,7 +335,7 @@ function readJson<T>(key: string, fallback: T): T {
 
 function writeJson(key: string, value: unknown): void {
   if (!hasStorage()) return
-  window.localStorage.setItem(key, JSON.stringify(value))
+  accountStorage.setItem(key, JSON.stringify(value))
 }
 
 function hasStorage(): boolean {
@@ -422,24 +356,6 @@ function isUserScanBatch(value: unknown): value is UserScanBatch {
   if (!value || typeof value !== 'object') return false
   const batch = value as Partial<UserScanBatch>
   return typeof batch.id === 'string' && typeof batch.name === 'string' && typeof batch.source === 'string'
-}
-
-function userKeywordStrength(keyword: Pick<UserKeywordItem, 'opportunity_score' | 'gap_score' | 'demand_score' | 'competition_ease'>): number {
-  return weightedScore([
-    [keyword.opportunity_score ?? null, 0.45],
-    [keyword.gap_score ?? null, 0.35],
-    [keyword.demand_score ?? null, 0.12],
-    [keyword.competition_ease ?? null, 0.08],
-  ]) ?? -1
-}
-
-function userPriority(opportunity: number | null, gap: number | null): number {
-  const score = weightedScore([[opportunity, 0.6], [gap, 0.4]])
-  if (score == null) return 1
-  if (score >= 80) return 10
-  if (score >= 70) return 8
-  if (score >= 60) return 6
-  return 4
 }
 
 function findCompetitionHeaderKind(cells: string[], headerMap: Map<string, number>): UserKeywordItem['competition_kind'] {
@@ -479,13 +395,6 @@ function inferDomain(keyword: string): string {
   return 'user scan'
 }
 
-function trajectoryFromTrend(value: number | null): string | null {
-  if (!Number.isFinite(value)) return null
-  if (Number(value) > 5) return 'rising'
-  if (Number(value) < -5) return 'declining'
-  return 'stable'
-}
-
 function labelForSource(source: UserScanSource): string {
   if (source === 'erank') return 'eRank scan'
   if (source === 'semrush') return 'Semrush scan'
@@ -498,29 +407,10 @@ function roundAverage(values: number[]): number {
   return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1))
 }
 
-function bestNumber(a?: number | null, b?: number | null): number | null {
-  const aOk = Number.isFinite(a)
-  const bOk = Number.isFinite(b)
-  if (aOk && bOk) return Math.max(Number(a), Number(b))
-  if (aOk) return Number(a)
-  if (bOk) return Number(b)
-  return null
-}
-
-function latestDate(a?: string | null, b?: string | null): string | null {
-  if (!a) return b || null
-  if (!b) return a
-  return Date.parse(a) >= Date.parse(b) ? a : b
-}
-
 function uniqueText(values: string[], joiner: string): string {
   return Array.from(new Set(values.flatMap((value) => value.split(joiner)).map((value) => value.trim()).filter(Boolean))).join(joiner)
 }
 
 function uniqueId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function clampScore(value: number): number {
-  return Math.max(0, Math.min(100, value))
 }

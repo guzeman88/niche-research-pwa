@@ -56,9 +56,9 @@ class RedditEtsyAdapter(BaseResearchAdapter):
                 demand = min(100.0, avg_score / 10)  # rough scale
                 results.append(NicheSignal(
                     keyword=kw,
-                    monthly_searches=int(avg_score),
-                    competition_score=min(100.0, avg_comments * 2),
-                    avg_price_usd=0.0,
+                    monthly_searches=None,
+                    competition_score=None,
+                    avg_price_usd=None,
                     trend_direction=_trend_from_posts(posts),
                     source="reddit_etsy",
                 ))

@@ -51,38 +51,38 @@ class GapReport:
     analyzed_at: str
 
     # ── Individual gap scores (0-100; higher = more opportunity) ─────────────
-    volume_gap_score: float = 0.0      # supply/demand imbalance
-    quality_gap_score: float = 0.0     # weak incumbent quality
-    tag_gap_score: float = 0.0         # uncovered buyer search terms
-    style_gap_score: float = 0.0       # style monopoly = opening for alternatives
-    price_gap_score: float = 0.0       # underserved price range
-    recency_gap_score: float = 0.0     # aging competition
-    buyer_intent_score: float = 0.0    # buyer-ready search phrase
-    profit_gap_score: float = 0.0      # margin + revenue density opening
+    volume_gap_score: float | None = None
+    quality_gap_score: float | None = None
+    tag_gap_score: float | None = None
+    style_gap_score: float | None = None
+    price_gap_score: float | None = None
+    recency_gap_score: float | None = None
+    buyer_intent_score: float | None = None
+    profit_gap_score: float | None = None
 
     # ── Composite ─────────────────────────────────────────────────────────────
-    composite_gap_score: float = 0.0
+    composite_gap_score: float | None = None
 
     # ── Entry point ───────────────────────────────────────────────────────────
     entry_angle: str = ""
-    recommended_price_min: float = 0.0
-    recommended_price_max: float = 0.0
+    recommended_price_min: float | None = None
+    recommended_price_max: float | None = None
 
     # ── Evidence ──────────────────────────────────────────────────────────────
     untagged_searches: list[str] = field(default_factory=list)
     dominant_competitor_tags: list[str] = field(default_factory=list)
     recommended_tags: list[str] = field(default_factory=list)
     listings_analyzed: int = 0
-    avg_listing_age_months: float = 0.0
-    price_p25_usd: float = 0.0
-    price_median_usd: float = 0.0
-    price_p75_usd: float = 0.0
-    avg_favorites: float = 0.0
-    pct_high_favorites: float = 0.0
-    pct_star_sellers: float = 0.0
-    pct_bestsellers: float = 0.0
-    revenue_per_listing: float = 0.0
-    market_evidence_score: float = 0.0
+    avg_listing_age_months: float | None = None
+    price_p25_usd: float | None = None
+    price_median_usd: float | None = None
+    price_p75_usd: float | None = None
+    avg_favorites: float | None = None
+    pct_high_favorites: float | None = None
+    pct_star_sellers: float | None = None
+    pct_bestsellers: float | None = None
+    revenue_per_listing: float | None = None
+    market_evidence_score: float | None = None
 
     def save(self, store_slug: str) -> Path:
         out_dir = WORKSPACE / store_slug / "_gap_reports"
@@ -143,9 +143,11 @@ def run(
     valid_details = [d for d in listing_details if not d.error]
     report.listings_analyzed = len(valid_details)
 
-    # ── Step 2: Tag gap analysis ──────────────────────────────────────────────
-    tag_gap_score = 50.0
-    style_gap_score = 30.0
+    # ── Step 2: Tag observations ──────────────────────────────────────────────
+    # Do not score missing tag data. A score can only be produced by a separately
+    # versioned model after its inputs and outcomes have been validated.
+    tag_gap_score: float | None = None
+    style_gap_score: float | None = None
     untagged_searches: list[str] = []
     dominant_tags: list[str] = []
     recommended_tags: list[str] = []
@@ -160,17 +162,11 @@ def run(
                     autocomplete_terms=autocomplete_terms,
                     listing_tag_sets=tag_sets,
                 )
-                tag_gap_score = tg.tag_gap_score
-                style_gap_score = tg.style_gap_score
                 untagged_searches = tg.untagged_searches
                 recommended_tags = tg.recommended_tags
                 # Top 10 most-used competitor tags
                 dominant_tags = list(tg.tag_frequency.keys())[:10]
-                _log(
-                    f"[gap_analysis] tag_gap={tag_gap_score:.0f}  "
-                    f"style_gap={style_gap_score:.0f}  "
-                    f"untagged={len(untagged_searches)}"
-                )
+                _log(f"[gap_analysis] observed {len(untagged_searches)} uncovered search terms")
         except Exception as exc:
             _log(f"[gap_analysis] Tag gap analysis failed: {exc}")
 
@@ -182,122 +178,43 @@ def run(
 
     # ── Step 3: Recency gap (average listing age) ─────────────────────────────
     ages = [d.listing_age_months for d in valid_details if d.listing_age_months > 0]
-    avg_age = sum(ages) / len(ages) if ages else 18.0
-    report.avg_listing_age_months = round(avg_age, 1)
-
-    # Score: older average = more recency gap (stale competition)
-    # 6 months avg  → score 10  (fresh competition, little recency gap)
-    # 18 months avg → score 40  (typical)
-    # 36 months avg → score 75  (stale competition, strong recency gap)
-    # 60+ months    → score 95  (very stale)
-    if avg_age <= 6:
-        recency_gap = 10.0
-    elif avg_age <= 12:
-        recency_gap = 25.0
-    elif avg_age <= 24:
-        recency_gap = 45.0
-    elif avg_age <= 36:
-        recency_gap = 65.0
-    elif avg_age <= 48:
-        recency_gap = 80.0
-    else:
-        recency_gap = 92.0
-    report.recency_gap_score = recency_gap
+    report.avg_listing_age_months = round(sum(ages) / len(ages), 1) if ages else None
 
     # ── Step 4: Volume gap (supply/demand ratio) ──────────────────────────────
     ksd_list = niche_report_data.get("keyword_search_data", [])
-    ksd = next((k for k in ksd_list if k.get("keyword") == keyword), None) or \
-          (ksd_list[0] if ksd_list else {})
+    ksd = next((k for k in ksd_list if k.get("keyword") == keyword), None) or {}
 
-    listing_count = ksd.get("total_listing_count", 0) or 0
-    trend_score = niche_report_data.get("trend_velocity_score") or 0.0
-    demand_score = niche_report_data.get("demand_score") or 0.0
-    avg_favorites = ksd.get("avg_favorites", 0) or 0
-    report.avg_favorites = round(float(avg_favorites or 0), 1)
-    report.pct_high_favorites = round(float(ksd.get("pct_high_favorites", 0) or 0), 1)
-    report.pct_star_sellers = round(float(ksd.get("pct_star_sellers", 0) or 0), 1)
-    report.pct_bestsellers = round(float(ksd.get("pct_bestsellers", 0) or 0), 1)
+    def observed_number(name: str) -> float | None:
+        value = ksd.get(name)
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if math.isfinite(parsed) else None
 
-    # Volume gap = demand signal / log(supply)
-    # High demand (trend, favorites) + lower listing count = high volume gap
-    supply_pressure = math.log10(max(1, listing_count)) / math.log10(500_000) * 100
-    demand_signal = (trend_score * 0.5 + demand_score * 0.3 + min(30, math.log10(max(1, avg_favorites)) / math.log10(5000) * 30) * 0.2)
-    volume_gap = max(0.0, min(100.0, demand_signal - supply_pressure * 0.6 + 30))
-    report.volume_gap_score = round(volume_gap, 1)
-
-    # ── Step 5: Quality gap (weak incumbent listings) ─────────────────────────
-    competition_quality = niche_report_data.get("avg_competition_quality") or \
-                          ksd.get("competition_quality_score") or 0.0
-    # Quality gap = how low the bar is. Low quality incumbents = easy to rank above them.
-    quality_gap = max(0.0, min(100.0, 100.0 - competition_quality)) if competition_quality > 0 else 0.0
-    report.quality_gap_score = round(quality_gap, 1)
+    listing_count = observed_number("total_listing_count")
+    avg_favorites = observed_number("avg_favorites")
+    report.avg_favorites = round(avg_favorites, 1) if avg_favorites is not None else None
+    for source_name, target_name in (
+        ("pct_high_favorites", "pct_high_favorites"),
+        ("pct_star_sellers", "pct_star_sellers"),
+        ("pct_bestsellers", "pct_bestsellers"),
+    ):
+        value = observed_number(source_name)
+        setattr(report, target_name, round(value, 1) if value is not None else None)
 
     # ── Step 6: Price gap (underserved price range) ───────────────────────────
-    price_min = ksd.get("price_min", 0) or 0
-    price_p25 = ksd.get("price_p25", 0) or 0
-    price_p75 = ksd.get("price_p75", 0) or 0
-    price_max = ksd.get("price_max", 0) or 0
-    avg_price = ksd.get("avg_price_usd", 0) or 0
-    report.price_p25_usd = round(float(price_p25 or 0), 2)
-    report.price_median_usd = round(float(ksd.get("price_median", 0) or 0), 2)
-    report.price_p75_usd = round(float(price_p75 or 0), 2)
+    price_p25 = observed_number("price_p25")
+    price_median = observed_number("price_median")
+    price_p75 = observed_number("price_p75")
+    report.price_p25_usd = round(price_p25, 2) if price_p25 is not None else None
+    report.price_median_usd = round(price_median, 2) if price_median is not None else None
+    report.price_p75_usd = round(price_p75, 2) if price_p75 is not None else None
 
-    # Price gap strategy: find range with least competition
-    # If price_p25 is close to price_p75, the market is tightly clustered — easy to enter above or below
-    price_gap = _score_price_gap(price_min, price_p25, price_p75, price_max, avg_price)
-    report.price_gap_score = price_gap
-
-    buyer_intent = kdb.score_keyword_buyer_intent(keyword)
-    profit_gap = _score_profit_gap(
-        avg_price=avg_price,
-        margin_score=niche_report_data.get("margin_score", 0) or 0,
-        monthly_revenue=niche_report_data.get("estimated_market_monthly_revenue_usd", 0) or 0,
-        listing_count=listing_count,
-        demand_score=demand_score,
-    )
-    monthly_revenue = niche_report_data.get("estimated_market_monthly_revenue_usd", 0) or 0
-    report.revenue_per_listing = round(monthly_revenue / listing_count, 4) if monthly_revenue > 0 and listing_count > 0 else 0.0
-    report.buyer_intent_score = buyer_intent
-    report.profit_gap_score = profit_gap
-    report.market_evidence_score = _score_market_evidence(
-        listings_analyzed=report.listings_analyzed,
-        listing_count=listing_count,
-        avg_price=avg_price,
-        monthly_revenue=monthly_revenue,
-        competition_quality=competition_quality,
-        avg_favorites=report.avg_favorites,
-        price_p25=price_p25,
-        price_p75=price_p75,
-    )
-
-    # Set recommended price range: slightly below the sweet spot p75 to undercut incumbents
-    # Or above p75 if quality gap is high (low competition = can charge premium)
-    if avg_price > 0:
-        if quality_gap >= 50:
-            # Weak incumbents — can charge premium
-            report.recommended_price_min = round(price_p75 * 0.9, 2)
-            report.recommended_price_max = round(min(price_max, price_p75 * 1.4), 2)
-        else:
-            # Strong incumbents — undercut to gain initial traction
-            report.recommended_price_min = round(price_p25 * 0.85, 2)
-            report.recommended_price_max = round(price_p75 * 0.95, 2)
-
-    # ── Composite gap score ───────────────────────────────────────────────────
-    # Weighted average of market, search, buyer-intent, and profit signals.
-    composite = (
-        volume_gap   * 0.18 +
-        quality_gap  * 0.14 +
-        tag_gap_score * 0.19 +
-        style_gap_score * 0.10 +
-        price_gap    * 0.09 +
-        recency_gap  * 0.07 +
-        buyer_intent * 0.12 +
-        profit_gap   * 0.11
-    )
-    report.composite_gap_score = round(min(100.0, max(0.0, composite)), 1)
-
-    # ── Entry angle ───────────────────────────────────────────────────────────
-    report.entry_angle = _build_entry_angle(report, keyword, avg_price)
+    # These remain TBD until a documented, versioned model is calibrated against
+    # observed sales and product costs. Raw listing observations are still saved.
+    report.composite_gap_score = None
+    report.entry_angle = ""
 
     # ── Persist to database ───────────────────────────────────────────────────
     try:
@@ -340,12 +257,8 @@ def run(
         _log(f"[gap_analysis] File save failed: {exc}")
 
     _log(
-        f"[gap_analysis] '{keyword}' done in {time.time()-t0:.1f}s  "
-        f"composite={report.composite_gap_score:.0f}  "
-        f"vol={report.volume_gap_score:.0f} qual={report.quality_gap_score:.0f} "
-        f"tag={report.tag_gap_score:.0f} style={report.style_gap_score:.0f} "
-        f"price={report.price_gap_score:.0f} recency={report.recency_gap_score:.0f} "
-        f"intent={report.buyer_intent_score:.0f} profit={report.profit_gap_score:.0f}"
+        f"[gap_analysis] '{keyword}' done in {time.time()-t0:.1f}s; "
+        f"listings={report.listings_analyzed}; score=TBD pending validated model"
     )
     return report
 

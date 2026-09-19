@@ -3,6 +3,7 @@ import Icon from './Icon'
 import type { IconName } from './Icon'
 import { useAppMode, type AppMode } from '../lib/appMode'
 import BrandLogo from './BrandLogo'
+import {useAuth} from '../lib/auth'
 
 const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconName }[] = [
   { to: '/', label: 'Dashboard', icon: 'home' },
@@ -13,14 +14,15 @@ const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconNam
 
 export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const { mode, setMode } = useAppMode()
+  const auth = useAuth()
   const fastDataReady = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0'
   const statusOk = fastDataReady || import.meta.env.DEV
 
   if (mobile) {
     return (
       <div className="p-1.5">
-        <div className="flex items-center gap-2"><div className="flex-1"><ModeSwitch mode={mode} onModeChange={setMode} compact /></div>
-          <Link to="/workspace" className="text-xs text-surface-100 px-2 py-2">Backups</Link></div>
+        <div className="flex items-center gap-2"><div className="flex-1">{auth.profile?.role === 'admin' && <ModeSwitch mode={mode} onModeChange={setMode} compact />}</div>
+          <Link to="/workspace" className="text-xs text-surface-100 px-2 py-2">Backups</Link><Link to="/account" className="text-xs text-surface-100 px-2 py-2">Account</Link></div>
         <div className="mt-1 grid grid-cols-4 gap-1">
           {NAV_ITEMS.map(({ to, label, shortLabel, icon }) => (
             <NavLink
@@ -66,7 +68,7 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
       </div>
 
       <div className="mb-5">
-        <ModeSwitch mode={mode} onModeChange={setMode} />
+        {auth.profile?.role === 'admin' && <ModeSwitch mode={mode} onModeChange={setMode} />}
       </div>
 
       <nav className="flex-1 space-y-1">
@@ -90,6 +92,7 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
       </nav>
 
       <Link to="/workspace" className="text-sm text-surface-100 px-3 py-3">Workspace & backups</Link>
+      <Link to="/account" className="text-sm text-surface-100 px-3 py-3">Account & profile</Link>
       <div className="pt-4 border-t border-surface-600/60">
         <div className="flex items-center gap-2 rounded-lg border border-surface-600/55 bg-surface-800/55 px-3 py-2 text-[11px]">
           <span className={`w-2 h-2 rounded-full ${statusOk ? 'bg-emerald-400 shadow-[0_0_6px_#a3be8c]' : 'bg-red-400'}`} />

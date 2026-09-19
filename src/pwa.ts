@@ -21,7 +21,7 @@ export function registerPwaUpdates() {
   }
 
   navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data?.type === 'APP_CACHE_RESET') {
+    if (event.data?.type === 'APP_CACHE_RESET' && !window.location.pathname.startsWith('/auth/') && window.location.pathname !== '/signin') {
       window.location.replace('/?v=17&reset=1')
     }
   })

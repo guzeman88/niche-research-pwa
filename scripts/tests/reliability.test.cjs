@@ -9,7 +9,10 @@ function loadModule(file) {
   const source = fs.readFileSync(path.join(__dirname, '../../src/lib', file), 'utf8');
   const compiled = ts.transpileModule(source, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   const result = {exports:{}};
-  new Function('exports','module',compiled)(result.exports,result);
+  new Function('exports','module','require',compiled)(result.exports,result, name => {
+    if (name === './accountWorkspace') return {accountStorage:storage()};
+    throw new Error(`Unexpected dependency: ${name}`);
+  });
   return result.exports;
 }
 const backups = loadModule('workspaceBackup.ts');

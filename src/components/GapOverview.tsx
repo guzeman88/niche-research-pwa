@@ -41,10 +41,10 @@ export default function GapOverview() {
         {averages.map(g => (
           <div key={g.key} className="text-center">
             <Icon name={g.icon} size={16} className="mx-auto mb-1.5" />
-            <div className="text-lg font-extrabold tracking-tight" style={{ color: g.avg == null ? undefined : g.color }}>{g.avg ?? '-'}</div>
+            <div className="text-lg font-extrabold tracking-tight" style={{ color: g.avg == null ? undefined : g.color }}>{g.avg ?? 'TBD'}</div>
             <div className="text-[9px] text-surface-300 uppercase font-semibold tracking-wide">{g.label}</div>
             <div className="progress-track mt-2 h-1">
-              <div className="h-full rounded-full transition-all" style={{ width: `${g.avg ?? 0}%`, backgroundColor: g.color }} />
+              {g.avg != null && <div className="h-full rounded-full transition-all" style={{ width: `${g.avg}%`, backgroundColor: g.color }} />}
             </div>
           </div>
         ))}

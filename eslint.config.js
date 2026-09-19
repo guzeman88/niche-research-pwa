@@ -19,6 +19,7 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {files: ['netlify/**/*.mjs'], languageOptions: {globals: globals.node}},
   {
     files: ['src/**/*.{ts,tsx}'],
     languageOptions: {

@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import WorkspaceSaveStatus from './account/WorkspaceSaveStatus'
 
 export default function Layout() {
   return (
@@ -10,6 +11,7 @@ export default function Layout() {
       </aside>
       {/* Main content */}
       <main className="flex-1 overflow-y-auto pb-32 lg:pb-0">
+        <WorkspaceSaveStatus />
         <Outlet />
       </main>
       {/* Mobile bottom nav */}

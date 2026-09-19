@@ -5,10 +5,10 @@ from dataclasses import dataclass
 @dataclass
 class NicheSignal:
     keyword: str
-    monthly_searches: int    # 0 if unavailable
-    competition_score: float # 0-100 (higher = more competitive)
-    avg_price_usd: float     # 0.0 if unavailable
-    trend_direction: str     # "rising" | "stable" | "declining"
+    monthly_searches: int | None
+    competition_score: float | None
+    avg_price_usd: float | None
+    trend_direction: str | None
     source: str              # adapter name
 
 

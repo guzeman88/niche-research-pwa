@@ -68,18 +68,18 @@ class PinterestTrendsAdapter(BaseResearchAdapter):
 
         return NicheSignal(
             keyword=keyword,
-            monthly_searches=int(avg * 1000),  # Pinterest index 0-100 → scale
-            competition_score=0.0,              # not provided by Pinterest
-            avg_price_usd=0.0,
+            monthly_searches=None,
+            competition_score=None,
+            avg_price_usd=None,
             trend_direction=trend,
             source="pinterest_trends",
         )
 
 
 def _zero_signal(keyword: str) -> NicheSignal:
-    return NicheSignal(keyword=keyword, monthly_searches=0,
-                       competition_score=0.0, avg_price_usd=0.0,
-                       trend_direction="stable", source="pinterest_trends")
+    return NicheSignal(keyword=keyword, monthly_searches=None,
+                       competition_score=None, avg_price_usd=None,
+                       trend_direction=None, source="pinterest_trends")
 
 
 def _slugify(text: str) -> str:
