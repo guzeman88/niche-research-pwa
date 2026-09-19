@@ -374,7 +374,7 @@ function RankedKeywordList({
                 <div className="break-words text-[12px] font-extrabold text-surface-100">{keyword.keyword}</div>
                 <div className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-surface-400">
                   <span className="break-words">{keyword.product}</span>
-                  {keyword.estimatedRevenue ? <span>{fmtPrice(keyword.estimatedRevenue)}/mo</span> : null}
+                  {keyword.estimatedRevenue != null ? <span>{fmtPrice(keyword.estimatedRevenue)}/mo</span> : null}
                 </div>
               </div>
               <MetricValue label="strength" value={keyword.strength} />

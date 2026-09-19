@@ -1023,7 +1023,9 @@ function bestNumber(a?: number | null, b?: number | null): number | undefined {
 }
 
 function numberOrNull(value: unknown): number | null {
-  return Number.isFinite(value) ? Number(value) : null
+  if (value === null || value === undefined || value === '') return null
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
 }
 
 function recordOrNull(value: unknown): Record<string, unknown> | null {

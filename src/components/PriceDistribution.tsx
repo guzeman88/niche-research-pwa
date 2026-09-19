@@ -14,7 +14,7 @@ const BARS = [
 ]
 
 export default function PriceDistribution({ data }: Props) {
-  if (!data || !data.avg_price_usd) return null
+  if (!data || data.avg_price_usd == null) return null
 
   const chartData = BARS
     .map(b => ({
@@ -31,7 +31,7 @@ export default function PriceDistribution({ data }: Props) {
       <div className="flex items-center gap-2 mb-3">
         <Icon name="dollar-sign" size={14} className="text-accent-green" />
         <span className="section-label">Price Distribution</span>
-        <span className="text-[10px] text-surface-400 ml-auto">{data.total_listing_count ? `${data.total_listing_count.toLocaleString()} listings` : 'No listing count'}</span>
+        <span className="text-[10px] text-surface-400 ml-auto">{data.total_listing_count == null ? 'Listing count TBD' : `${data.total_listing_count.toLocaleString()} listings`}</span>
       </div>
       <ResponsiveContainer width="100%" height={140}>
         <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
@@ -45,7 +45,7 @@ export default function PriceDistribution({ data }: Props) {
       </ResponsiveContainer>
       <div className="flex items-center gap-2 mt-2 text-[10px] text-surface-200">
         <span>Sweet spot:</span>
-        <span className="font-bold text-surface-50">{data.price_sweet_spot}</span>
+        <span className="font-bold text-surface-50">{data.price_sweet_spot || 'TBD'}</span>
         <span className="text-surface-400">·</span>
         <span>Mean:</span>
         <span className="font-bold text-surface-50">{fmtPrice(data.avg_price_usd)}</span>
@@ -55,6 +55,7 @@ export default function PriceDistribution({ data }: Props) {
 }
 
 function positiveNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
   const numeric = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null
 }

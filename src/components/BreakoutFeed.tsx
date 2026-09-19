@@ -21,7 +21,7 @@ export default function BreakoutFeed() {
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-auto" />
         </div>
         <p className="text-[12px] text-surface-300 text-center py-6">
-          {isUserMode ? 'No rising terms in imported scans yet' : 'No breakouts yet - run more scans to detect velocity'}
+          {isUserMode ? 'No verified breakout evidence in imported scans yet' : 'No verified breakout evidence yet'}
         </p>
       </div>
     )

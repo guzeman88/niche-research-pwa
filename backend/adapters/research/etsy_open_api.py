@@ -7,7 +7,6 @@ real Etsy listing evidence; HTML scraping remains an optional fallback only.
 
 from __future__ import annotations
 
-import math
 import os
 from datetime import datetime
 from typing import Any
@@ -18,7 +17,6 @@ from adapters.base.research import BaseResearchAdapter, NicheSignal
 from adapters.research.etsy_search_scraper import (
     EtsyListingData,
     EtsySearchResult,
-    PriceDistribution,
 )
 from adapters.research.etsy_listing_scraper import ListingDetail
 
@@ -79,7 +77,7 @@ class EtsyOpenAPIClient:
         rows = _extract_results(payload)
         result = EtsySearchResult(
             keyword=keyword,
-            total_listing_count=_extract_count(payload, len(rows)),
+            total_listing_count=_extract_count(payload),
         )
         result.listings = [
             listing
@@ -87,9 +85,6 @@ class EtsyOpenAPIClient:
             if (listing := _listing_data_from_api(row)) is not None
         ]
         result.compute_aggregates()
-        if result.listings:
-            result.competition_quality_score = _api_competition_quality(result)
-            result.estimated_total_monthly_revenue_usd = 0.0
         return result
 
     def fetch_listing(self, listing_id: str) -> ListingDetail:
@@ -140,14 +135,13 @@ class EtsyOpenAPIAdapter(BaseResearchAdapter):
             return []
         result = self._client.search_listings(keyword, limit=50)
         prices = [item.price_usd for item in result.listings if item.price_usd > 0]
-        avg_price = sum(prices) / len(prices) if prices else 0.0
-        competition = _listing_count_competition(result.total_listing_count)
+        avg_price = sum(prices) / len(prices) if prices else None
         return [
             NicheSignal(
                 keyword=keyword,
                 monthly_searches=None,
                 competition_score=None,
-                avg_price_usd=round(avg_price, 2),
+                avg_price_usd=round(avg_price, 2) if avg_price is not None else None,
                 trend_direction=None,
                 source=self.name,
             )
@@ -177,21 +171,24 @@ def _extract_single(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def _extract_count(payload: dict[str, Any], fallback: int) -> int:
+def _extract_count(payload: dict[str, Any]) -> int | None:
     for key in ("count", "total_count", "total"):
+        raw_value = payload.get(key)
+        if raw_value is None:
+            continue
         try:
-            value = int(payload.get(key) or 0)
-            if value > 0:
+            value = int(raw_value)
+            if value >= 0:
                 return value
         except Exception:
             pass
-    return fallback
+    return None
 
 
 def _listing_data_from_api(row: dict[str, Any]) -> EtsyListingData | None:
     listing_id = str(row.get("listing_id") or "").strip()
     price = _money_to_float(row.get("price") or row.get("price_usd"))
-    if not listing_id or price <= 0:
+    if not listing_id or price is None or price <= 0:
         return None
     title = str(row.get("title") or "").strip()
     url = str(row.get("url") or f"https://www.etsy.com/listing/{listing_id}/")
@@ -199,12 +196,12 @@ def _listing_data_from_api(row: dict[str, Any]) -> EtsyListingData | None:
         listing_id=listing_id,
         title=title,
         price_usd=price,
-        review_count=0,
-        is_star_seller=False,
-        is_bestseller=False,
+        review_count=None,
+        is_star_seller=None,
+        is_bestseller=None,
         shop_name=_shop_name(row),
         url=url,
-        num_favorites=_int_value(row.get("num_favorers") or row.get("favorers") or row.get("views")),
+        num_favorites=_first_int(row, "num_favorers", "favorers"),
     )
 
 
@@ -215,7 +212,7 @@ def _listing_detail_from_api(listing_id: str, row: dict[str, Any]) -> ListingDet
         tags=_clean_tags(row.get("tags") or row.get("materials") or []),
         shop_name=_shop_name(row),
         price_usd=_money_to_float(row.get("price") or row.get("price_usd")),
-        num_favorites=_int_value(row.get("num_favorers") or row.get("favorers") or row.get("views")),
+        num_favorites=_first_int(row, "num_favorers", "favorers"),
         url=str(row.get("url") or f"https://www.etsy.com/listing/{listing_id}/"),
     )
     created = _timestamp_value(
@@ -225,29 +222,29 @@ def _listing_detail_from_api(listing_id: str, row: dict[str, Any]) -> ListingDet
     )
     if created:
         detail.listed_date = created.date()
-        detail.listing_age_months = max(0.1, round((datetime.utcnow().date() - detail.listed_date).days / 30.44, 1))
+        detail.listing_age_months = round(max(0, (datetime.utcnow().date() - detail.listed_date).days) / 30.4375, 1)
     return detail
 
 
-def _money_to_float(value: Any) -> float:
+def _money_to_float(value: Any) -> float | None:
     if value is None:
-        return 0.0
+        return None
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
         try:
             return float(value.replace("$", "").replace(",", "").strip())
         except Exception:
-            return 0.0
+            return None
     if isinstance(value, dict):
         amount = value.get("amount")
-        divisor = value.get("divisor") or 100
-        if amount is not None:
+        divisor = value.get("divisor")
+        if amount is not None and divisor is not None:
             try:
                 return round(float(amount) / float(divisor), 2)
             except Exception:
-                return 0.0
-    return 0.0
+                return None
+    return None
 
 
 def _shop_name(row: dict[str, Any]) -> str:
@@ -288,22 +285,15 @@ def _timestamp_value(value: Any) -> datetime | None:
         return None
 
 
-def _int_value(value: Any) -> int:
+def _int_value(value: Any) -> int | None:
     try:
         return int(str(value).replace(",", ""))
     except Exception:
-        return 0
+        return None
 
 
-def _listing_count_competition(listing_count: int) -> float:
-    if listing_count <= 0:
-        return 0.0
-    return round(min(100.0, math.log10(max(1, listing_count)) / math.log10(500_000) * 100), 1)
-
-
-def _api_competition_quality(result: EtsySearchResult) -> float:
-    if not result.listings:
-        return 0.0
-    listing_pressure = _listing_count_competition(result.total_listing_count) * 0.6
-    favorite_pressure = min(40.0, math.log10(max(1.0, result.avg_favorites)) / math.log10(5000) * 40)
-    return round(min(100.0, listing_pressure + favorite_pressure), 1)
+def _first_int(row: dict[str, Any], *keys: str) -> int | None:
+    for key in keys:
+        if key in row and row[key] is not None:
+            return _int_value(row[key])
+    return None

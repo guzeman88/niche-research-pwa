@@ -43,10 +43,8 @@ class ERankAdapter(BaseResearchAdapter):
                 if resp.status_code == 200:
                     data = resp.json()
                     results.append(self._parse(kw, data))
-                else:
-                    results.append(_zero_signal(kw))
             except Exception:
-                results.append(_zero_signal(kw))
+                continue
         return results
 
     @staticmethod
@@ -58,14 +56,8 @@ class ERankAdapter(BaseResearchAdapter):
         return NicheSignal(
             keyword=keyword,
             monthly_searches=int(searches) if searches is not None else None,
-            competition_score=min(100.0, float(comp)) if comp is not None else None,
+            competition_score=float(comp) if comp is not None else None,
             avg_price_usd=float(avg_price) if avg_price is not None else None,
             trend_direction=trend if trend in ("rising", "stable", "declining") else None,
             source="erank",
         )
-
-
-def _zero_signal(keyword: str) -> NicheSignal:
-    return NicheSignal(keyword=keyword, monthly_searches=None,
-                       competition_score=None, avg_price_usd=None,
-                       trend_direction=None, source="erank")

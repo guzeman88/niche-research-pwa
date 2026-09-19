@@ -3,7 +3,7 @@ Etsy Listing Page Scraper — no API key required.
 
 Fetches individual listing pages to extract data unavailable from search results:
   - All 13 seller-defined tags (exact keywords they optimized for)
-  - Listing creation date (for real age-adjusted revenue, not the 18-month assumption)
+  - Listing creation date and age when Etsy exposes it
   - Exact favorite count
   - Shop name + total shop sales + active listing count
 
@@ -47,11 +47,11 @@ class ListingDetail:
     title: str = ""
     tags: list[str] = field(default_factory=list)           # up to 13 seller tags
     listed_date: Optional[date] = None                      # exact listing creation date
-    listing_age_months: float = 18.0                        # computed from listed_date
+    listing_age_months: float | None = None                 # computed from listed_date
     shop_name: str = ""
-    price_usd: float = 0.0
-    num_favorites: int = 0
-    num_reviews: int = 0
+    price_usd: float | None = None
+    num_favorites: int | None = None
+    num_reviews: int | None = None
     url: str = ""
     error: str = ""
 
@@ -59,11 +59,11 @@ class ListingDetail:
 @dataclass
 class ShopDetail:
     shop_name: str
-    total_sales: int = 0
-    active_listing_count: int = 0
-    shop_age_months: float = 0.0
-    sales_velocity: float = 0.0      # sales per month
-    revenue_per_listing: float = 0.0
+    total_sales: int | None = None
+    active_listing_count: int | None = None
+    shop_age_months: float | None = None
+    sales_velocity: float | None = None
+    revenue_per_listing: None = None
     error: str = ""
 
 
@@ -215,24 +215,26 @@ def _parse_listing_json_ld(detail: ListingDetail, html: str) -> bool:
             found_anything = True
 
         # Price
-        if detail.price_usd == 0.0:
+        if detail.price_usd is None:
             offer = data.get("offers", {})
             if isinstance(offer, list):
                 offer = offer[0] if offer else {}
-            price_str = offer.get("price", offer.get("lowPrice", "0"))
-            try:
-                detail.price_usd = float(str(price_str).replace(",", ""))
-            except Exception:
-                pass
+            price_value = offer.get("price", offer.get("lowPrice"))
+            if price_value is not None:
+                try:
+                    parsed_price = float(str(price_value).replace(",", ""))
+                    detail.price_usd = parsed_price if parsed_price > 0 else None
+                except Exception:
+                    pass
 
         # Reviews
-        if detail.num_reviews == 0:
-            try:
-                detail.num_reviews = int(
-                    data.get("aggregateRating", {}).get("reviewCount", 0)
-                )
-            except Exception:
-                pass
+        if detail.num_reviews is None:
+            review_value = data.get("aggregateRating", {}).get("reviewCount")
+            if review_value is not None:
+                try:
+                    detail.num_reviews = int(review_value)
+                except Exception:
+                    pass
 
         if found_anything:
             break
@@ -272,7 +274,7 @@ def _parse_listing_preloaded_state(detail: ListingDetail, html: str) -> None:
                     detail.tags = tags
 
             # favorites
-            if detail.num_favorites == 0:
+            if detail.num_favorites is None:
                 for fav_field in ["num_favorers", "favorited_by_count", "listing_favorites_count"]:
                     fav_m = re.search(rf'"{fav_field}"\s*:\s*(\d+)', blob)
                     if fav_m:
@@ -286,7 +288,7 @@ def _parse_listing_preloaded_state(detail: ListingDetail, html: str) -> None:
                     detail.shop_name = sn.group(1)
 
             # price
-            if detail.price_usd == 0.0:
+            if detail.price_usd is None:
                 for price_field in ["price", "converted_price", "min_price"]:
                     pm = re.search(rf'"{price_field}"\s*:\s*"?([\d.]+)"?', blob)
                     if pm:
@@ -369,7 +371,6 @@ def _populate_shop_detail(detail: ShopDetail, html: str) -> None:
     # Total sales — shown prominently on shop pages
     sales_patterns = [
         r'"transaction_sold_count"\s*:\s*(\d+)',
-        r'"num_favorers"\s*:\s*(\d+)',  # not sales but a signal
         r'([\d,]+)\s+[Ss]ales?',
         r'"sales_count"\s*:\s*(\d+)',
         r'"shop_sales_count"\s*:\s*(\d+)',
@@ -416,10 +417,8 @@ def _populate_shop_detail(detail: ShopDetail, html: str) -> None:
                 pass
 
     # Derived metrics
-    if detail.shop_age_months > 0:
+    if detail.shop_age_months is not None and detail.shop_age_months > 0 and detail.total_sales is not None:
         detail.sales_velocity = round(detail.total_sales / detail.shop_age_months, 1)
-    if detail.active_listing_count > 0:
-        detail.revenue_per_listing = round(detail.total_sales / detail.active_listing_count, 1)
 
 
 # ── Utility helpers ───────────────────────────────────────────────────────────

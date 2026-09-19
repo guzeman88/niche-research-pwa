@@ -1,6 +1,6 @@
 """
 Google Trends research adapter via pytrends.
-Returns trend_direction for keywords over the last 90 days.
+Returns the observed average relative-interest index for the requested period.
 """
 
 import random
@@ -45,25 +45,21 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
                     pt.build_payload(chunk, cat=0, timeframe=self._timeframe, geo=self._geo)
                     df = pt.interest_over_time()
                     if df.empty:
-                        for kw in chunk:
-                            results.append(_zero_signal(kw))
                         break
                     for kw in chunk:
                         if kw not in df.columns:
-                            results.append(_zero_signal(kw))
                             continue
                         series = df[kw]
                         avg = float(series.mean())
-                        recent = float(series.iloc[-4:].mean())  # last ~month
-                        older = float(series.iloc[:4].mean())    # first ~month
-                        trend = _trend_direction(recent, older)
                         results.append(NicheSignal(
                             keyword=kw,
                             monthly_searches=None,
                             competition_score=None,
                             avg_price_usd=None,
-                            trend_direction=trend,
+                            trend_direction=None,
                             source="google_trends",
+                            relative_interest=avg,
+                            relative_interest_period=self._timeframe,
                         ))
                     # polite delay between chunks
                     time.sleep(2.0 + random.uniform(0, 1.5))
@@ -73,36 +69,9 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
                     if "429" in err_str or "rate" in err_str or "too many" in err_str:
                         backoff = 15.0 * (2 ** attempt) + random.uniform(0, 5)
                         time.sleep(backoff)
-                        if attempt == _MAX_RETRIES - 1:
-                            for kw in chunk:
-                                results.append(_zero_signal(kw))
                     else:
-                        for kw in chunk:
-                            results.append(_zero_signal(kw))
                         break
         return results
-
-
-def _trend_direction(recent: float, older: float) -> str | None:
-    if older == 0:
-        return None
-    change = (recent - older) / older
-    if change > 0.15:
-        return "rising"
-    if change < -0.15:
-        return "declining"
-    return "stable"
-
-
-def _zero_signal(keyword: str) -> NicheSignal:
-    return NicheSignal(
-        keyword=keyword,
-        monthly_searches=None,
-        competition_score=None,
-        avg_price_usd=None,
-        trend_direction=None,
-        source="google_trends",
-    )
 
 
 def _chunks(lst: list, n: int):

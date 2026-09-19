@@ -24,14 +24,14 @@ export interface GapReport {
 
 export interface GapReportListItem {
   keyword: string;
-  composite_gap_score: number;
-  volume_gap_score: number;
-  quality_gap_score: number;
-  tag_gap_score: number;
-  style_gap_score: number;
-  price_gap_score: number;
-  recency_gap_score: number;
-  buyer_intent_score?: number;
-  profit_gap_score?: number;
+  composite_gap_score: number | null;
+  volume_gap_score: number | null;
+  quality_gap_score: number | null;
+  tag_gap_score: number | null;
+  style_gap_score: number | null;
+  price_gap_score: number | null;
+  recency_gap_score: number | null;
+  buyer_intent_score?: number | null;
+  profit_gap_score?: number | null;
   entry_angle: string;
 }

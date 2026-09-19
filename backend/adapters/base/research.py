@@ -10,6 +10,8 @@ class NicheSignal:
     avg_price_usd: float | None
     trend_direction: str | None
     source: str              # adapter name
+    relative_interest: float | None = None
+    relative_interest_period: str | None = None
 
 
 class BaseResearchAdapter(ABC):

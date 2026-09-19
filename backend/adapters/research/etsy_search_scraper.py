@@ -2,25 +2,17 @@
 Etsy Search Scraper — no API key required.
 Scrapes Etsy search results pages to extract real listing data:
   - Prices (full distribution, not just average)
-  - Review counts (proxy for sales volume)
-  - Star Seller / Bestseller badges (competition quality)
+  - Review counts when Etsy exposes them
+  - Star Seller / Bestseller badges when Etsy exposes them
   - Shop names, listing titles, listing IDs
 
-Revenue estimation heuristic (same as Alura/EverBee):
-  estimated_sales = review_count × 20   (assumes ~5% review rate)
-  monthly_revenue = (estimated_sales / listing_age_months) × price
-
-Competition quality score (0-100, higher = harder to break into):
-  - Average review count of top 20     (0-40 pts)
-  - % Star Sellers in top 20           (0-30 pts)
-  - % Bestseller badges                (0-20 pts)
-  - Price coherence (tight = mature)   (0-10 pts)
+Missing observations remain ``None``. This adapter deliberately does not infer
+sales, revenue, or a competition score from reviews or listing counts.
 """
 
 from __future__ import annotations
 
 import json
-import math
 import os
 import re
 import statistics
@@ -115,34 +107,23 @@ class EtsyListingData:
     listing_id: str
     title: str
     price_usd: float
-    review_count: int
-    is_star_seller: bool
-    is_bestseller: bool
+    review_count: int | None
+    is_star_seller: bool | None
+    is_bestseller: bool | None
     shop_name: str
     url: str
-    num_favorites: int = 0       # people who favorited — direct buyer-intent signal
-    # Computed
-    estimated_lifetime_sales: int = 0
-    estimated_monthly_revenue_usd: float = 0.0
-
-    def __post_init__(self):
-        # 5% review rate → multiply reviews by 20 for estimated sales
-        self.estimated_lifetime_sales = self.review_count * 20
-        # Assume average listing is ~18 months old
-        self.estimated_monthly_revenue_usd = round(
-            (self.review_count * 20 / 18) * self.price_usd, 2
-        )
+    num_favorites: int | None = None
 
 
 @dataclass
 class PriceDistribution:
-    min: float = 0.0
-    p25: float = 0.0
-    median: float = 0.0
-    p75: float = 0.0
-    max: float = 0.0
-    mean: float = 0.0
-    sweet_spot: str = ""   # e.g. "$12–$28 (middle 50%)"
+    min: float | None = None
+    p25: float | None = None
+    median: float | None = None
+    p75: float | None = None
+    max: float | None = None
+    mean: float | None = None
+    sweet_spot: str | None = None
 
     @classmethod
     def from_prices(cls, prices: list[float]) -> "PriceDistribution":
@@ -166,45 +147,39 @@ class PriceDistribution:
 @dataclass
 class EtsySearchResult:
     keyword: str
-    total_listing_count: int
+    total_listing_count: int | None
     listings: list[EtsyListingData] = field(default_factory=list)
     price_distribution: PriceDistribution = field(default_factory=PriceDistribution)
     # Aggregate metrics
-    avg_review_count: float = 0.0
-    pct_star_sellers: float = 0.0
-    pct_bestsellers: float = 0.0
-    competition_quality_score: float = 0.0   # 0-100
-    estimated_total_monthly_revenue_usd: float = 0.0
-    avg_favorites: float = 0.0          # avg favorites across sampled listings
-    max_favorites: int = 0              # single highest-favorited listing
-    pct_high_favorites: float = 0.0     # % listings with ≥100 favorites
+    avg_review_count: float | None = None
+    pct_star_sellers: float | None = None
+    pct_bestsellers: float | None = None
+    competition_quality_score: None = None
+    estimated_total_monthly_revenue_usd: None = None
+    avg_favorites: float | None = None
+    max_favorites: int | None = None
+    pct_high_favorites: float | None = None
     error: str = ""
 
     def compute_aggregates(self) -> None:
         if not self.listings:
             return
-        n = len(self.listings)
         prices = [l.price_usd for l in self.listings if l.price_usd > 0]
         if prices:
             self.price_distribution = PriceDistribution.from_prices(prices)
-        self.avg_review_count = round(
-            sum(l.review_count for l in self.listings) / n, 1
-        )
-        self.pct_star_sellers = round(
-            sum(1 for l in self.listings if l.is_star_seller) / n * 100, 1
-        )
-        self.pct_bestsellers = round(
-            sum(1 for l in self.listings if l.is_bestseller) / n * 100, 1
-        )
-        self.estimated_total_monthly_revenue_usd = round(
-            sum(l.estimated_monthly_revenue_usd for l in self.listings), 2
-        )
-        favs = [l.num_favorites for l in self.listings if l.num_favorites > 0]
+        reviews = [l.review_count for l in self.listings if l.review_count is not None]
+        if reviews:
+            self.avg_review_count = round(sum(reviews) / len(reviews), 1)
+        star_seller_values = [l.is_star_seller for l in self.listings if l.is_star_seller is not None]
+        if star_seller_values:
+            self.pct_star_sellers = round(sum(1 for value in star_seller_values if value) / len(star_seller_values) * 100, 1)
+        bestseller_values = [l.is_bestseller for l in self.listings if l.is_bestseller is not None]
+        if bestseller_values:
+            self.pct_bestsellers = round(sum(1 for value in bestseller_values if value) / len(bestseller_values) * 100, 1)
+        favs = [l.num_favorites for l in self.listings if l.num_favorites is not None]
         if favs:
             self.avg_favorites = round(sum(favs) / len(favs), 1)
             self.max_favorites = max(favs)
-            self.pct_high_favorites = round(sum(1 for f in favs if f >= 100) / n * 100, 1)
-        self.competition_quality_score = _score_competition(self)
 
 
 class EtsySearchScraper:
@@ -225,7 +200,7 @@ class EtsySearchScraper:
         page: int = 1,
     ) -> EtsySearchResult:
         """Fetch and parse Etsy search results for a keyword."""
-        result = EtsySearchResult(keyword=keyword, total_listing_count=0)
+        result = EtsySearchResult(keyword=keyword, total_listing_count=None)
         try:
             html = self._fetch(keyword, page)
             listings, total_count = _parse_listings(html, max_listings)
@@ -250,7 +225,7 @@ class EtsySearchScraper:
         60 listings gives a statistically representative price/competition picture
         vs. the top-20 which over-represents promoted/bestseller listings.
         """
-        result = EtsySearchResult(keyword=keyword, total_listing_count=0)
+        result = EtsySearchResult(keyword=keyword, total_listing_count=None)
         seen_ids: set[str] = set()
         all_listings: list[EtsyListingData] = []
         for page in range(1, max_pages + 1):
@@ -415,20 +390,17 @@ def _parse_json_ld(html: str, max_n: int) -> list[EtsyListingData]:
             name = product.get("name", "")
             if lid and price > 0:
                 # JSON-LD may include interactionStatistic with FavoriteAction
-                fav_count = 0
+                fav_count = None
                 for stat in product.get("interactionStatistic", []):
                     if "Favorite" in stat.get("interactionType", ""):
-                        try:
-                            fav_count = int(stat.get("userInteractionCount", 0))
-                        except Exception:
-                            pass
+                        fav_count = _optional_int(stat.get("userInteractionCount"))
                 results.append(EtsyListingData(
                     listing_id=lid,
                     title=name,
                     price_usd=price,
-                    review_count=int(product.get("aggregateRating", {}).get("reviewCount", 0)),
-                    is_star_seller=False,
-                    is_bestseller=False,
+                    review_count=_optional_int(product.get("aggregateRating", {}).get("reviewCount")),
+                    is_star_seller=None,
+                    is_bestseller=None,
                     shop_name=_shop_from_url(url),
                     url=url,
                     num_favorites=fav_count,
@@ -471,13 +443,17 @@ def _parse_preloaded_state(html: str, max_n: int) -> list[EtsyListingData]:
                 title = _extract_field_from_ctx(ctx, "title")
                 shop = _extract_field_from_ctx(ctx, "shop_name")
                 reviews = _extract_int_field_from_ctx(ctx, "num_ratings")
-                favorites = (
-                    _extract_int_field_from_ctx(ctx, "num_favorers")
-                    or _extract_int_field_from_ctx(ctx, "favorited_by_count")
-                    or _extract_int_field_from_ctx(ctx, "listing_favorites_count")
-                )
-                star_seller = '"star_seller":true' in ctx or '"is_star_seller":true' in ctx
-                bestseller = '"is_bestseller_listing":true' in ctx
+                favorites = next((
+                    value for value in (
+                        _extract_int_field_from_ctx(ctx, "num_favorers"),
+                        _extract_int_field_from_ctx(ctx, "favorited_by_count"),
+                        _extract_int_field_from_ctx(ctx, "listing_favorites_count"),
+                    ) if value is not None
+                ), None)
+                star_seller = _extract_bool_field_from_ctx(ctx, "star_seller")
+                if star_seller is None:
+                    star_seller = _extract_bool_field_from_ctx(ctx, "is_star_seller")
+                bestseller = _extract_bool_field_from_ctx(ctx, "is_bestseller_listing")
                 if lid and price > 0:
                     results.append(EtsyListingData(
                         listing_id=lid,
@@ -531,9 +507,9 @@ def _parse_html_regex(html: str, max_n: int) -> list[EtsyListingData]:
             listing_id=lid,
             title="",
             price_usd=price,
-            review_count=0,
-            is_star_seller=lid in star_seller_ids,
-            is_bestseller=False,
+            review_count=None,
+            is_star_seller=True if lid in star_seller_ids else None,
+            is_bestseller=None,
             shop_name="",
             url=f"https://www.etsy.com/listing/{lid}/",
         ))
@@ -543,47 +519,9 @@ def _parse_html_regex(html: str, max_n: int) -> list[EtsyListingData]:
 
 # ── Competition quality scorer ────────────────────────────────────────────────
 
-def _score_competition(result: EtsySearchResult) -> float:
-    """
-    Score 0–100: how hard it is to compete in this niche based on top listing data.
-    Higher score = more established competition = harder to break in.
-
-    Components:
-      avg_review_count (0-40 pts): <10 reviews avg → easy, >200 → very hard
-      pct_star_sellers (0-30 pts): % of Star Sellers in top 20
-      pct_bestsellers  (0-20 pts): % of Bestseller badges
-      listing_count    (0-10 pts): total search results (log scale)
-    """
-    # Review count score — log scale
-    avg_rev = result.avg_review_count
-    if avg_rev <= 5:
-        rev_pts = 5.0
-    elif avg_rev <= 20:
-        rev_pts = 10.0
-    elif avg_rev <= 50:
-        rev_pts = 18.0
-    elif avg_rev <= 150:
-        rev_pts = 28.0
-    elif avg_rev <= 500:
-        rev_pts = 36.0
-    else:
-        rev_pts = 40.0
-
-    star_pts = min(30.0, result.pct_star_sellers * 0.30)
-    best_pts = min(20.0, result.pct_bestsellers * 0.20)
-
-    # Listing count — log scale capped
-    if result.total_listing_count > 0:
-        cnt_pts = min(10.0, math.log10(result.total_listing_count) / math.log10(500_000) * 10)
-    else:
-        cnt_pts = 5.0
-
-    return round(rev_pts + star_pts + best_pts + cnt_pts, 1)
-
-
 # ── Utility helpers ───────────────────────────────────────────────────────────
 
-def _extract_total_count(html: str) -> int:
+def _extract_total_count(html: str) -> int | None:
     patterns = [
         r'"num_listings_available"\s*:\s*(\d+)',
         r'"total_count"\s*:\s*(\d+)',
@@ -597,7 +535,7 @@ def _extract_total_count(html: str) -> int:
                 return int(m.group(1).replace(",", ""))
             except Exception:
                 pass
-    return 0
+    return None
 
 
 def _listing_id_from_url(url: str) -> str:
@@ -617,19 +555,21 @@ def _extract_one_listing(data: dict) -> Optional[EtsyListingData]:
     price = _extract_price_from_ctx(json.dumps(data))
     if price <= 0:
         return None
-    favorites = int(
-        data.get("num_favorers")
-        or data.get("favorited_by_count")
-        or data.get("listing_favorites_count")
-        or 0
-    )
+    favorites = next((
+        _optional_int(data.get(key))
+        for key in ("num_favorers", "favorited_by_count", "listing_favorites_count")
+        if data.get(key) is not None
+    ), None)
+    review_value = data.get("num_ratings")
+    if review_value is None:
+        review_value = data.get("num_reviews")
     return EtsyListingData(
         listing_id=lid,
         title=data.get("title", ""),
         price_usd=price,
-        review_count=int(data.get("num_ratings", data.get("num_reviews", 0)) or 0),
-        is_star_seller=bool(data.get("is_star_seller") or data.get("star_seller")),
-        is_bestseller=bool(data.get("is_bestseller_listing") or data.get("is_bestseller")),
+        review_count=_optional_int(review_value),
+        is_star_seller=_optional_bool(data, "is_star_seller", "star_seller"),
+        is_bestseller=_optional_bool(data, "is_bestseller_listing", "is_bestseller"),
         shop_name=data.get("shop_name", ""),
         url=f"https://www.etsy.com/listing/{lid}/",
         num_favorites=favorites,
@@ -659,9 +599,25 @@ def _extract_field_from_ctx(ctx: str, field_name: str) -> str:
     return m.group(1) if m else ""
 
 
-def _extract_int_field_from_ctx(ctx: str, field_name: str) -> int:
+def _extract_int_field_from_ctx(ctx: str, field_name: str) -> int | None:
     m = re.search(rf'"{field_name}"\s*:\s*(\d+)', ctx)
+    return _optional_int(m.group(1)) if m else None
+
+
+def _extract_bool_field_from_ctx(ctx: str, field_name: str) -> bool | None:
+    m = re.search(rf'"{field_name}"\s*:\s*(true|false)', ctx, re.IGNORECASE)
+    return m.group(1).lower() == "true" if m else None
+
+
+def _optional_int(value: object) -> int | None:
     try:
-        return int(m.group(1)) if m else 0
-    except Exception:
-        return 0
+        return int(str(value).replace(",", "")) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_bool(data: dict, *keys: str) -> bool | None:
+    for key in keys:
+        if key in data and data[key] is not None:
+            return bool(data[key])
+    return None

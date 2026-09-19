@@ -41,45 +41,33 @@ class PinterestTrendsAdapter(BaseResearchAdapter):
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    results.append(self._parse(kw, data))
-                else:
-                    results.append(_zero_signal(kw))
+                    signal = self._parse(kw, data)
+                    if signal is not None:
+                        results.append(signal)
             except Exception:
-                results.append(_zero_signal(kw))
+                continue
         return results
 
     @staticmethod
-    def _parse(keyword: str, data: dict) -> NicheSignal:
+    def _parse(keyword: str, data: dict) -> NicheSignal | None:
         trend_data = data.get("trend_data", [])
         if not trend_data:
-            return _zero_signal(keyword)
+            return None
 
-        values = [point.get("value", 0) for point in trend_data]
-        avg = sum(values) / len(values) if values else 0
-        recent = sum(values[-4:]) / 4 if len(values) >= 4 else avg
-        older = sum(values[:4]) / 4 if len(values) >= 4 else avg
-
-        if older and recent > older * 1.15:
-            trend = "rising"
-        elif older and recent < older * 0.85:
-            trend = "declining"
-        else:
-            trend = "stable"
+        values = [float(point["value"]) for point in trend_data if point.get("value") is not None]
+        if not values:
+            return None
+        average_relative_interest = sum(values) / len(values)
 
         return NicheSignal(
             keyword=keyword,
             monthly_searches=None,
             competition_score=None,
             avg_price_usd=None,
-            trend_direction=trend,
+            trend_direction=None,
             source="pinterest_trends",
+            relative_interest=average_relative_interest,
         )
-
-
-def _zero_signal(keyword: str) -> NicheSignal:
-    return NicheSignal(keyword=keyword, monthly_searches=None,
-                       competition_score=None, avg_price_usd=None,
-                       trend_direction=None, source="pinterest_trends")
 
 
 def _slugify(text: str) -> str:

@@ -3,24 +3,18 @@
 # Store configs are also auto-generated when you approve a store suggestion in the GUI.
 
 store_slug: example-store
-display_name: "My Etsy Store"
+display_name: ""
 etsy_shop_id: ""          # Filled in after store is live on Etsy
-active: true
+active: false
 created_at: ""
 listing_count_target: null
 airtable_store_record_id: ""
 
 niche:
-  primary: "cottagecore home decor"
-  secondary:
-    - botanical prints
-    - farmhouse style
-    - wildflower art
-  target_audience: "women 25-45, home decor enthusiasts, nature lovers"
-  subreddits:
-    - cottagecore
-    - HomeDecorating
-    - printmaking
+  primary: ""
+  secondary: []
+  target_audience: ""
+  subreddits: []
 
 adapters:
   llm:
@@ -44,25 +38,9 @@ pricing:
   round_to_cent: null
 
 branding:
-  style_keywords:
-    - minimalist
-    - botanical
-    - hand-drawn
-    - vintage
-  color_palette:
-    - "#F5E6D3"   # warm cream
-    - "#8B7355"   # earthy brown
-    - "#5C7A4E"   # sage green
-    - "#D4B8A0"   # dusty rose
-  font_style: handwritten       # serif | sans-serif | handwritten
-  mood_keywords:
-    - cozy
-    - nostalgic
-    - earthy
-    - organic
+  style_keywords: []
+  color_palette: []
+  font_style: sans-serif        # serif | sans-serif | handwritten
+  mood_keywords: []
 
-product_types:
-  - digital_download
-  - wall_art
-  # - apparel        # Uncomment to enable POD apparel
-  # - merch          # Uncomment to enable POD merch (mugs, totes, etc.)
+product_types: []

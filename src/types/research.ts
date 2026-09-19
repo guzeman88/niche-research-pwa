@@ -7,27 +7,29 @@ export interface NicheSignal {
   avg_price_usd: number | null;
   trend_direction: 'rising' | 'stable' | 'declining' | null;
   source: string;
+  relative_interest?: number | null;
+  relative_interest_period?: string | null;
 }
 
 export interface KeywordSearchData {
   keyword: string;
-  total_listing_count: number;
-  avg_price_usd: number;
-  price_min: number;
-  price_p25: number;
-  price_median: number;
-  price_p75: number;
-  price_max: number;
-  price_sweet_spot: string;
-  avg_review_count: number;
-  pct_star_sellers: number;
-  pct_bestsellers: number;
+  total_listing_count: number | null;
+  avg_price_usd: number | null;
+  price_min: number | null;
+  price_p25: number | null;
+  price_median: number | null;
+  price_p75: number | null;
+  price_max: number | null;
+  price_sweet_spot: string | null;
+  avg_review_count: number | null;
+  pct_star_sellers: number | null;
+  pct_bestsellers: number | null;
   competition_quality_score: number | null;
   estimated_market_monthly_revenue_usd: number | null;
   top_listing_titles: string[];
-  avg_favorites: number;
-  max_favorites: number;
-  pct_high_favorites: number;
+  avg_favorites: number | null;
+  max_favorites: number | null;
+  pct_high_favorites: number | null;
 }
 
 export interface SeasonalityPoint {
@@ -38,9 +40,9 @@ export interface SeasonalityPoint {
 export interface KeywordCluster {
   cluster_name: string;
   keywords: string[];
-  opportunity_score: number;
-  avg_competition_quality: number;
-  estimated_monthly_revenue_potential_usd: number;
+  opportunity_score?: number | null;
+  avg_competition_quality?: number | null;
+  estimated_monthly_revenue_potential_usd?: number | null;
   rationale: string;
 }
 
