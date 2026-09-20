@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -12,6 +13,12 @@ class NicheSignal:
     source: str              # adapter name
     relative_interest: float | None = None
     relative_interest_period: str | None = None
+    observed_at: str | None = None
+    geography: str | None = None
+    query: str | None = None
+    position: int | None = None
+    time_series: list[dict[str, Any]] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class BaseResearchAdapter(ABC):

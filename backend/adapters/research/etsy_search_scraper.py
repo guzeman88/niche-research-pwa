@@ -113,6 +113,7 @@ class EtsyListingData:
     shop_name: str
     url: str
     num_favorites: int | None = None
+    currency_code: str | None = None
 
 
 @dataclass
@@ -164,7 +165,13 @@ class EtsySearchResult:
     def compute_aggregates(self) -> None:
         if not self.listings:
             return
-        prices = [l.price_usd for l in self.listings if l.price_usd > 0]
+        # The legacy field name is retained for compatibility. Only values
+        # explicitly denominated in USD (or HTML results already localized to
+        # the US surface) may contribute to USD aggregates.
+        prices = [
+            l.price_usd for l in self.listings
+            if l.price_usd > 0 and l.currency_code in {None, "USD"}
+        ]
         if prices:
             self.price_distribution = PriceDistribution.from_prices(prices)
         reviews = [l.review_count for l in self.listings if l.review_count is not None]

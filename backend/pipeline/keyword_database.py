@@ -26,7 +26,8 @@ import json
 import math
 import shutil
 import sqlite3
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -36,7 +37,7 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 15
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -316,6 +317,12 @@ def init_db() -> None:
         if version < 13:
             _migrate_v13(con)
             _set_version(con, 13)
+        if version < 14:
+            _migrate_v14(con)
+            _set_version(con, 14)
+        if version < 15:
+            _migrate_v15(con)
+            _set_version(con, 15)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
 
@@ -535,6 +542,110 @@ def _migrate_v13(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE seeds DROP COLUMN priority")
 
 
+def _migrate_v14(con: sqlite3.Connection) -> None:
+    """Preserve source-level evidence instead of only report aggregates."""
+    for col, typedef in [
+        ("geography", "TEXT"),
+        ("period_start", "TEXT"),
+        ("period_end", "TEXT"),
+        ("provider_record_id", "TEXT"),
+        ("collection_run_id", "TEXT"),
+    ]:
+        try:
+            con.execute(f"ALTER TABLE keyword_observations ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass
+
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS evidence_collection_runs (
+            id                  TEXT PRIMARY KEY,
+            source              TEXT NOT NULL,
+            started_at          TEXT NOT NULL,
+            completed_at        TEXT,
+            status              TEXT NOT NULL,
+            request_json        TEXT,
+            observation_count   INTEGER NOT NULL DEFAULT 0,
+            error               TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS keyword_suggestions (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_keyword      TEXT NOT NULL,
+            suggestion          TEXT NOT NULL,
+            source              TEXT NOT NULL,
+            query               TEXT NOT NULL,
+            position            INTEGER NOT NULL,
+            observed_at         TEXT NOT NULL,
+            geography           TEXT,
+            collection_run_id   TEXT,
+            metadata_json       TEXT,
+            UNIQUE(parent_keyword, suggestion, source, query, observed_at),
+            FOREIGN KEY (parent_keyword) REFERENCES seeds(keyword) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS keyword_trend_points (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword             TEXT NOT NULL,
+            source              TEXT NOT NULL,
+            point_at            TEXT NOT NULL,
+            value               REAL NOT NULL,
+            unit                TEXT NOT NULL,
+            geography           TEXT,
+            timeframe           TEXT,
+            is_partial          INTEGER,
+            collected_at        TEXT NOT NULL,
+            collection_run_id   TEXT,
+            metadata_json       TEXT,
+            UNIQUE(keyword, source, point_at, geography, timeframe, collected_at),
+            FOREIGN KEY (keyword) REFERENCES seeds(keyword) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS keyword_listing_snapshots (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword             TEXT NOT NULL,
+            source              TEXT NOT NULL,
+            observed_at         TEXT NOT NULL,
+            listing_id          TEXT NOT NULL,
+            title               TEXT,
+            shop_name           TEXT,
+            url                 TEXT,
+            price               REAL,
+            currency_code       TEXT,
+            favorites           INTEGER,
+            review_count        INTEGER,
+            is_star_seller      INTEGER,
+            is_bestseller       INTEGER,
+            position            INTEGER,
+            collection_run_id   TEXT,
+            metadata_json       TEXT,
+            UNIQUE(keyword, source, observed_at, listing_id),
+            FOREIGN KEY (keyword) REFERENCES seeds(keyword) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_collection_runs_started
+            ON evidence_collection_runs(started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_keyword_suggestions_parent
+            ON keyword_suggestions(parent_keyword, observed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_keyword_trends_lookup
+            ON keyword_trend_points(keyword, point_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_keyword_listing_snapshots_lookup
+            ON keyword_listing_snapshots(keyword, observed_at DESC);
+    """)
+
+
+def _migrate_v15(con: sqlite3.Connection) -> None:
+    """Track whether a collection run has reached durable cloud storage."""
+    for col, typedef in [
+        ("durable_sync_status", "TEXT NOT NULL DEFAULT 'pending'"),
+        ("durable_synced_at", "TEXT"),
+        ("durable_sync_error", "TEXT"),
+    ]:
+        try:
+            con.execute(f"ALTER TABLE evidence_collection_runs ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass
+
+
 # ── Seed management ───────────────────────────────────────────────────────────
 
 def load_seeds_from_library() -> int:
@@ -601,6 +712,244 @@ def add_seeds_bulk(keywords: list[str], domain: str = "discovered", source: str 
                 observation_count=keyword_sources.observation_count + 1
         """, [(keyword, source, now, now) for keyword, _domain, _source, _added in rows])
         return cur.rowcount
+
+
+# ── Evidence collection ──────────────────────────────────────────────────────
+
+def start_evidence_collection(source: str, request: dict | None = None,
+                              run_id: str | None = None) -> str:
+    """Create a durable collection attempt before any provider work starts."""
+    clean_source = source.strip().lower()
+    if not clean_source:
+        raise ValueError("collection source is required")
+    identifier = run_id or f"ev_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    now = datetime.now(timezone.utc).isoformat()
+    with _conn() as con:
+        con.execute("""
+            INSERT OR IGNORE INTO evidence_collection_runs
+                (id, source, started_at, status, request_json)
+            VALUES (?, ?, ?, 'running', ?)
+        """, (identifier, clean_source, now, json.dumps(request or {}, sort_keys=True)))
+    return identifier
+
+
+def finish_evidence_collection(run_id: str, status: str,
+                               observation_count: int = 0,
+                               error: str | None = None) -> None:
+    """Finalize a collection run without translating failure into evidence."""
+    if status not in {"completed", "partial", "failed", "no_data"}:
+        raise ValueError("invalid collection status")
+    with _conn() as con:
+        con.execute("""
+            UPDATE evidence_collection_runs
+            SET completed_at=?, status=?, observation_count=?, error=?
+            WHERE id=?
+        """, (
+            datetime.now(timezone.utc).isoformat(), status,
+            max(0, int(observation_count)), error, run_id,
+        ))
+
+
+def mark_evidence_collection_sync(run_id: str, status: str,
+                                  error: str | None = None) -> None:
+    """Record cloud durability separately from provider collection status."""
+    if status not in {"synced", "failed", "not_configured", "pending"}:
+        raise ValueError("invalid durable sync status")
+    with _conn() as con:
+        con.execute("""
+            UPDATE evidence_collection_runs
+            SET durable_sync_status=?, durable_synced_at=?, durable_sync_error=?
+            WHERE id=?
+        """, (
+            status,
+            datetime.now(timezone.utc).isoformat() if status == "synced" else None,
+            error,
+            run_id,
+        ))
+
+
+def record_keyword_observation(
+    *,
+    keyword: str,
+    source: str,
+    metric: str,
+    value: float,
+    unit: str,
+    observed_at: str | None = None,
+    sample_size: int | None = None,
+    geography: str | None = None,
+    period_start: str | None = None,
+    period_end: str | None = None,
+    provider_record_id: str | None = None,
+    collection_run_id: str | None = None,
+    metadata: dict | None = None,
+) -> int:
+    """Store one exact provider value with enough context to audit it later."""
+    normalized = keyword.strip().lower()
+    clean_source = source.strip().lower()
+    clean_metric = metric.strip().lower()
+    clean_unit = unit.strip().lower()
+    numeric = _present_number(value)
+    if not all((normalized, clean_source, clean_metric, clean_unit)):
+        raise ValueError("keyword, source, metric, and unit are required")
+    if numeric is None:
+        raise ValueError("observation value must be finite")
+    if sample_size is not None and int(sample_size) < 0:
+        raise ValueError("sample size must be non-negative")
+    timestamp = observed_at or datetime.now(timezone.utc).isoformat()
+    add_seed(normalized, source=clean_source)
+    with _conn() as con:
+        cur = con.execute("""
+            INSERT OR REPLACE INTO keyword_observations
+                (keyword, source, observed_at, metric, value, unit, sample_size,
+                 metadata_json, geography, period_start, period_end,
+                 provider_record_id, collection_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            normalized, clean_source, timestamp, clean_metric, numeric, clean_unit,
+            sample_size, json.dumps(metadata, sort_keys=True) if metadata else None,
+            geography, period_start, period_end, provider_record_id, collection_run_id,
+        ))
+        return int(cur.lastrowid)
+
+
+def record_keyword_suggestions(
+    parent_keyword: str,
+    source: str,
+    suggestions: list[dict],
+    *,
+    observed_at: str | None = None,
+    geography: str | None = None,
+    collection_run_id: str | None = None,
+) -> int:
+    """Store autocomplete results with their exact query and returned position."""
+    parent = parent_keyword.strip().lower()
+    clean_source = source.strip().lower()
+    if not parent or not clean_source:
+        raise ValueError("parent keyword and source are required")
+    timestamp = observed_at or datetime.now(timezone.utc).isoformat()
+    add_seed(parent, source=clean_source)
+    rows = []
+    child_keywords = []
+    for item in suggestions:
+        suggestion = str(item.get("suggestion") or item.get("keyword") or "").strip().lower()
+        query = str(item.get("query") or parent).strip().lower()
+        position = _present_int(item.get("position"))
+        if not suggestion or position is None or position < 1:
+            continue
+        child_keywords.append(suggestion)
+        rows.append((
+            parent, suggestion, clean_source, query, position, timestamp,
+            item.get("geography") or geography, collection_run_id,
+            json.dumps(item.get("metadata"), sort_keys=True) if item.get("metadata") else None,
+        ))
+    if not rows:
+        return 0
+    add_seeds_bulk(child_keywords, source=f"discover_{clean_source}")
+    with _conn() as con:
+        before = con.total_changes
+        con.executemany("""
+            INSERT OR IGNORE INTO keyword_suggestions
+                (parent_keyword, suggestion, source, query, position, observed_at,
+                 geography, collection_run_id, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+        return con.total_changes - before
+
+
+def record_keyword_trend_points(
+    keyword: str,
+    source: str,
+    points: list[dict],
+    *,
+    collected_at: str | None = None,
+    geography: str | None = None,
+    timeframe: str | None = None,
+    collection_run_id: str | None = None,
+    metadata: dict | None = None,
+) -> int:
+    """Store the full provider time series; never collapse it to a trend label."""
+    normalized = keyword.strip().lower()
+    clean_source = source.strip().lower()
+    timestamp = collected_at or datetime.now(timezone.utc).isoformat()
+    if not normalized or not clean_source:
+        raise ValueError("keyword and source are required")
+    add_seed(normalized, source=clean_source)
+    rows = []
+    for point in points:
+        point_at = str(point.get("date") or point.get("point_at") or "").strip()
+        value = _present_number(point.get("value"))
+        if not point_at or value is None:
+            continue
+        partial = point.get("is_partial")
+        rows.append((
+            normalized, clean_source, point_at, value,
+            str(point.get("unit") or "relative_interest_index").strip().lower(),
+            point.get("geography") or geography,
+            point.get("timeframe") or timeframe,
+            None if partial is None else int(bool(partial)), timestamp,
+            collection_run_id,
+            json.dumps(metadata, sort_keys=True) if metadata else None,
+        ))
+    if not rows:
+        return 0
+    with _conn() as con:
+        before = con.total_changes
+        con.executemany("""
+            INSERT OR IGNORE INTO keyword_trend_points
+                (keyword, source, point_at, value, unit, geography, timeframe,
+                 is_partial, collected_at, collection_run_id, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+        return con.total_changes - before
+
+
+def record_keyword_listing_snapshots(
+    keyword: str,
+    source: str,
+    listings: list[dict],
+    *,
+    observed_at: str | None = None,
+    collection_run_id: str | None = None,
+) -> int:
+    """Store individual listing observations so aggregate prices remain auditable."""
+    normalized = keyword.strip().lower()
+    clean_source = source.strip().lower()
+    timestamp = observed_at or datetime.now(timezone.utc).isoformat()
+    if not normalized or not clean_source:
+        raise ValueError("keyword and source are required")
+    add_seed(normalized, source=clean_source)
+    rows = []
+    for position, item in enumerate(listings, start=1):
+        listing_id = str(item.get("listing_id") or "").strip()
+        if not listing_id:
+            continue
+        price = _present_number(item.get("price") if item.get("price") is not None else item.get("price_usd"))
+        rows.append((
+            normalized, clean_source, timestamp, listing_id,
+            str(item.get("title") or "").strip() or None,
+            str(item.get("shop_name") or "").strip() or None,
+            str(item.get("url") or "").strip() or None,
+            price, str(item.get("currency_code") or "").strip().upper() or None,
+            _present_int(item.get("favorites") if item.get("favorites") is not None else item.get("num_favorites")),
+            _present_int(item.get("review_count")),
+            None if item.get("is_star_seller") is None else int(bool(item.get("is_star_seller"))),
+            None if item.get("is_bestseller") is None else int(bool(item.get("is_bestseller"))),
+            _present_int(item.get("position")) or position, collection_run_id,
+            json.dumps(item.get("metadata"), sort_keys=True) if item.get("metadata") else None,
+        ))
+    if not rows:
+        return 0
+    with _conn() as con:
+        before = con.total_changes
+        con.executemany("""
+            INSERT OR IGNORE INTO keyword_listing_snapshots
+                (keyword, source, observed_at, listing_id, title, shop_name, url,
+                 price, currency_code, favorites, review_count, is_star_seller,
+                 is_bestseller, position, collection_run_id, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+        return con.total_changes - before
 
 
 # ── Expansion tree ────────────────────────────────────────────────────────────
@@ -850,7 +1199,8 @@ def _classify_market_evidence(metrics: dict, scan_error: str | None = None) -> t
 
 
 def _record_scan_observations(con: sqlite3.Connection, keyword: str, observed_at: str,
-                              metrics: dict, sources: list[str]) -> None:
+                              metrics: dict, sources: list[str],
+                              collection_run_id: str | None = None) -> None:
     market_source = next(
         (source for source in sources if source in {"etsy_open_api", "etsy_search_scraper"}),
         "etsy_market",
@@ -872,31 +1222,135 @@ def _record_scan_observations(con: sqlite3.Connection, keyword: str, observed_at
             continue
         con.execute("""
             INSERT OR REPLACE INTO keyword_observations
-                (keyword, source, observed_at, metric, value, unit, sample_size, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
-        """, (keyword, market_source, observed_at, metric, value, unit, sample_size))
+                (keyword, source, observed_at, metric, value, unit, sample_size,
+                 metadata_json, collection_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+        """, (
+            keyword, market_source, observed_at, metric, value, unit,
+            sample_size, collection_run_id,
+        ))
 
-    if metrics.get("observed_search_volume") is not None:
-        con.execute("""
-            INSERT OR REPLACE INTO keyword_observations
-                (keyword, source, observed_at, metric, value, unit, sample_size, metadata_json)
-            VALUES (?, 'external_keyword_provider', ?, 'monthly_searches', ?, 'searches_per_month', NULL, NULL)
-        """, (keyword, observed_at, metrics["observed_search_volume"]))
 
-    for source, metric_key, period_key in (
-        ("google_trends", "google_trends_relative_interest", "google_trends_relative_interest_period"),
-        ("pinterest_trends", "pinterest_relative_interest", "pinterest_relative_interest_period"),
-    ):
-        value = metrics.get(metric_key)
-        if value is None:
+def _record_report_source_evidence(keyword: str, report: dict,
+                                   collection_run_id: str | None) -> int:
+    """Persist source-native signals, series, suggestions, and listing rows."""
+    normalized = keyword.strip().lower()
+    count = 0
+    for signal in report.get("keyword_signals", []) or []:
+        if not isinstance(signal, dict):
             continue
-        period = metrics.get(period_key)
-        metadata = json.dumps({"period": period}) if period else None
-        con.execute("""
-            INSERT OR REPLACE INTO keyword_observations
-                (keyword, source, observed_at, metric, value, unit, sample_size, metadata_json)
-            VALUES (?, ?, ?, 'relative_interest', ?, 'provider_index', NULL, ?)
-        """, (keyword, source, observed_at, value, metadata))
+        source = str(signal.get("source") or "").strip().lower()
+        signal_keyword = str(signal.get("keyword") or "").strip().lower()
+        if not source or not signal_keyword:
+            continue
+        observed_at = signal.get("observed_at") or report.get("generated_at")
+        geography = signal.get("geography")
+        metadata = signal.get("metadata") if isinstance(signal.get("metadata"), dict) else None
+
+        query = str(signal.get("query") or "").strip().lower()
+        position = _present_int(signal.get("position"))
+        if query and position is not None:
+            count += record_keyword_suggestions(
+                normalized, source,
+                [{
+                    "suggestion": signal_keyword,
+                    "query": query,
+                    "position": position,
+                    "geography": geography,
+                    "metadata": metadata,
+                }],
+                observed_at=observed_at,
+                geography=geography,
+                collection_run_id=collection_run_id,
+            )
+
+        if signal_keyword == normalized:
+            definitions = (
+                ("monthly_searches", "monthly_searches", "searches_per_month"),
+                ("competition_score", "provider_competition", "provider_value"),
+                ("avg_price_usd", "average_price", "usd"),
+                ("relative_interest", "relative_interest", "provider_index"),
+            )
+            for key, metric, unit in definitions:
+                value = _present_number(signal.get(key))
+                if value is None:
+                    continue
+                record_keyword_observation(
+                    keyword=normalized,
+                    source=source,
+                    metric=metric,
+                    value=value,
+                    unit=unit,
+                    observed_at=observed_at,
+                    geography=geography,
+                    collection_run_id=collection_run_id,
+                    metadata={
+                        **(metadata or {}),
+                        **({"timeframe": signal.get("relative_interest_period")}
+                           if signal.get("relative_interest_period") else {}),
+                    } or None,
+                )
+                count += 1
+
+            provider_observations = (metadata or {}).get("observations")
+            if isinstance(provider_observations, list):
+                for observation_index, observation in enumerate(provider_observations):
+                    if not isinstance(observation, dict):
+                        continue
+                    value = _present_number(observation.get("value"))
+                    metric = str(observation.get("metric") or "").strip().lower()
+                    unit = str(observation.get("unit") or "").strip().lower()
+                    if value is None or not metric or not unit:
+                        continue
+                    record_keyword_observation(
+                        keyword=normalized,
+                        source=source,
+                        metric=metric,
+                        value=value,
+                        unit=unit,
+                        observed_at=observed_at,
+                        geography=geography,
+                        collection_run_id=collection_run_id,
+                        metadata={
+                            key: item for key, item in (metadata or {}).items()
+                            if key != "observations" and (key != "posts" or observation_index == 0)
+                        },
+                    )
+                    count += 1
+
+        time_series = signal.get("time_series")
+        if signal_keyword == normalized and isinstance(time_series, list):
+            count += record_keyword_trend_points(
+                normalized,
+                source,
+                time_series,
+                collected_at=observed_at,
+                geography=geography,
+                timeframe=signal.get("relative_interest_period"),
+                collection_run_id=collection_run_id,
+                metadata=metadata,
+            )
+
+    market_source = next(
+        (source for source in (report.get("sources_used") or [])
+         if source in {"etsy_open_api", "etsy_search_scraper"}),
+        "etsy_market",
+    )
+    for row in report.get("keyword_search_data", []) or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("keyword") or "").strip().lower() != normalized:
+            continue
+        listings = row.get("listing_samples")
+        if isinstance(listings, list):
+            count += record_keyword_listing_snapshots(
+                normalized,
+                market_source,
+                listings,
+                observed_at=report.get("generated_at"),
+                collection_run_id=collection_run_id,
+            )
+    return count
 
 
 def save_scan(keyword: str, report) -> None:
@@ -910,6 +1364,14 @@ def save_scan(keyword: str, report) -> None:
 
     now = datetime.utcnow().isoformat()
     kw = keyword.strip().lower()
+    report_id = str(r.get("report_id") or "").strip()
+    collection_run_id = None
+    if report_id:
+        collection_run_id = start_evidence_collection(
+            "multi_source_research",
+            {"keyword": kw, "sources": r.get("sources_used") or []},
+            run_id=f"{report_id}:{kw}",
+        )
 
     metrics = _extract_market_metrics(kw, r)
     sources = [str(source) for source in (r.get("sources_used") or []) if source]
@@ -976,7 +1438,29 @@ def save_scan(keyword: str, report) -> None:
             metrics.get("sampled_listings"),
             cur.lastrowid,
         ))
-        _record_scan_observations(con, kw, now, metrics, sources)
+        _record_scan_observations(con, kw, now, metrics, sources, collection_run_id)
+
+    if collection_run_id:
+        try:
+            detail_count = _record_report_source_evidence(kw, r, collection_run_id)
+            aggregate_count = sum(
+                1 for key in (
+                    "listing_count", "sampled_listings", "avg_price_usd",
+                    "price_p25_usd", "price_median_usd", "price_p75_usd",
+                    "avg_favorites", "pct_star_sellers", "pct_bestsellers",
+                ) if metrics.get(key) is not None
+            )
+            total = detail_count + aggregate_count
+            finish_evidence_collection(
+                collection_run_id,
+                "completed" if total else "no_data",
+                total,
+            )
+            from services.supabase_evidence_sync import sync_collection_run
+            sync_collection_run(collection_run_id)
+        except Exception as exc:
+            finish_evidence_collection(collection_run_id, "partial", 0, str(exc))
+            raise
 
 
 def _update_gap_score(keyword: str, new_gap: float, listing_efficiency: float | None = None) -> None:
@@ -1582,6 +2066,40 @@ def get_keyword_evidence(keyword: str, limit: int = 100) -> dict | None:
             """,
             (normalized, row_limit),
         ).fetchall()
+        suggestions = con.execute(
+            """
+            SELECT * FROM keyword_suggestions
+            WHERE parent_keyword = ? ORDER BY observed_at DESC, position ASC LIMIT ?
+            """,
+            (normalized, row_limit),
+        ).fetchall()
+        trend_points = con.execute(
+            """
+            SELECT * FROM keyword_trend_points
+            WHERE keyword = ? ORDER BY point_at DESC, id DESC LIMIT ?
+            """,
+            (normalized, row_limit),
+        ).fetchall()
+        listing_snapshots = con.execute(
+            """
+            SELECT * FROM keyword_listing_snapshots
+            WHERE keyword = ? ORDER BY observed_at DESC, position ASC LIMIT ?
+            """,
+            (normalized, row_limit),
+        ).fetchall()
+        collection_runs = con.execute(
+            """
+            SELECT DISTINCT run.* FROM evidence_collection_runs run
+            WHERE run.id IN (
+                SELECT collection_run_id FROM keyword_observations WHERE keyword = ?
+                UNION SELECT collection_run_id FROM keyword_trend_points WHERE keyword = ?
+                UNION SELECT collection_run_id FROM keyword_listing_snapshots WHERE keyword = ?
+                UNION SELECT collection_run_id FROM keyword_suggestions WHERE parent_keyword = ?
+            )
+            ORDER BY started_at DESC LIMIT ?
+            """,
+            (normalized, normalized, normalized, normalized, row_limit),
+        ).fetchall()
     return {
         "keyword": normalized,
         "seed": dict(seed),
@@ -1591,7 +2109,96 @@ def get_keyword_evidence(keyword: str, limit: int = 100) -> dict | None:
         "observations": [dict(row) for row in observations],
         "product_economics": [dict(row) for row in economics],
         "outcomes": [dict(row) for row in outcomes],
+        "suggestions": [dict(row) for row in suggestions],
+        "trend_points": [dict(row) for row in trend_points],
+        "listing_snapshots": [dict(row) for row in listing_snapshots],
+        "collection_runs": [dict(row) for row in collection_runs],
     }
+
+
+def get_evidence_coverage(run_limit: int = 20) -> dict:
+    """Return factual coverage counts; no completeness score is synthesized."""
+    recent_limit = max(1, min(int(run_limit), 100))
+    with _conn() as con:
+        total_keywords = int(con.execute("SELECT COUNT(*) FROM seeds").fetchone()[0] or 0)
+        metrics = {
+            row["metric"]: int(row["keyword_count"])
+            for row in con.execute("""
+                SELECT metric, COUNT(DISTINCT keyword) AS keyword_count
+                FROM keyword_observations GROUP BY metric ORDER BY metric
+            """).fetchall()
+        }
+        sources = [dict(row) for row in con.execute("""
+            SELECT source,
+                   COUNT(DISTINCT keyword) AS keywords,
+                   COUNT(*) AS observations,
+                   MAX(observed_at) AS latest_observation_at
+            FROM keyword_observations
+            GROUP BY source ORDER BY source
+        """).fetchall()]
+        suggestion_sources = [dict(row) for row in con.execute("""
+            SELECT source,
+                   COUNT(DISTINCT parent_keyword) AS parent_keywords,
+                   COUNT(*) AS suggestions,
+                   MAX(observed_at) AS latest_observation_at
+            FROM keyword_suggestions
+            GROUP BY source ORDER BY source
+        """).fetchall()]
+        coverage = {
+            "candidate_keywords": total_keywords,
+            "keywords_with_any_observation": int(con.execute(
+                "SELECT COUNT(DISTINCT keyword) FROM keyword_observations"
+            ).fetchone()[0] or 0),
+            "keywords_with_demand": int(con.execute("""
+                SELECT COUNT(DISTINCT keyword) FROM keyword_observations
+                WHERE metric IN ('monthly_searches', 'searches_30d', 'searches')
+            """).fetchone()[0] or 0),
+            "keywords_with_supply": int(con.execute("""
+                SELECT COUNT(DISTINCT keyword) FROM keyword_observations
+                WHERE metric IN ('listing_count', 'competition_listings')
+            """).fetchone()[0] or 0),
+            "keywords_with_trend_series": int(con.execute(
+                "SELECT COUNT(DISTINCT keyword) FROM keyword_trend_points"
+            ).fetchone()[0] or 0),
+            "keywords_with_listing_samples": int(con.execute(
+                "SELECT COUNT(DISTINCT keyword) FROM keyword_listing_snapshots"
+            ).fetchone()[0] or 0),
+            "keywords_with_shop_outcomes": int(con.execute(
+                "SELECT COUNT(DISTINCT keyword) FROM keyword_outcomes"
+            ).fetchone()[0] or 0),
+            "keywords_with_unit_economics": int(con.execute(
+                "SELECT COUNT(DISTINCT keyword) FROM keyword_product_economics"
+            ).fetchone()[0] or 0),
+        }
+        recent_runs = [dict(row) for row in con.execute("""
+            SELECT * FROM evidence_collection_runs
+            ORDER BY started_at DESC LIMIT ?
+        """, (recent_limit,)).fetchall()]
+    return {
+        "coverage": coverage,
+        "metrics": metrics,
+        "observation_sources": sources,
+        "suggestion_sources": suggestion_sources,
+        "recent_runs": recent_runs,
+        "durability": {
+            "cloud_sync_configured": bool(
+                _os.environ.get("SUPABASE_URL", "").strip()
+                and _os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+            ),
+            "run_statuses": {
+                row["durable_sync_status"]: int(row["run_count"])
+                for row in _durability_rows()
+            },
+        },
+    }
+
+
+def _durability_rows() -> list[sqlite3.Row]:
+    with _conn() as con:
+        return con.execute("""
+            SELECT durable_sync_status, COUNT(*) AS run_count
+            FROM evidence_collection_runs GROUP BY durable_sync_status
+        """).fetchall()
 
 
 # ── Scheduler log ─────────────────────────────────────────────────────────────
