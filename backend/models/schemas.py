@@ -153,6 +153,17 @@ class KeywordOutcomeRequest(BaseModel):
     source: str = Field(min_length=1, max_length=120)
 
 
+class EvidenceImportRequest(BaseModel):
+    source: str = Field(min_length=1, max_length=120)
+    name: str | None = Field(default=None, max_length=200)
+    text: str = Field(min_length=1, max_length=5_000_000)
+    observed_at: str | None = None
+    geography: str | None = Field(default=None, max_length=80)
+    period_start: str | None = None
+    period_end: str | None = None
+    currency_code: str | None = Field(default=None, min_length=3, max_length=3)
+
+
 # ── Stats ───────────────────────────────────────────────────────────────────
 
 class StatsResponse(BaseModel):

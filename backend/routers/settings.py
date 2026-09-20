@@ -68,6 +68,7 @@ def adapter_status():
         "etsy_autocomplete": {
             "loader": lambda: __import__("adapters.research.etsy_autocomplete", fromlist=["EtsyAutocompleteAdapter"]).EtsyAutocompleteAdapter(),
             "requires_credentials": False,
+            "requires_configuration": True,
             "evidence": ["source phrases"],
         },
         "etsy_open_api": {
@@ -98,7 +99,7 @@ def adapter_status():
         "reddit_etsy": {
             "loader": lambda: __import__("adapters.research.reddit_etsy", fromlist=["RedditEtsyAdapter"]).RedditEtsyAdapter(),
             "requires_credentials": True,
-            "evidence": ["observed discussion activity"],
+            "evidence": ["dated matching posts", "post scores", "comment counts", "source records"],
         },
     }
     for key, definition in research_adapters.items():
@@ -108,6 +109,7 @@ def adapter_status():
                 "available": True,
                 "configured": bool(adapter.is_configured()),
                 "requires_credentials": definition["requires_credentials"],
+                "requires_configuration": definition.get("requires_configuration", False),
                 "evidence": definition["evidence"],
             }
         except Exception as e:
@@ -115,6 +117,7 @@ def adapter_status():
                 "available": False,
                 "configured": False,
                 "requires_credentials": definition["requires_credentials"],
+                "requires_configuration": definition.get("requires_configuration", False),
                 "evidence": definition["evidence"],
                 "error": str(e),
             }

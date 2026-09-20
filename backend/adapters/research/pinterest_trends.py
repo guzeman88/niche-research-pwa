@@ -6,6 +6,7 @@ otherwise falls back to scraping Pinterest's Explore page for category trends.
 
 import os
 import httpx
+from datetime import datetime, timezone
 from adapters.base.research import BaseResearchAdapter, NicheSignal
 
 
@@ -67,6 +68,17 @@ class PinterestTrendsAdapter(BaseResearchAdapter):
             trend_direction=None,
             source="pinterest_trends",
             relative_interest=average_relative_interest,
+            observed_at=datetime.now(timezone.utc).isoformat(),
+            time_series=[
+                {
+                    "date": str(point.get("date") or point.get("timestamp") or point.get("time") or ""),
+                    "value": float(point["value"]),
+                }
+                for point in trend_data
+                if point.get("value") is not None
+                and (point.get("date") or point.get("timestamp") or point.get("time"))
+            ],
+            metadata={"provider_endpoint": "v5/trends/keywords"},
         )
 
 

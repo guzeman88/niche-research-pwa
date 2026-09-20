@@ -26,7 +26,25 @@ interface EvidenceBundle {
   observations: Array<Record<string, unknown>>
   product_economics: Array<Record<string, unknown>>
   outcomes: Array<Record<string, unknown>>
+  suggestions: Array<Record<string, unknown>>
+  trend_points: Array<Record<string, unknown>>
+  listing_snapshots: Array<Record<string, unknown>>
+  collection_runs: Array<Record<string, unknown>>
 }
+
+interface EvidenceCoverage {
+  coverage: Record<string, number>
+  metrics: Record<string, number>
+  observation_sources: Array<Record<string, unknown>>
+  suggestion_sources: Array<Record<string, unknown>>
+  recent_runs: Array<Record<string, unknown>>
+  durability: {
+    cloud_sync_configured: boolean
+    run_statuses: Record<string, number>
+  }
+}
+
+type ImportSource = 'etsy_marketplace_insights' | 'erank' | 'etsy_shop_stats' | 'google_trends'
 
 const MARKET_ADAPTERS = [
   'google_suggest',
@@ -37,6 +55,13 @@ const MARKET_ADAPTERS = [
   'google_trends',
   'pinterest_trends',
   'reddit_etsy',
+]
+
+const IMPORT_SOURCES: Array<{ value: ImportSource; label: string; help: string }> = [
+  { value: 'etsy_marketplace_insights', label: 'Etsy Marketplace Insights', help: 'Keyword searches and competing listings from Etsy\'s seller tool.' },
+  { value: 'erank', label: 'eRank free export', help: 'Searches, clicks, click rate, and competition exactly as exported.' },
+  { value: 'etsy_shop_stats', label: 'Etsy Shop Stats', help: 'Search terms tied to your own visits, views, orders, and revenue.' },
+  { value: 'google_trends', label: 'Google Trends CSV', help: 'The complete dated relative-interest series, not a single average.' },
 ]
 
 const MONEY_FIELDS = [
@@ -71,6 +96,13 @@ export default function EvidenceOperations() {
   const [selectedAdapters, setSelectedAdapters] = useState<string[]>([])
   const [mode, setMode] = useState('')
   const [batchSize, setBatchSize] = useState('')
+  const [importSource, setImportSource] = useState<ImportSource>('etsy_marketplace_insights')
+  const [importName, setImportName] = useState('')
+  const [importText, setImportText] = useState('')
+  const [importGeography, setImportGeography] = useState('')
+  const [importPeriodStart, setImportPeriodStart] = useState('')
+  const [importPeriodEnd, setImportPeriodEnd] = useState('')
+  const [importCurrency, setImportCurrency] = useState('')
 
   const providers = useQuery<Record<string, ProviderStatus>>({
     queryKey: ['provider-readiness', connectionVersion],
@@ -90,13 +122,19 @@ export default function EvidenceOperations() {
     enabled: connected && Boolean(selectedKeyword),
     retry: false,
   })
+  const coverage = useQuery<EvidenceCoverage>({
+    queryKey: ['evidence-coverage', connectionVersion],
+    queryFn: () => operatorRequest('/api/evidence/coverage'),
+    enabled: connected,
+    retry: false,
+  })
 
   const action = useMutation({
     mutationFn: ({ path, body }: { path: string; body: Record<string, unknown> }) => operatorRequest<Record<string, unknown>>(path, body),
     onSuccess: async (result) => {
       setError('')
       setMessage(String(result.message || result.status || 'Recorded.'))
-      await Promise.all([scheduler.refetch(), evidence.refetch()])
+      await Promise.all([scheduler.refetch(), evidence.refetch(), coverage.refetch()])
     },
     onError: failure => setError(failure instanceof Error ? failure.message : 'The operation failed.'),
   })
@@ -132,13 +170,40 @@ export default function EvidenceOperations() {
     }
     action.mutate({
       path: '/api/research/run',
-      body: { keywords, store_slug: '__global__', skip_scraper: false, adapter_names: selectedAdapters },
+      body: { keywords, store_slug: '__global__', skip_scraper: !selectedAdapters.includes('etsy_open_api'), adapter_names: selectedAdapters },
+    })
+  }
+
+  const submitImport = () => {
+    if (!importText.trim()) {
+      setError('Paste the source export before importing.')
+      return
+    }
+    if (importSource === 'etsy_marketplace_insights' && (!importPeriodStart || !importPeriodEnd)) {
+      setError('Marketplace Insights needs the exact start and end dates shown by the export.')
+      return
+    }
+    if (importSource === 'google_trends' && !importGeography.trim()) {
+      setError('Google Trends needs the geography used for the export.')
+      return
+    }
+    action.mutate({
+      path: '/api/evidence/import',
+      body: {
+        source: importSource,
+        name: importName.trim() || null,
+        text: importText,
+        geography: importGeography.trim() || null,
+        period_start: importPeriodStart || null,
+        period_end: importPeriodEnd || null,
+        currency_code: importCurrency.trim().toUpperCase() || null,
+      },
     })
   }
 
   return (
     <div className="page max-w-6xl">
-      <div className="page-header">
+      <div className="page-header flex-col items-start gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight">Evidence operations</h1>
           <p className="mt-1 max-w-2xl text-[13px] text-surface-200">Collect exact observations, inspect provenance, and record real unit economics and outcomes. Blank inputs stay blank; this page never estimates them.</p>
@@ -180,6 +245,31 @@ export default function EvidenceOperations() {
             )}
           </section>
 
+          <section className="panel overflow-hidden" aria-labelledby="coverage-heading">
+            <div className="border-b border-surface-600/55 px-4 py-3">
+              <h2 id="coverage-heading" className="text-sm font-bold">Evidence coverage</h2>
+              <p className="mt-1 text-[12px] text-surface-300">Counts show what is actually stored. No coverage percentage or opportunity score is inferred.</p>
+            </div>
+            {coverage.isError ? <InlineError text={errorText(coverage.error)} /> : (
+              <>
+                <div className="grid sm:grid-cols-2 xl:grid-cols-4">
+                  <CoverageValue label="Candidate phrases" value={coverage.data?.coverage.candidate_keywords} />
+                  <CoverageValue label="Buyer demand" value={coverage.data?.coverage.keywords_with_demand} />
+                  <CoverageValue label="Marketplace supply" value={coverage.data?.coverage.keywords_with_supply} />
+                  <CoverageValue label="Trend series" value={coverage.data?.coverage.keywords_with_trend_series} />
+                  <CoverageValue label="Listing samples" value={coverage.data?.coverage.keywords_with_listing_samples} />
+                  <CoverageValue label="Own-shop outcomes" value={coverage.data?.coverage.keywords_with_shop_outcomes} />
+                  <CoverageValue label="Unit economics" value={coverage.data?.coverage.keywords_with_unit_economics} />
+                  <CoverageValue label="Any observation" value={coverage.data?.coverage.keywords_with_any_observation} />
+                </div>
+                <div className="flex flex-col gap-1 border-t border-surface-600/45 px-4 py-3 text-[11px] sm:flex-row sm:items-center sm:justify-between">
+                  <span className="font-bold text-surface-200">Durable cloud copy</span>
+                  <span className={coverage.data?.durability.cloud_sync_configured ? 'text-accent-green' : 'text-accent-amber'}>{coverage.data?.durability.cloud_sync_configured ? 'Configured — completed runs sync to Supabase' : 'Not configured — evidence remains on this backend filesystem'}</span>
+                </div>
+              </>
+            )}
+          </section>
+
           <section className="panel p-4" aria-labelledby="collection-heading">
             <h2 id="collection-heading" className="text-sm font-bold">Controlled collection</h2>
             <p className="mt-1 text-[12px] text-surface-300">Run named keywords against sources you explicitly select, or start the queue with an explicit operating mode and batch size.</p>
@@ -190,6 +280,7 @@ export default function EvidenceOperations() {
                   {configuredMarketProviders.map(name => <label key={name} className="inline-flex items-center gap-2 rounded-md bg-surface-900/55 px-3 py-2 text-[11px] font-semibold"><input type="checkbox" checked={selectedAdapters.includes(name)} onChange={event => setSelectedAdapters(current => event.target.checked ? [...current, name] : current.filter(value => value !== name))} />{name.split('_').join(' ')}</label>)}
                   {!configuredMarketProviders.length && <span className="text-[12px] text-accent-amber">No collection providers are currently configured.</span>}
                 </div>
+                {configuredMarketProviders.length > 0 && <button className="mt-2 text-[11px] font-bold text-primary-200 hover:text-primary-100" type="button" onClick={() => setSelectedAdapters(configuredMarketProviders)}>Select every ready source</button>}
                 <button className="btn-primary mt-3" type="button" disabled={action.isPending} onClick={submitResearch}><Icon name="play" size={15} />Run exact keywords</button>
               </div>
               <div className="border-t border-surface-600/45 pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
@@ -203,6 +294,30 @@ export default function EvidenceOperations() {
                   <button className="btn-secondary" type="button" disabled={action.isPending} onClick={() => action.mutate({ path: '/api/scheduler/pause', body: {} })}><Icon name="pause" size={14} />Pause</button>
                   <button className="btn-danger" type="button" disabled={action.isPending} onClick={() => action.mutate({ path: '/api/scheduler/stop', body: {} })}><Icon name="square" size={14} />Stop</button>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="panel p-4" aria-labelledby="imports-heading">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 text-primary-200"><Icon name="database" size={18} /></span>
+              <div>
+                <h2 id="imports-heading" className="text-sm font-bold">Import free first-party and seller-tool evidence</h2>
+                <p className="mt-1 max-w-3xl text-[12px] text-surface-300">Paste CSV or tab-separated exports. The importer stores source values, dates, geography, and units exactly; missing cells remain missing.</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(14rem,0.7fr)_minmax(20rem,1.3fr)]">
+              <div className="grid content-start gap-3">
+                <Field label="Source"><select className="input" value={importSource} onChange={event => setImportSource(event.target.value as ImportSource)}>{IMPORT_SOURCES.map(source => <option key={source.value} value={source.value}>{source.label}</option>)}</select></Field>
+                <p className="text-[11px] leading-relaxed text-surface-300">{IMPORT_SOURCES.find(source => source.value === importSource)?.help}</p>
+                <Field label="Import name (optional)"><input className="input" value={importName} onChange={event => setImportName(event.target.value)} placeholder="Export filename or note" /></Field>
+                {(importSource === 'etsy_marketplace_insights' || importSource === 'etsy_shop_stats') && <div className="grid grid-cols-2 gap-3"><Field label="Period start"><input className="input" type="date" value={importPeriodStart} onChange={event => setImportPeriodStart(event.target.value)} /></Field><Field label="Period end"><input className="input" type="date" value={importPeriodEnd} onChange={event => setImportPeriodEnd(event.target.value)} /></Field></div>}
+                {(importSource === 'google_trends' || importSource === 'etsy_marketplace_insights' || importSource === 'erank') && <Field label="Geography (when shown)"><input className="input" value={importGeography} onChange={event => setImportGeography(event.target.value)} placeholder="US, worldwide, or export value" /></Field>}
+                {importSource === 'etsy_shop_stats' && <Field label="Revenue currency (if included)"><input className="input uppercase" maxLength={3} value={importCurrency} onChange={event => setImportCurrency(event.target.value)} placeholder="USD" /></Field>}
+              </div>
+              <div>
+                <Field label="Export data"><textarea className="input min-h-56 resize-y font-mono text-[11px] leading-relaxed" value={importText} onChange={event => setImportText(event.target.value)} placeholder="Paste the unedited CSV or TSV export here" /></Field>
+                <button className="btn-primary mt-3" type="button" disabled={action.isPending} onClick={submitImport}><Icon name="database" size={15} />{action.isPending ? 'Recording…' : 'Record source evidence'}</button>
               </div>
             </div>
           </section>
@@ -242,8 +357,19 @@ function EvidenceSummary({ data }: { data: EvidenceBundle }) {
     <EvidenceRow label="Latest attempt" value={data.latest_attempt ? `${String(data.latest_attempt.evidence_status || 'unknown')} · ${String(data.latest_attempt.scanned_at || '')}` : 'No attempt recorded'} />
     <EvidenceRow label="Sources" value={data.sources.length ? data.sources.map(source => String(source.source)).join(', ') : 'None recorded'} />
     <EvidenceRow label="Raw observations" value={`${data.observations.length} recorded`} />
+    <EvidenceRow label="Autocomplete" value={`${data.suggestions.length} dated suggestions`} />
+    <EvidenceRow label="Trend history" value={`${data.trend_points.length} dated points`} />
+    <EvidenceRow label="Listing sample" value={`${data.listing_snapshots.length} listing snapshots`} />
+    <EvidenceRow label="Collection runs" value={`${data.collection_runs.length} linked attempts`} />
     <EvidenceRow label="Economics" value={`${data.product_economics.length} exact records`} />
     <EvidenceRow label="Outcomes" value={`${data.outcomes.length} observed periods`} />
+  </div>
+}
+
+function CoverageValue({ label, value }: { label: string; value: number | undefined }) {
+  return <div className="border-b border-surface-600/35 px-4 py-3 sm:border-r">
+    <div className="text-[11px] font-semibold text-surface-300">{label}</div>
+    <div className="mt-1 text-base font-extrabold tabular-nums text-surface-50">{value == null ? 'TBD' : value.toLocaleString()}</div>
   </div>
 }
 

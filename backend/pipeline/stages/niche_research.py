@@ -61,6 +61,7 @@ class KeywordSearchData:
     avg_favorites: float | None = None
     max_favorites: int | None = None
     pct_high_favorites: float | None = None
+    listing_samples: list[dict] = field(default_factory=list)
 
 @dataclass
 class SeasonalityPoint:
@@ -237,7 +238,7 @@ def run(
         pricing_insights=synthesis.get("pricing_insights", ""),
         entry_strategy=synthesis.get("entry_strategy", ""),
         sources_used=sources_used,
-        report_id=f"rpt_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        report_id=f"rpt_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}",
     )
 
     path = report.save()
@@ -304,6 +305,7 @@ def _run_scraper(
                 avg_favorites=sr.avg_favorites,
                 max_favorites=sr.max_favorites,
                 pct_high_favorites=sr.pct_high_favorites,
+                listing_samples=[asdict(listing) for listing in sr.listings],
             )
             results.append(ksd)
             log_fn(
@@ -368,6 +370,7 @@ def _run_etsy_open_api_search(
                 avg_favorites=sr.avg_favorites,
                 max_favorites=sr.max_favorites,
                 pct_high_favorites=sr.pct_high_favorites,
+                listing_samples=[asdict(listing) for listing in sr.listings],
             )
             results.append(ksd)
             log_fn(
@@ -596,6 +599,12 @@ def _signal_to_dict(s: NicheSignal) -> dict:
         "trend_direction": s.trend_direction, "source": s.source,
         "relative_interest": s.relative_interest,
         "relative_interest_period": s.relative_interest_period,
+        "observed_at": s.observed_at,
+        "geography": s.geography,
+        "query": s.query,
+        "position": s.position,
+        "time_series": s.time_series,
+        "metadata": s.metadata,
     }
 
 

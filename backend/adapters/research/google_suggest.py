@@ -6,6 +6,7 @@ Replaces the broken Etsy autocomplete adapter.
 from __future__ import annotations
 
 import json, time, random
+from datetime import datetime, timezone
 import httpx
 from adapters.base.research import BaseResearchAdapter, NicheSignal
 
@@ -31,16 +32,22 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
         return True  # no key needed
 
     def search(self, keyword: str, category: str = "") -> list[NicheSignal]:
-        suggestions = self._get_suggestions(keyword)
+        suggestions = self._get_suggestion_records(keyword)
         results = []
-        for kw in suggestions:
+        observed_at = datetime.now(timezone.utc).isoformat()
+        for record in suggestions:
             results.append(NicheSignal(
-                keyword=kw,
+                keyword=record["suggestion"],
                 monthly_searches=None,
                 competition_score=None,
                 avg_price_usd=None,
                 trend_direction=None,
                 source="google_suggest",
+                observed_at=observed_at,
+                geography="US",
+                query=record["query"],
+                position=record["position"],
+                metadata={"surface": "shopping_suggest", "language": "en"},
             ))
         return results
 
@@ -52,7 +59,11 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
 
     def _get_suggestions(self, keyword: str) -> list[str]:
         """Fetch Google Suggest completions for a keyword."""
-        suggestions = []
+        return [record["suggestion"] for record in self._get_suggestion_records(keyword)]
+
+    def _get_suggestion_records(self, keyword: str) -> list[dict]:
+        """Fetch suggestions with the exact query and provider-returned position."""
+        suggestions: list[dict] = []
         prefixes = ["", "etsy ", "custom ", "personalized "]
 
         for prefix in prefixes:
@@ -73,20 +84,25 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
                 if r.status_code == 200:
                     data = json.loads(r.text.replace("window.google.ac.h(", "").rstrip(")")) if "google.ac.h" in r.text else json.loads(r.text)
                     items = data[1] if isinstance(data, list) and len(data) > 1 else []
-                    for s in items:
+                    for position, s in enumerate(items, start=1):
                         if isinstance(s, str):
                             clean = s.replace("etsy ", "").strip().lower()
                             if clean and clean != keyword.lower() and len(clean) > 3:
-                                suggestions.append(clean)
+                                suggestions.append({
+                                    "query": query.lower(),
+                                    "suggestion": clean,
+                                    "position": position,
+                                })
                 time.sleep(self._delay)
             except Exception:
                 continue
 
         # Dedup and limit
-        seen = set()
+        seen: set[tuple[str, str]] = set()
         unique = []
-        for s in suggestions:
-            if s not in seen:
-                seen.add(s)
-                unique.append(s)
+        for record in suggestions:
+            key = (record["query"], record["suggestion"])
+            if key not in seen:
+                seen.add(key)
+                unique.append(record)
         return unique[:25]

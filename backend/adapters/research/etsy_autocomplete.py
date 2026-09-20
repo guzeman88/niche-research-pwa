@@ -1,14 +1,16 @@
-"""
-Etsy autocomplete research adapter — no API key required.
-Hits the public Etsy autocomplete endpoint to gather keyword suggestions.
+"""Etsy autocomplete adapter for an explicitly configured endpoint.
+
+Etsy does not publish a supported autocomplete endpoint. Keeping the URL in
+configuration prevents a retired, undocumented route from being reported as a
+working evidence source.
 """
 
+import os
 import httpx
+from datetime import datetime, timezone
 from adapters.base.research import BaseResearchAdapter, NicheSignal
 
 
-# Etsy changed their autocomplete endpoint — using the current suggestions API
-_AUTOCOMPLETE_URL = "https://www.etsy.com/api/v3/ajax/suggest/keywords"
 import random
 _USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -32,6 +34,7 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
 
     def __init__(self, request_delay: float = 0.5):
         self._delay = request_delay
+        self._autocomplete_url = os.environ.get("ETSY_AUTOCOMPLETE_URL", "").strip()
         self._client = httpx.Client(headers=_get_headers(), timeout=15, follow_redirects=True)
 
     @property
@@ -39,13 +42,19 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
         return "etsy_autocomplete"
 
     def is_configured(self) -> bool:
-        return True  # no key needed
+        return bool(self._autocomplete_url)
 
     def search(self, keyword: str, category: str = "") -> list[NicheSignal]:
+        if not self.is_configured():
+            return []
         suggestions = self._get_suggestions(keyword)
         if not suggestions:
             return []
-        return [self._build_signal(kw) for kw in suggestions[:10]]
+        observed_at = datetime.now(timezone.utc).isoformat()
+        return [
+            self._build_signal(kw, query=keyword, position=position, observed_at=observed_at)
+            for position, kw in enumerate(suggestions[:10], start=1)
+        ]
 
     def bulk_search(self, keywords: list[str]) -> list[NicheSignal]:
         results: list[NicheSignal] = []
@@ -58,7 +67,7 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
     def _get_suggestions(self, keyword: str) -> list[str]:
         try:
             resp = self._client.get(
-                _AUTOCOMPLETE_URL,
+                self._autocomplete_url,
                 params={"query": keyword, "limit": 20, "include_metadata": "true"},
             )
             if resp.status_code == 200:
@@ -75,7 +84,12 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
         return []
 
     @staticmethod
-    def _build_signal(keyword: str) -> NicheSignal:
+    def _build_signal(
+        keyword: str,
+        query: str | None = None,
+        position: int | None = None,
+        observed_at: str | None = None,
+    ) -> NicheSignal:
         return NicheSignal(
             keyword=keyword,
             monthly_searches=None,
@@ -83,4 +97,9 @@ class EtsyAutocompleteAdapter(BaseResearchAdapter):
             avg_price_usd=None,
             trend_direction=None,
             source="etsy_autocomplete",
+            observed_at=observed_at,
+            geography="US",
+            query=query.strip().lower() if query else None,
+            position=position,
+            metadata={"surface": "etsy_autocomplete"},
         )

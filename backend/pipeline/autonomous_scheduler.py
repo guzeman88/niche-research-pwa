@@ -563,6 +563,6 @@ def _is_positive_observation(value) -> bool:
 
 
 def _scheduler_research_adapters() -> list[str]:
-    raw = os.environ.get("SCHEDULER_RESEARCH_ADAPTERS", "etsy_open_api,etsy_autocomplete,google_suggest")
+    raw = os.environ.get("SCHEDULER_RESEARCH_ADAPTERS", "etsy_open_api,google_suggest")
     names = [name.strip() for name in raw.split(",") if name.strip()]
-    return names or ["etsy_open_api", "etsy_autocomplete", "google_suggest"]
+    return names or ["etsy_open_api", "google_suggest"]

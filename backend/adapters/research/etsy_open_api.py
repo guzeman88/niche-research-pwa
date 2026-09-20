@@ -134,7 +134,10 @@ class EtsyOpenAPIAdapter(BaseResearchAdapter):
         if not self.is_configured():
             return []
         result = self._client.search_listings(keyword, limit=50)
-        prices = [item.price_usd for item in result.listings if item.price_usd > 0]
+        prices = [
+            item.price_usd for item in result.listings
+            if item.price_usd > 0 and item.currency_code == "USD"
+        ]
         avg_price = sum(prices) / len(prices) if prices else None
         return [
             NicheSignal(
@@ -202,6 +205,7 @@ def _listing_data_from_api(row: dict[str, Any]) -> EtsyListingData | None:
         shop_name=_shop_name(row),
         url=url,
         num_favorites=_first_int(row, "num_favorers", "favorers"),
+        currency_code=_money_currency(row.get("price") or row.get("price_usd")),
     )
 
 
@@ -245,6 +249,13 @@ def _money_to_float(value: Any) -> float | None:
             except Exception:
                 return None
     return None
+
+
+def _money_currency(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    currency = str(value.get("currency_code") or value.get("currency") or "").strip().upper()
+    return currency or None
 
 
 def _shop_name(row: dict[str, Any]) -> str:

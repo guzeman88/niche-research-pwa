@@ -5,6 +5,7 @@ Returns the observed average relative-interest index for the requested period.
 
 import random
 import time
+from datetime import datetime, timezone
 from adapters.base.research import BaseResearchAdapter, NicheSignal
 
 _MAX_RETRIES = 3
@@ -51,6 +52,14 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
                             continue
                         series = df[kw]
                         avg = float(series.mean())
+                        points = [
+                            {
+                                "date": timestamp.isoformat(),
+                                "value": float(value),
+                                "is_partial": bool(df.loc[timestamp].get("isPartial", False)),
+                            }
+                            for timestamp, value in series.items()
+                        ]
                         results.append(NicheSignal(
                             keyword=kw,
                             monthly_searches=None,
@@ -60,6 +69,10 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
                             source="google_trends",
                             relative_interest=avg,
                             relative_interest_period=self._timeframe,
+                            observed_at=datetime.now(timezone.utc).isoformat(),
+                            geography=self._geo or "worldwide",
+                            time_series=points,
+                            metadata={"category": 0, "language": "en-US"},
                         ))
                     # polite delay between chunks
                     time.sleep(2.0 + random.uniform(0, 1.5))

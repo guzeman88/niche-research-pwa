@@ -74,6 +74,16 @@ def test_default_scanner_registers_google_suggest():
     assert len(adapters) == 1 and adapters[0].name == "google_suggest"
 
 
+def test_etsy_autocomplete_is_not_reported_ready_without_verified_endpoint(monkeypatch):
+    from adapters.research.etsy_autocomplete import EtsyAutocompleteAdapter
+
+    monkeypatch.delenv("ETSY_AUTOCOMPLETE_URL", raising=False)
+    adapter = EtsyAutocompleteAdapter(request_delay=0)
+
+    assert adapter.is_configured() is False
+    assert adapter.search("teacher mug") == []
+
+
 def test_private_api_requires_token_and_settings_are_redacted(monkeypatch):
     monkeypatch.setenv("PIPELINE_API_TOKEN", "test-only-secret")
     app = FastAPI()
@@ -178,7 +188,7 @@ def test_etsy_listing_evidence_never_infers_sales_revenue_or_rank():
     assert result.avg_favorites is None
 
 
-def test_schema_v13_clears_unversioned_values_and_seed_priorities(database):
+def test_schema_v15_clears_unversioned_values_and_adds_raw_evidence_tables(database):
     database.add_seed("legacy estimate", source="test")
     with database._conn() as con:
         con.execute("""
@@ -197,9 +207,119 @@ def test_schema_v13_clears_unversioned_values_and_seed_priorities(database):
             FROM scans WHERE keyword='legacy estimate'
         """).fetchone()
         seed_columns = {item[1] for item in con.execute("PRAGMA table_info(seeds)").fetchall()}
-    assert database.SCHEMA_VERSION == 13
+    assert database.SCHEMA_VERSION == 15
     assert tuple(row) == (None, None, None, None, None)
     assert "priority" not in seed_columns
+    with database._conn() as con:
+        tables = {item[0] for item in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        observation_columns = {item[1] for item in con.execute("PRAGMA table_info(keyword_observations)")}
+    assert {"evidence_collection_runs", "keyword_suggestions", "keyword_trend_points", "keyword_listing_snapshots"} <= tables
+    assert {"geography", "period_start", "period_end", "provider_record_id", "collection_run_id"} <= observation_columns
+
+
+def test_marketplace_insights_import_requires_period_and_preserves_source(database):
+    from services.evidence_import_service import import_evidence
+
+    with pytest.raises(ValueError, match="period_start"):
+        import_evidence(
+            source="etsy_marketplace_insights",
+            text="Keyword,Searches,Listings\nteacher mug,120,4500",
+        )
+
+    result = import_evidence(
+        source="etsy_marketplace_insights",
+        text="Keyword,Searches,Listings\nteacher mug,120,4500",
+        period_start="2026-08-20",
+        period_end="2026-09-18",
+        geography="US",
+    )
+    assert result["keywords"] == 1
+    assert result["observations"] == 2
+    bundle = database.get_keyword_evidence("teacher mug")
+    observations = {row["metric"]: row for row in bundle["observations"]}
+    assert observations["searches"]["value"] == 120
+    assert observations["searches"]["period_start"] == "2026-08-20"
+    assert observations["listing_count"]["source"] == "etsy_marketplace_insights"
+    assert bundle["collection_runs"][0]["durable_sync_status"] == "not_configured"
+
+
+def test_google_trends_import_keeps_every_dated_point(database):
+    from services.evidence_import_service import import_evidence
+
+    result = import_evidence(
+        source="google_trends",
+        geography="US",
+        text="Category: All categories\n\nWeek,teacher mug\n2026-09-01,32\n2026-09-08,47",
+    )
+    assert result["observations"] == 2
+    bundle = database.get_keyword_evidence("teacher mug")
+    assert [row["value"] for row in bundle["trend_points"]] == [47, 32]
+    assert {row["geography"] for row in bundle["trend_points"]} == {"US"}
+
+
+def test_scan_preserves_suggestion_trend_and_listing_rows(database):
+    report = {
+        "report_id": "report-one",
+        "generated_at": "2026-09-20T12:00:00Z",
+        "sources_used": ["etsy_open_api", "google_suggest", "google_trends"],
+        "keyword_signals": [
+            {
+                "keyword": "custom teacher mug",
+                "source": "google_suggest",
+                "query": "teacher mug",
+                "position": 2,
+                "observed_at": "2026-09-20T12:00:00Z",
+                "geography": "US",
+            },
+            {
+                "keyword": "teacher mug",
+                "source": "google_trends",
+                "relative_interest": 42,
+                "relative_interest_period": "today 3-m",
+                "observed_at": "2026-09-20T12:00:00Z",
+                "geography": "US",
+                "time_series": [{"date": "2026-09-01", "value": 38}],
+            },
+        ],
+        "keyword_search_data": [{
+            "keyword": "teacher mug",
+            "total_listing_count": 1500,
+            "sampled_listing_count": 1,
+            "avg_price_usd": 24,
+            "listing_samples": [{
+                "listing_id": "listing-1", "title": "Teacher Mug", "price_usd": 24,
+                "currency_code": "USD", "shop_name": "Test Shop", "position": 1,
+            }],
+        }],
+    }
+    database.save_scan("teacher mug", report)
+    bundle = database.get_keyword_evidence("teacher mug")
+    assert bundle["suggestions"][0]["suggestion"] == "custom teacher mug"
+    assert bundle["trend_points"][0]["value"] == 38
+    assert bundle["listing_snapshots"][0]["currency_code"] == "USD"
+    assert bundle["collection_runs"][0]["status"] == "completed"
+
+
+def test_reddit_adapter_records_exact_query_activity(monkeypatch):
+    from adapters.integrations.reddit import RedditPost
+    from adapters.research.reddit_etsy import RedditEtsyAdapter
+
+    post = RedditPost(
+        post_id="post-1", title="Teacher mug feedback", subreddit="Etsy",
+        score=12, upvote_ratio=0.9, num_comments=4, created_utc=1.0,
+        url="https://example.test", permalink="https://reddit.test/post-1",
+        selftext="", flair="", is_self=True,
+    )
+    client = Mock()
+    client.search_subreddit.side_effect = lambda **kwargs: [post] if kwargs["subreddit"] == "Etsy" else []
+    adapter = RedditEtsyAdapter(subreddits=["Etsy", "EtsySellers"])
+    monkeypatch.setattr(adapter, "is_configured", lambda: True)
+    monkeypatch.setattr(adapter, "_get_client", lambda: client)
+
+    signal = adapter.search("teacher mug")[0]
+    assert signal.metadata["query"] == "teacher mug"
+    assert signal.metadata["observations"][0] == {"metric": "posts_returned", "value": 1, "unit": "count"}
+    assert signal.metadata["posts"][0]["post_id"] == "post-1"
 
 
 def test_local_origin_cannot_bypass_tunnel_auth(monkeypatch):
