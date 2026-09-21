@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
 import BrandLogo from '../components/BrandLogo'
 
-const WEBSITE_URL = 'https://etsy-niches.netlify.app/api-application'
-const CALLBACK_URL = 'https://etsy-niches.netlify.app/auth/etsy'
+const WEBSITE_URL = 'https://etgen.netlify.app/api-application'
+const CALLBACK_URL = 'https://etgen.netlify.app/auth/etsy'
 
 const SCREENSHOTS = [
   {
