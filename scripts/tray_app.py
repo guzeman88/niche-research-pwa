@@ -10,7 +10,7 @@ import json
 PWA_DIR = Path(__file__).resolve().parents[1]
 BACKEND = PWA_DIR / "backend"
 LOG_FILE = PWA_DIR / "scanner.log"
-PWA_URL = "https://etsy-niches.netlify.app"
+PWA_URL = "https://etgen.netlify.app"
 BACKEND_PORT = int(os.environ.get("NICHE_BACKEND_PORT", "8001"))
 BACKEND_URL = f"http://localhost:{BACKEND_PORT}"
 

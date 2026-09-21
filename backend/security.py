@@ -13,7 +13,7 @@ from starlette.responses import JSONResponse
 
 def allowed_origins() -> list[str]:
     return [value.strip().rstrip("/") for value in os.getenv(
-        "PIPELINE_ALLOWED_ORIGINS", "https://etsy-niches.netlify.app"
+        "PIPELINE_ALLOWED_ORIGINS", "https://etgen.netlify.app"
     ).split(",") if value.strip()]
 
 
