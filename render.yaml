@@ -32,3 +32,9 @@ services:
         value: 0
       - key: EXTERNAL_DISCOVERY_INTERVAL_HOURS
         value: 24
+      - key: GITHUB_HEARTBEAT_AUDIENCE
+        value: etgen-evidence-collector
+      - key: GITHUB_HEARTBEAT_REPOSITORY
+        value: guzeman88/niche-research-pwa
+      - key: GITHUB_HEARTBEAT_WORKFLOW_REF
+        value: guzeman88/niche-research-pwa/.github/workflows/keepalive.yml@refs/heads/main

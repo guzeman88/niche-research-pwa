@@ -5,8 +5,8 @@ from starlette.requests import Request
 import security
 
 
-def request(headers=()):
-    return Request({"type": "http", "method": "POST", "scheme": "http", "path": "/api/settings",
+def request(headers=(), path="/api/settings"):
+    return Request({"type": "http", "method": "POST", "scheme": "http", "path": path,
         "server": ("127.0.0.1", 8001), "client": ("127.0.0.1", 5000),
         "query_string": b"", "headers": [(b"host", b"127.0.0.1:8001"), *headers]})
 
@@ -33,3 +33,38 @@ def test_account_authorization_uses_verified_user_and_rls_profile(monkeypatch, r
     monkeypatch.setattr(security.httpx, "AsyncClient", lambda **kwargs: original(
         transport=httpx.MockTransport(respond), **kwargs))
     assert asyncio.run(security.authenticated_administrator(request([(b"authorization", b"Bearer test")]))) is expected
+
+
+def test_github_heartbeat_identity_is_exact_and_scheduler_scoped(monkeypatch):
+    valid = {
+        "repository": "guzeman88/niche-research-pwa",
+        "workflow_ref": "guzeman88/niche-research-pwa/.github/workflows/keepalive.yml@refs/heads/main",
+        "ref": "refs/heads/main",
+        "event_name": "schedule",
+    }
+
+    async def claims(_token):
+        return valid
+
+    monkeypatch.setattr(security, "_github_oidc_claims", claims)
+    authorized = request([(b"authorization", b"Bearer signed-token")], "/api/scheduler/start")
+    wrong_path = request([(b"authorization", b"Bearer signed-token")], "/api/evidence/import")
+    assert asyncio.run(security.github_heartbeat_authorized(authorized))
+    assert not asyncio.run(security.github_heartbeat_authorized(wrong_path))
+
+
+@pytest.mark.parametrize("claim,value", [
+    ("repository", "someone/else"),
+    ("workflow_ref", "guzeman88/niche-research-pwa/.github/workflows/other.yml@refs/heads/main"),
+    ("ref", "refs/heads/feature"),
+    ("event_name", "pull_request"),
+])
+def test_github_heartbeat_rejects_wrong_identity_claim(monkeypatch, claim, value):
+    candidate = {
+        "repository": "guzeman88/niche-research-pwa",
+        "workflow_ref": "guzeman88/niche-research-pwa/.github/workflows/keepalive.yml@refs/heads/main",
+        "ref": "refs/heads/main",
+        "event_name": "workflow_dispatch",
+    }
+    candidate[claim] = value
+    assert not security._github_heartbeat_claims_allowed(candidate)
