@@ -3,6 +3,10 @@ name: Deploy Render Backend
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -11,7 +15,6 @@ jobs:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
       RENDER_SERVICE_URL: https://niche-research-api-kqlt.onrender.com
-      PIPELINE_API_TOKEN: ${{ secrets.PIPELINE_API_TOKEN }}
     steps:
       - name: Record current backend process
         id: previous_backend
@@ -191,25 +194,51 @@ jobs:
           echo "Timed out waiting for Render to replace the previous backend process."
           exit 1
 
+      - name: Request short-lived GitHub identity
+        id: oidc
+        run: |
+          set -euo pipefail
+          response=$(curl -fsS --max-time 20 \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=etgen-evidence-collector")
+          token=$(jq -er '.value' <<< "$response")
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Validate issued identity scope
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          node <<'NODE'
+          const claims = JSON.parse(Buffer.from(process.env.GITHUB_OIDC_TOKEN.split('.')[1], 'base64url'))
+          const expected = {
+            iss: 'https://token.actions.githubusercontent.com',
+            aud: 'etgen-evidence-collector',
+            repository: 'guzeman88/niche-research-pwa',
+            workflow_ref: 'guzeman88/niche-research-pwa/.github/workflows/deploy-backend.yml@refs/heads/main',
+            ref: 'refs/heads/main',
+            event_name: 'workflow_dispatch',
+          }
+          for (const [name, value] of Object.entries(expected)) {
+            if (claims[name] !== value) throw new Error(`Unexpected ${name}: ${claims[name] ?? 'missing'}`)
+          }
+          NODE
+
       - name: Verify backend health and scheduler
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
           curl -i -fsS "$RENDER_SERVICE_URL/api/health"
           curl -i -fsS "$RENDER_SERVICE_URL/api/stats" | tee stats.raw
           sed -n '/^{/,$p' stats.raw > stats.json
           node -e "const s=require('./stats.json'); if ((s.total_seeds || 0) < 13000) throw new Error('Backend has fewer than 13000 keywords')"
-          if [ -n "$PIPELINE_API_TOKEN" ]; then
-            curl -fsS --max-time 45 \
-              --request POST \
-              --url "$RENDER_SERVICE_URL/api/scheduler/start" \
-              --header "Authorization: Bearer $PIPELINE_API_TOKEN" \
-              --header 'Content-Type: application/json' \
-              --data '{"mode":"continuous","batch_size":5}' \
-              --output scheduler.json
-            cat scheduler.json
-            node -e "const s=require('./scheduler.json'); if (!s.running || s.paused || s.fatal_error) throw new Error(JSON.stringify(s))"
-          else
-            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$RENDER_SERVICE_URL/api/scheduler/status")
-            test "$STATUS" = "401"
-            echo "Private scheduler endpoint requires operator authentication."
-          fi
+          curl -fsS --max-time 45 \
+            --request POST \
+            --url "$RENDER_SERVICE_URL/api/scheduler/start" \
+            --header "Authorization: Bearer $GITHUB_OIDC_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data '{"mode":"continuous","batch_size":5}' \
+            --output scheduler.json
+          cat scheduler.json
+          node -e "const s=require('./scheduler.json'); if (!s.running || s.paused || s.fatal_error) throw new Error(JSON.stringify(s))"
