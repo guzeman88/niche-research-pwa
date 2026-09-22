@@ -1,7 +1,9 @@
-"""
-Marmalead SEO research adapter — requires MARMALEAD_API_KEY.
-Marmalead provides Etsy keyword engagement, search frequency, and competition.
-Docs: https://marmalead.com/api
+"""Optional Marmalead private-API adapter.
+
+Marmalead does not document a generally available public API. EtGen therefore
+does not guess an endpoint. Automatic collection is enabled only when the
+provider has issued both an endpoint and a key; normal exports belong in the
+structured evidence importer.
 """
 
 import os
@@ -9,14 +11,12 @@ import httpx
 from adapters.base.research import BaseResearchAdapter, NicheSignal
 
 
-_BASE_URL = "https://api.marmalead.com/v1"
-
-
 class MarmaleadAdapter(BaseResearchAdapter):
-    """Fetches Etsy keyword data from Marmalead API."""
+    """Fetch Etsy keyword data from an explicitly granted private API."""
 
     def __init__(self):
         self._api_key = os.getenv("MARMALEAD_API_KEY", "")
+        self._api_url = os.getenv("MARMALEAD_API_URL", "").strip().rstrip("/")
         self._client = httpx.Client(timeout=20)
 
     @property
@@ -24,7 +24,11 @@ class MarmaleadAdapter(BaseResearchAdapter):
         return "marmalead"
 
     def is_configured(self) -> bool:
-        return bool(self._api_key and not self._api_key.startswith("your_"))
+        return bool(
+            self._api_url.startswith("https://")
+            and self._api_key
+            and not self._api_key.startswith("your_")
+        )
 
     def search(self, keyword: str, category: str = "") -> list[NicheSignal]:
         return self.bulk_search([keyword])
@@ -36,7 +40,7 @@ class MarmaleadAdapter(BaseResearchAdapter):
         for kw in keywords:
             try:
                 resp = self._client.get(
-                    f"{_BASE_URL}/keywords",
+                    self._api_url,
                     params={"q": kw},
                     headers={"Authorization": f"Bearer {self._api_key}"},
                 )

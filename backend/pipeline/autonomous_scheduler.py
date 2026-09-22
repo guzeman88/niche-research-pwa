@@ -86,6 +86,7 @@ class AutonomousScheduler:
         self._current_keyword: Optional[str] = None
         self._run_id: Optional[int] = None
         self._started_at: Optional[str] = None
+        self._last_external_discovery_at: Optional[str] = None
         self._errors: list[str] = []
 
         kdb.init_db()
@@ -490,8 +491,54 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
         from pipeline.stages.keyword_scanner import SeedDiscovery
         disc = SeedDiscovery(log_fn=self._log)
         llm_enabled = os.environ.get("ALLOW_LLM_SEED_DISCOVERY", "0").strip().lower() in {"1", "true", "yes"}
-        result = disc.run_all(llm=llm_enabled, llm_count=20)
-        return result.get("total_added", 0)
+        result = disc.run_all(
+            llm=llm_enabled,
+            llm_count=20,
+            # Etsy does not provide a supported trending-page scraper. Listing
+            # collection remains on the approved Open API path.
+            etsy_trending=False,
+        )
+        return result.get("total_added", 0) + self._run_external_discovery()
+
+    def _run_external_discovery(self) -> int:
+        """Collect source-native discovery feeds on their own slower cadence."""
+        interval_hours = max(1, int(os.environ.get("EXTERNAL_DISCOVERY_INTERVAL_HOURS", "24")))
+        now = datetime.utcnow()
+        if self._last_external_discovery_at:
+            try:
+                last = datetime.fromisoformat(self._last_external_discovery_at)
+                if (now - last).total_seconds() < interval_hours * 3600:
+                    return 0
+            except ValueError:
+                pass
+
+        try:
+            from adapters.research.pinterest_trends import PinterestTrendsAdapter
+            adapter = PinterestTrendsAdapter()
+            if not adapter.is_configured():
+                return 0
+            signals = adapter.discover()
+            added = 0
+            for signal in signals:
+                if not signal.keyword:
+                    continue
+                if kdb.add_seed(signal.keyword, domain="visual_trends", source="pinterest_trends"):
+                    added += 1
+                report = {
+                    "report_id": f"pinterest_{now.strftime('%Y%m%d%H%M%S')}_{signal.position or 0}",
+                    "generated_at": signal.observed_at or now.isoformat(),
+                    "sources_used": ["pinterest_trends"],
+                    "keyword_signals": [vars(signal)],
+                    "keyword_search_data": [],
+                }
+                kdb.save_scan(signal.keyword, report)
+            self._last_external_discovery_at = now.isoformat()
+            self._save_state(running=self.is_running(), paused=self.is_paused())
+            self._log(f"[scheduler] Pinterest discovery recorded {len(signals)} trends and {added} new seeds")
+            return added
+        except Exception as exc:
+            self._log(f"[scheduler] Pinterest discovery failed: {exc}")
+            return 0
 
     def _interruptible_sleep(self, seconds: float) -> None:
         """Sleep that wakes immediately on stop signal."""
@@ -510,6 +557,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
             "skip_scraper":     self._skip_scraper,
             "keywords_scanned": self._keywords_scanned,
             "new_seeds_found":  self._new_seeds_found,
+            "last_external_discovery_at": self._last_external_discovery_at,
             "last_updated":     datetime.utcnow().isoformat(),
         }
         temporary = STATE_FILE.with_name(f".{STATE_FILE.name}.{uuid.uuid4().hex}.tmp")
@@ -523,6 +571,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                 self._mode = state.get("mode", self._mode)
                 self._batch_size = state.get("batch_size", self._batch_size)
                 self._stale_days = state.get("stale_days", self._stale_days)
+                self._last_external_discovery_at = state.get("last_external_discovery_at")
             except Exception:
                 pass
 
@@ -563,6 +612,9 @@ def _is_positive_observation(value) -> bool:
 
 
 def _scheduler_research_adapters() -> list[str]:
-    raw = os.environ.get("SCHEDULER_RESEARCH_ADAPTERS", "etsy_open_api,google_suggest")
+    raw = os.environ.get(
+        "SCHEDULER_RESEARCH_ADAPTERS",
+        "etsy_open_api,google_suggest,google_trends,pinterest_trends,reddit_etsy",
+    )
     names = [name.strip() for name in raw.split(",") if name.strip()]
-    return names or ["etsy_open_api", "google_suggest"]
+    return names or ["etsy_open_api", "google_suggest", "google_trends"]

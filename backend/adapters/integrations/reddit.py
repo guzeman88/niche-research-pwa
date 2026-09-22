@@ -4,6 +4,7 @@ Used for niche research signal collection — surfaces community topics,
 language patterns, and engagement signals from relevant subreddits.
 
 Requires in .env:
+  REDDIT_DATA_API_APPROVED — explicit confirmation Reddit approved this use
   REDDIT_CLIENT_ID     — app client ID from reddit.com/prefs/apps
   REDDIT_CLIENT_SECRET — app client secret
   REDDIT_USER_AGENT    — any descriptive string, e.g. "etsy-pipeline/1.0"

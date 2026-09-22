@@ -257,6 +257,80 @@ def test_google_trends_import_keeps_every_dated_point(database):
     assert {row["geography"] for row in bundle["trend_points"]} == {"US"}
 
 
+def test_google_keyword_planner_import_requires_context_and_preserves_metrics(database):
+    from services.evidence_import_service import import_evidence
+
+    text = (
+        "Keyword,Avg. monthly searches,Competition (indexed value),"
+        "Top of page bid (low range),Top of page bid (high range)\n"
+        "teacher mug,1200,34,0.52,1.84"
+    )
+    with pytest.raises(ValueError, match="period_start"):
+        import_evidence(source="google_keyword_planner", text=text)
+
+    result = import_evidence(
+        source="google_keyword_planner",
+        text=text,
+        period_start="2025-09-01",
+        period_end="2026-08-31",
+        geography="US",
+        currency_code="USD",
+    )
+    assert result["observations"] == 4
+    observations = {
+        row["metric"]: row for row in database.get_keyword_evidence("teacher mug")["observations"]
+    }
+    assert observations["monthly_searches"]["value"] == 1200
+    assert observations["provider_competition"]["value"] == 34
+    assert observations["top_of_page_bid_low"]["unit"] == "usd"
+    assert observations["top_of_page_bid_high"]["geography"] == "US"
+
+
+def test_marmalead_import_keeps_provider_values(database):
+    from services.evidence_import_service import import_evidence
+
+    result = import_evidence(
+        source="marmalead",
+        text="Keyword,Search Volume,Engagement,Competition\nteacher mug,875,62,48",
+        geography="US",
+    )
+    assert result["observations"] == 3
+    observations = {
+        row["metric"]: row for row in database.get_keyword_evidence("teacher mug")["observations"]
+    }
+    assert observations["monthly_searches"]["source"] == "marmalead"
+    assert observations["provider_engagement"]["value"] == 62
+
+
+def test_pinterest_trends_uses_documented_ranked_endpoint(monkeypatch):
+    from adapters.research.pinterest_trends import PinterestTrendsAdapter, _CACHE
+
+    monkeypatch.setenv("PINTEREST_ACCESS_TOKEN", "pina_test")
+    monkeypatch.setenv("PINTEREST_TRENDS_REGION", "US")
+    monkeypatch.setenv("PINTEREST_TREND_TYPE", "growing")
+    _CACHE.clear()
+    adapter = PinterestTrendsAdapter()
+    response = Mock()
+    response.status_code = 200
+    response.raise_for_status = Mock()
+    response.json.return_value = {
+        "trends": [{
+            "keyword": "Teacher Mug",
+            "pct_growth_wow": 25,
+            "pct_growth_mom": 80,
+            "time_series": {"2026-09-01": 20, "2026-09-08": 40},
+        }]
+    }
+    adapter._client.get = Mock(return_value=response)
+
+    signal = adapter.search("teacher mug")[0]
+    request_url = adapter._client.get.call_args.args[0]
+    assert request_url.endswith("/trends/keywords/US/top/growing")
+    assert signal.relative_interest == 30
+    assert signal.metadata["series_normalization"] == "independent_0_100"
+    assert signal.time_series[1]["date"] == "2026-09-08"
+
+
 def test_scan_preserves_suggestion_trend_and_listing_rows(database):
     report = {
         "report_id": "report-one",

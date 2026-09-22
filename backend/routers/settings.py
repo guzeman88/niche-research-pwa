@@ -79,11 +79,15 @@ def adapter_status():
         "erank": {
             "loader": lambda: __import__("adapters.research.erank", fromlist=["ERankAdapter"]).ERankAdapter(),
             "requires_credentials": True,
+            "integration_mode": "import_or_private_api",
+            "status_reason": "No generally available public API is documented; use an export unless eRank grants a private endpoint.",
             "evidence": ["provider search volume", "provider competition", "provider trend"],
         },
         "marmalead": {
             "loader": lambda: __import__("adapters.research.marmalead", fromlist=["MarmaleadAdapter"]).MarmaleadAdapter(),
             "requires_credentials": True,
+            "integration_mode": "import_or_private_api",
+            "status_reason": "No generally available public API is documented; use an export unless Marmalead grants a private endpoint.",
             "evidence": ["provider search volume", "provider competition", "provider trend"],
         },
         "google_trends": {
@@ -94,11 +98,17 @@ def adapter_status():
         "pinterest_trends": {
             "loader": lambda: __import__("adapters.research.pinterest_trends", fromlist=["PinterestTrendsAdapter"]).PinterestTrendsAdapter(),
             "requires_credentials": True,
+            "approval_required": True,
+            "integration_mode": "approved_api",
+            "status_reason": "Requires a Pinterest business app approved for Trends API access.",
             "evidence": ["relative trend interest"],
         },
         "reddit_etsy": {
             "loader": lambda: __import__("adapters.research.reddit_etsy", fromlist=["RedditEtsyAdapter"]).RedditEtsyAdapter(),
             "requires_credentials": True,
+            "approval_required": True,
+            "integration_mode": "approved_api",
+            "status_reason": "Commercial Data API collection requires Reddit approval in addition to credentials.",
             "evidence": ["dated matching posts", "post scores", "comment counts", "source records"],
         },
     }
@@ -110,6 +120,9 @@ def adapter_status():
                 "configured": bool(adapter.is_configured()),
                 "requires_credentials": definition["requires_credentials"],
                 "requires_configuration": definition.get("requires_configuration", False),
+                "approval_required": definition.get("approval_required", False),
+                "integration_mode": definition.get("integration_mode", "automatic"),
+                "status_reason": definition.get("status_reason"),
                 "evidence": definition["evidence"],
             }
         except Exception as e:
@@ -118,6 +131,9 @@ def adapter_status():
                 "configured": False,
                 "requires_credentials": definition["requires_credentials"],
                 "requires_configuration": definition.get("requires_configuration", False),
+                "approval_required": definition.get("approval_required", False),
+                "integration_mode": definition.get("integration_mode", "automatic"),
+                "status_reason": definition.get("status_reason"),
                 "evidence": definition["evidence"],
                 "error": str(e),
             }

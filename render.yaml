@@ -18,3 +18,17 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: AUTO_START_SCHEDULER
+        value: 1
+      - key: SCHEDULER_MODE
+        value: continuous
+      - key: SCHEDULER_BATCH_SIZE
+        value: 5
+      - key: SCHEDULER_RESEARCH_ADAPTERS
+        value: etsy_open_api,google_suggest,google_trends,pinterest_trends,reddit_etsy
+      - key: SCHEDULER_INCLUDE_SEASONALITY
+        value: 0
+      - key: SCHEDULER_ALLOW_LLM_SYNTHESIS
+        value: 0
+      - key: EXTERNAL_DISCOVERY_INTERVAL_HOURS
+        value: 24
