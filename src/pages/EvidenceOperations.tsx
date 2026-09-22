@@ -47,7 +47,7 @@ interface EvidenceCoverage {
   }
 }
 
-type ImportSource = 'etsy_marketplace_insights' | 'erank' | 'marmalead' | 'etsy_shop_stats' | 'google_keyword_planner' | 'google_trends'
+type ImportSource = 'etsy_marketplace_insights' | 'erank' | 'marmalead' | 'etsy_shop_stats' | 'google_keyword_planner' | 'google_trends' | 'pinterest_trends'
 
 const MARKET_ADAPTERS = [
   'google_suggest',
@@ -68,6 +68,7 @@ const IMPORT_SOURCES: Array<{ value: ImportSource; label: string; help: string }
   { value: 'etsy_shop_stats', label: 'Etsy Shop Stats', help: 'Search terms tied to your own visits, views, orders, and revenue.' },
   { value: 'google_keyword_planner', label: 'Google Keyword Planner', help: 'Google monthly searches, competition, and optional bid ranges with an explicit geography and reporting period.' },
   { value: 'google_trends', label: 'Google Trends CSV', help: 'The complete dated relative-interest series, not a single average.' },
+  { value: 'pinterest_trends', label: 'Pinterest Trends CSV', help: 'Official ranked, growth, normalized-volume, and dated trend data. Capped values stay explicit bounds.' },
 ]
 
 const MONEY_FIELDS = [
@@ -328,7 +329,7 @@ export default function EvidenceOperations() {
                 <p className="text-[11px] leading-relaxed text-surface-300">{IMPORT_SOURCES.find(source => source.value === importSource)?.help}</p>
                 <Field label="Import name (optional)"><input className="input" value={importName} onChange={event => setImportName(event.target.value)} placeholder="Export filename or note" /></Field>
                 {(importSource === 'etsy_marketplace_insights' || importSource === 'etsy_shop_stats' || importSource === 'google_keyword_planner') && <div className="grid grid-cols-2 gap-3"><Field label="Period start"><input className="input" type="date" value={importPeriodStart} onChange={event => setImportPeriodStart(event.target.value)} /></Field><Field label="Period end"><input className="input" type="date" value={importPeriodEnd} onChange={event => setImportPeriodEnd(event.target.value)} /></Field></div>}
-                {(importSource === 'google_trends' || importSource === 'google_keyword_planner' || importSource === 'etsy_marketplace_insights' || importSource === 'erank' || importSource === 'marmalead') && <Field label="Geography (when shown)"><input className="input" value={importGeography} onChange={event => setImportGeography(event.target.value)} placeholder="US, worldwide, or export value" /></Field>}
+                {(importSource === 'google_trends' || importSource === 'pinterest_trends' || importSource === 'google_keyword_planner' || importSource === 'etsy_marketplace_insights' || importSource === 'erank' || importSource === 'marmalead') && <Field label="Geography (when shown)"><input className="input" value={importGeography} onChange={event => setImportGeography(event.target.value)} placeholder="US, worldwide, or export value" /></Field>}
                 {(importSource === 'etsy_shop_stats' || importSource === 'google_keyword_planner') && <Field label="Currency (when money columns are included)"><input className="input uppercase" maxLength={3} value={importCurrency} onChange={event => setImportCurrency(event.target.value)} placeholder="USD" /></Field>}
               </div>
               <div>

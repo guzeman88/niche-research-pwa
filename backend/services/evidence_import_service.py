@@ -10,6 +10,7 @@ import io
 import math
 import re
 from datetime import datetime, timezone
+from urllib.parse import parse_qs, urlparse
 
 from pipeline import keyword_database as kdb
 
@@ -21,10 +22,12 @@ SUPPORTED_SOURCES = {
     "etsy_shop_stats",
     "google_keyword_planner",
     "google_trends",
+    "pinterest_trends",
 }
 
 KEYWORD_HEADERS = {"keyword", "keywords", "search term", "search terms", "query", "term", "phrase"}
 SEARCH_HEADERS = {"searches", "etsy searches", "keyword searches", "search volume", "avg monthly searches", "avg searches", "average searches", "monthly searches", "volume"}
+CURRENT_SEARCH_HEADERS = {"current searches", "current month searches", "current period searches"}
 LISTING_HEADERS = {"listings", "number of listings", "competing listings", "listing count", "competition listings", "etsy competition", "results"}
 CLICK_HEADERS = {"clicks", "avg clicks", "average clicks"}
 CTR_HEADERS = {"ctr", "ctr percent", "click through rate", "click-through rate"}
@@ -81,6 +84,11 @@ def import_evidence(*, source: str, text: str, name: str | None = None,
                 text=text, source=clean_source, collected_at=timestamp,
                 geography=geography or "", run_id=run_id,
             )
+        elif clean_source == "pinterest_trends":
+            result = _import_pinterest_trends(
+                text=text, source=clean_source, collected_at=timestamp,
+                geography=geography, run_id=run_id,
+            )
         else:
             result = _import_keyword_table(
                 text=text, source=clean_source, observed_at=timestamp,
@@ -121,6 +129,7 @@ def _import_keyword_table(*, text: str, source: str, observed_at: str,
     skipped = 0
     warnings: list[str] = []
     indexes = {
+        "current_searches": _find_header(headers, CURRENT_SEARCH_HEADERS),
         "searches": _find_header(headers, SEARCH_HEADERS),
         "listings": _find_header(headers, LISTING_HEADERS),
         "clicks": _find_header(headers, CLICK_HEADERS),
@@ -152,24 +161,33 @@ def _import_keyword_table(*, text: str, source: str, observed_at: str,
         row_observations = 0
         for definition in definitions:
             raw = _cell(row, definition["index"])
-            value = _number(raw)
+            value, bound = _bounded_number(raw)
             if value is None:
                 continue
             if value < 0:
                 warnings.append(f"row {row_number}: negative {definition['metric']} skipped")
                 continue
+            metric = definition["metric"]
+            unit = definition["unit"]
+            if bound:
+                metric = f"{metric}_{bound}_bound"
+                unit = f"{unit}_{bound}_bound"
             kdb.record_keyword_observation(
                 keyword=keyword,
                 source=source,
-                metric=definition["metric"],
+                metric=metric,
                 value=value,
-                unit=definition["unit"],
+                unit=unit,
                 observed_at=observed_at,
                 geography=geography,
-                period_start=period_start,
-                period_end=period_end,
+                period_start=period_start if definition.get("uses_period", True) else None,
+                period_end=period_end if definition.get("uses_period", True) else None,
                 collection_run_id=run_id,
-                metadata={"import_header": headers[definition["index"]], "row": row_number},
+                metadata={
+                    "import_header": headers[definition["index"]],
+                    "row": row_number,
+                    **({"bound": bound, "raw_value": raw.strip()} if bound else {}),
+                },
             )
             row_observations += 1
         if row_observations:
@@ -190,20 +208,24 @@ def _definitions_for_source(source: str, indexes: dict[str, int | None],
                             currency_code: str | None) -> list[dict]:
     definitions: list[dict] = []
 
-    def add(key: str, metric: str, unit: str) -> None:
+    def add(key: str, metric: str, unit: str, *, uses_period: bool = True) -> None:
         index = indexes.get(key)
         if index is not None:
-            definitions.append({"index": index, "metric": metric, "unit": unit})
+            definitions.append({
+                "index": index, "metric": metric, "unit": unit,
+                "uses_period": uses_period,
+            })
 
     if source == "etsy_marketplace_insights":
         add("searches", "searches", "searches_per_period")
         add("listings", "listing_count", "count")
     elif source == "erank":
-        add("searches", "monthly_searches", "searches_per_month")
-        add("clicks", "monthly_clicks", "clicks_per_month")
-        add("ctr", "click_through_rate", "percent")
-        add("listings", "competition_listings", "count")
-        add("competition", "provider_competition", "provider_value")
+        add("current_searches", "current_period_searches", "searches_per_period")
+        add("searches", "monthly_searches", "searches_per_month", uses_period=False)
+        add("clicks", "monthly_clicks", "clicks_per_month", uses_period=False)
+        add("ctr", "click_through_rate", "percent", uses_period=False)
+        add("listings", "competition_listings", "count", uses_period=False)
+        add("competition", "provider_competition", "provider_value", uses_period=False)
     elif source == "marmalead":
         add("searches", "monthly_searches", "searches_per_month")
         add("engagement", "provider_engagement", "provider_value")
@@ -280,6 +302,138 @@ def _import_google_trends(*, text: str, source: str, collected_at: str,
     }
 
 
+def _import_pinterest_trends(*, text: str, source: str, collected_at: str,
+                             geography: str | None, run_id: str) -> dict:
+    """Import Pinterest's official Trends CSV without inventing absolute volume."""
+    rows = _read_rows(text)
+    header_row = next((
+        index for index, row in enumerate(rows)
+        if len(row) > 1 and _normalize(row[0]) == "rank" and _normalize(row[1]) == "trend"
+    ), None)
+    if header_row is None:
+        raise ValueError("no Pinterest Trends Rank,Trend header was found")
+
+    export_url = next((cell.strip() for row in rows[:header_row] for cell in row
+                       if "trends.pinterest.com/search/" in cell), "")
+    filters = {
+        _normalize(row[0]): row[1].strip()
+        for row in rows[:header_row] if len(row) > 1 and row[0].strip() and row[1].strip()
+    }
+    parsed_geo = ""
+    if export_url:
+        parsed_geo = (parse_qs(urlparse(export_url.replace("&amp;", "&")).query)
+                      .get("country", [""])[0].strip())
+    report_geo = (geography or parsed_geo).strip()
+    if not report_geo:
+        raise ValueError("Pinterest Trends imports require a geography or an official export URL with country")
+
+    raw_headers = [cell.strip() for cell in rows[header_row]]
+    headers = [_normalize(cell) for cell in raw_headers]
+    indexes = {
+        "rank": _find_header(headers, {"rank"}),
+        "trend": _find_header(headers, {"trend"}),
+        "normalized_volume": _find_header(headers, {"normalized volume"}),
+        "weekly": _find_header(headers, {"weekly change"}),
+        "monthly": _find_header(headers, {"monthly change"}),
+        "yearly": _find_header(headers, {"yearly change"}),
+    }
+    date_columns = [
+        (index, header) for index, header in enumerate(raw_headers)
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", header)
+    ]
+    if not date_columns:
+        raise ValueError("Pinterest Trends import has no dated trend columns")
+
+    trend_type = filters.get("trend type", "")
+    date_range = filters.get("date range", "")
+    period_start, period_end = date_columns[0][1], date_columns[-1][1]
+    observations = 0
+    imported_keywords: set[str] = set()
+    skipped = 0
+    warnings: list[str] = []
+
+    for row_number, row in enumerate(rows[header_row + 1:], start=header_row + 2):
+        keyword = _cell(row, indexes["trend"]).strip().lower()
+        if not keyword:
+            skipped += 1
+            continue
+        metadata = {
+            "export_url": export_url or None,
+            "trend_type": trend_type or None,
+            "date_range": date_range or None,
+            "row": row_number,
+            "series_normalization": "provider_normalized_0_100",
+        }
+        row_observations = 0
+        for key, metric, unit in (
+            ("rank", "provider_rank", "rank"),
+            ("normalized_volume", "normalized_volume", "relative_interest_index"),
+        ):
+            value = _number(_cell(row, indexes[key]))
+            if value is None:
+                continue
+            if value < 0:
+                warnings.append(f"row {row_number}: negative {metric} skipped")
+                continue
+            kdb.record_keyword_observation(
+                keyword=keyword, source=source, metric=metric, value=value, unit=unit,
+                observed_at=collected_at, geography=report_geo,
+                period_start=period_start, period_end=period_end,
+                collection_run_id=run_id,
+                metadata={**metadata, "import_header": raw_headers[indexes[key]]},
+            )
+            row_observations += 1
+
+        for key, metric in (
+            ("weekly", "growth_week_over_week"),
+            ("monthly", "growth_month_over_month"),
+            ("yearly", "growth_year_over_year"),
+        ):
+            raw = _cell(row, indexes[key])
+            value, bound = _bounded_number(raw)
+            if value is None:
+                continue
+            stored_metric = f"{metric}_{bound}_bound" if bound else metric
+            unit = f"percent_{bound}_bound" if bound else "percent"
+            kdb.record_keyword_observation(
+                keyword=keyword, source=source, metric=stored_metric, value=value, unit=unit,
+                observed_at=collected_at, geography=report_geo,
+                period_start=period_start, period_end=period_end,
+                collection_run_id=run_id,
+                metadata={
+                    **metadata, "import_header": raw_headers[indexes[key]],
+                    **({"bound": bound, "raw_value": raw.strip()} if bound else {}),
+                },
+            )
+            row_observations += 1
+
+        points = []
+        for column, point_at in date_columns:
+            value = _number(_cell(row, column))
+            if value is not None:
+                points.append({
+                    "date": point_at, "value": value,
+                    "unit": "relative_interest_index",
+                })
+        point_count = kdb.record_keyword_trend_points(
+            keyword, source, points, collected_at=collected_at,
+            geography=report_geo, timeframe=date_range or trend_type or None,
+            collection_run_id=run_id, metadata=metadata,
+        )
+        if row_observations or point_count:
+            imported_keywords.add(keyword)
+            observations += row_observations + point_count
+        else:
+            skipped += 1
+    return {
+        "rows": max(0, len(rows) - header_row - 1),
+        "keywords": len(imported_keywords),
+        "observations": observations,
+        "skipped": skipped,
+        "warnings": warnings[:50],
+    }
+
+
 def _read_rows(text: str) -> list[list[str]]:
     clean = text.replace("\r\n", "\n").replace("\r", "\n").lstrip("\ufeff").strip()
     if not clean:
@@ -319,3 +473,13 @@ def _number(value: str) -> float | None:
     except ValueError:
         return None
     return number if math.isfinite(number) else None
+
+
+def _bounded_number(value: str) -> tuple[float | None, str | None]:
+    clean = value.strip()
+    bound = None
+    if clean.startswith("<"):
+        bound, clean = "upper", clean[1:].strip()
+    elif clean.endswith("+"):
+        bound, clean = "lower", clean[:-1].strip()
+    return _number(clean), bound
