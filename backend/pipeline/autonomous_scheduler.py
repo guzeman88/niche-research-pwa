@@ -87,10 +87,23 @@ class AutonomousScheduler:
         self._run_id: Optional[int] = None
         self._started_at: Optional[str] = None
         self._last_external_discovery_at: Optional[str] = None
+        self._external_discovery_by_source: dict[str, str] = {}
         self._errors: list[str] = []
 
         kdb.init_db()
         kdb.load_seeds_from_library()
+        try:
+            from services.supabase_collection_hydration import hydrate_collection_state
+            hydration = hydrate_collection_state()
+            if hydration.get("error"):
+                self._log(f"[scheduler] Durable queue hydration failed: {hydration['error']}")
+            elif hydration.get("configured"):
+                self._log(
+                    f"[scheduler] Restored {hydration.get('seeds', 0)} seeds and "
+                    f"{hydration.get('states', 0)} collection states from Supabase"
+                )
+        except Exception as exc:
+            self._log(f"[scheduler] Durable queue hydration failed: {exc}")
         self._load_state()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -179,7 +192,7 @@ class AutonomousScheduler:
             "new_seeds_found":  self._new_seeds_found,
             "current_keyword":  self._current_keyword,
             "started_at":       self._started_at,
-            "interval_s":       RATES.get(self._mode, 90),
+            "interval_s":       self._scan_interval_seconds(),
             "errors":           self._errors[-5:],
         }
 
@@ -204,6 +217,10 @@ class AutonomousScheduler:
             if self._stop_event.is_set():
                 break
 
+            # Discovery feeds have their own provider-derived cadence and must
+            # not depend on reaching an arbitrary number of keyword scans.
+            self._run_external_discovery()
+
             # Periodic seed discovery
             if scans_since_discover >= DISCOVER_EVERY_N_SCANS:
                 self._log("[scheduler] Running seed discovery...")
@@ -226,6 +243,8 @@ class AutonomousScheduler:
                     self._log(f"[scheduler] Discovery failed: {e}")
                     self._interruptible_sleep(300)
                 continue
+
+            self._prefetch_batch_sources(keywords)
 
             for kw in keywords:
                 if self._stop_event.is_set():
@@ -266,7 +285,7 @@ class AutonomousScheduler:
 
                 # Rate-limited sleep between keywords
                 if not self._stop_event.is_set():
-                    self._interruptible_sleep(RATES.get(self._mode, 90))
+                    self._interruptible_sleep(self._scan_interval_seconds())
 
         self._log("[scheduler] Loop ended")
 
@@ -275,7 +294,6 @@ class AutonomousScheduler:
         from pipeline.stages.niche_research import run as research_run
         from pipeline.stages.keyword_scanner import (
             _extract_competitor_tags,
-            _extract_trends_related,
         )
 
         self._log(f"[scheduler] Scanning: {keyword}")
@@ -333,37 +351,40 @@ class AutonomousScheduler:
             except Exception as e:
                 self._log(f"[scheduler]   Competitor phrase expansion failed: {e}")
 
-        # Google Suggest expansion — real buyer search queries, free & unblocked
-        try:
-            from adapters.research.google_suggest import GoogleSuggestAdapter
-            gs = GoogleSuggestAdapter()
-            sigs = gs.search(keyword)
-            gs_kws = self._rank_expansion_candidates(
-                [s.keyword for s in sigs if s.keyword != keyword.lower()],
-                source="expand_google_suggest",
-            )
-            expansion_limit = 14 if has_market_data else 6
-            if gs_kws:
-                added = kdb.record_expansion(keyword, gs_kws[:expansion_limit], "google_suggest", depth + 1)
-                new_seeds_total += added
-                if added:
-                    self._log(f"[scheduler]   +{added} seeds from Google Suggest")
-        except Exception as e:
-            self._log(f"[scheduler]   Google Suggest failed: {e}")
+        # Reuse the Google Suggest evidence already collected in this report.
+        # A second provider request would only duplicate the same query set.
+        suggestion_terms = [
+            signal.get("keyword")
+            for signal in report_dict.get("keyword_signals", [])
+            if signal.get("source") == "google_suggest" and signal.get("keyword")
+        ]
+        gs_kws = self._rank_expansion_candidates(
+            suggestion_terms,
+            source="expand_google_suggest",
+        )
+        expansion_limit = 14 if has_market_data else 6
+        if gs_kws:
+            added = kdb.record_expansion(keyword, gs_kws[:expansion_limit], "google_suggest", depth + 1)
+            new_seeds_total += added
+            if added:
+                self._log(f"[scheduler]   +{added} seeds from Google Suggest")
 
         if has_market_data:
-            try:
-                trends_terms = self._rank_expansion_candidates(
-                    _extract_trends_related(keyword),
-                    source="expand_trends_related",
-                )
-                if trends_terms:
-                    added = kdb.record_expansion(keyword, trends_terms[:6], "trends_related", depth + 1)
-                    new_seeds_total += added
-                    if added:
-                        self._log(f"[scheduler]   +{added} seeds from Google Trends related queries")
-            except Exception as e:
-                self._log(f"[scheduler]   Trends related expansion failed: {e}")
+            related_terms: list[str] = []
+            for signal in report_dict.get("keyword_signals", []):
+                if signal.get("source") != "google_trends":
+                    continue
+                metadata = signal.get("metadata") or {}
+                related_terms.extend(metadata.get("related_queries") or [])
+            trends_terms = self._rank_expansion_candidates(
+                related_terms,
+                source="expand_trends_related",
+            )
+            if trends_terms:
+                added = kdb.record_expansion(keyword, trends_terms[:6], "trends_related", depth + 1)
+                new_seeds_total += added
+                if added:
+                    self._log(f"[scheduler]   +{added} seeds from Google Trends related queries")
 
         # LLM-based expansion — fallback for deeper keyword generation
         if os.environ.get("ALLOW_LLM_KEYWORD_EXPANSION", "0").strip().lower() in {"1", "true", "yes"}:
@@ -500,17 +521,41 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
         )
         return result.get("total_added", 0) + self._run_external_discovery()
 
+    def _prefetch_batch_sources(self, keywords: list[str]) -> None:
+        """Use provider batch capacity before processing keywords individually."""
+        if "google_trends" not in _scheduler_research_adapters():
+            return
+        from adapters.research.google_trends import GoogleTrendsAdapter
+        from services.provider_telemetry import record_provider_attempt
+
+        adapter = GoogleTrendsAdapter()
+        started_at = datetime.utcnow()
+        try:
+            count = adapter.prefetch(keywords[:5])
+            record_provider_attempt(
+                provider=adapter.name,
+                operation="batch_prefetch",
+                status="completed" if count else "no_data",
+                started_at=started_at,
+                keyword_count=min(len(keywords), 5),
+                row_count=count,
+                metadata={"batch_capacity": 5},
+            )
+        except Exception as exc:
+            self._log(f"[scheduler] Google Trends batch prefetch failed: {exc}")
+            record_provider_attempt(
+                provider=adapter.name,
+                operation="batch_prefetch",
+                status="failed",
+                started_at=started_at,
+                keyword_count=min(len(keywords), 5),
+                row_count=0,
+                error=str(exc),
+            )
+
     def _run_external_discovery(self) -> int:
-        """Collect source-native discovery feeds on their own slower cadence."""
-        interval_hours = max(1, int(os.environ.get("EXTERNAL_DISCOVERY_INTERVAL_HOURS", "24")))
+        """Collect each source-native discovery feed on its own cache cadence."""
         now = datetime.utcnow()
-        if self._last_external_discovery_at:
-            try:
-                last = datetime.fromisoformat(self._last_external_discovery_at)
-                if (now - last).total_seconds() < interval_hours * 3600:
-                    return 0
-            except ValueError:
-                pass
 
         from adapters.research.google_daily_trends import GoogleDailyTrendsAdapter
         from adapters.research.pinterest_trends import PinterestTrendsAdapter
@@ -522,10 +567,31 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
         total_added = 0
         for adapter_factory, domain in sources:
             adapter = None
+            started_at = datetime.utcnow()
             try:
                 adapter = adapter_factory()
+                interval_seconds = adapter.discovery_interval_seconds()
+                last_value = self._external_discovery_by_source.get(adapter.name)
+                if last_value:
+                    try:
+                        last = datetime.fromisoformat(last_value)
+                        if (now - last).total_seconds() < interval_seconds:
+                            continue
+                    except ValueError:
+                        pass
                 if not adapter.is_configured():
                     self._log(f"[scheduler] {adapter.name} discovery is not configured")
+                    from services.provider_telemetry import record_provider_attempt
+                    record_provider_attempt(
+                        provider=adapter.name,
+                        operation="discovery",
+                        status="not_configured",
+                        started_at=started_at,
+                        keyword_count=0,
+                        row_count=0,
+                        configured=False,
+                    )
+                    self._external_discovery_by_source[adapter.name] = now.isoformat()
                     continue
                 signals = adapter.discover()
                 added = 0
@@ -550,13 +616,49 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                     f"[scheduler] {adapter.name} discovery recorded "
                     f"{len(signals)} trends and {added} new seeds"
                 )
+                from services.provider_telemetry import record_provider_attempt
+                record_provider_attempt(
+                    provider=adapter.name,
+                    operation="discovery",
+                    status="completed" if signals else "no_data",
+                    started_at=started_at,
+                    keyword_count=len(signals),
+                    row_count=len(signals),
+                    metadata={"new_seeds": added, "domain": domain},
+                )
+                self._external_discovery_by_source[adapter.name] = now.isoformat()
             except Exception as exc:
                 name = adapter.name if adapter is not None else adapter_factory.__name__
                 self._log(f"[scheduler] {name} discovery failed: {exc}")
+                from services.provider_telemetry import record_provider_attempt
+                record_provider_attempt(
+                    provider=name,
+                    operation="discovery",
+                    status="failed",
+                    started_at=started_at,
+                    keyword_count=0,
+                    row_count=0,
+                    error=str(exc),
+                )
+                if adapter is not None:
+                    self._external_discovery_by_source[adapter.name] = now.isoformat()
 
         self._last_external_discovery_at = now.isoformat()
         self._save_state(running=self.is_running(), paused=self.is_paused())
         return total_added
+
+    def _scan_interval_seconds(self) -> float:
+        configured = RATES.get(self._mode, 90)
+        if self._mode != "continuous" or "etsy_open_api" not in _scheduler_research_adapters():
+            return float(configured)
+        try:
+            from adapters.research.etsy_open_api import recommended_request_interval_seconds
+            provider_interval = recommended_request_interval_seconds()
+            if provider_interval is not None:
+                return provider_interval
+        except Exception:
+            pass
+        return float(configured)
 
     def _interruptible_sleep(self, seconds: float) -> None:
         """Sleep that wakes immediately on stop signal."""
@@ -576,6 +678,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
             "keywords_scanned": self._keywords_scanned,
             "new_seeds_found":  self._new_seeds_found,
             "last_external_discovery_at": self._last_external_discovery_at,
+            "external_discovery_by_source": self._external_discovery_by_source,
             "last_updated":     datetime.utcnow().isoformat(),
         }
         temporary = STATE_FILE.with_name(f".{STATE_FILE.name}.{uuid.uuid4().hex}.tmp")
@@ -590,6 +693,11 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                 self._batch_size = state.get("batch_size", self._batch_size)
                 self._stale_days = state.get("stale_days", self._stale_days)
                 self._last_external_discovery_at = state.get("last_external_discovery_at")
+                source_state = state.get("external_discovery_by_source")
+                if isinstance(source_state, dict):
+                    self._external_discovery_by_source = {
+                        str(key): str(value) for key, value in source_state.items() if value
+                    }
             except Exception:
                 pass
 

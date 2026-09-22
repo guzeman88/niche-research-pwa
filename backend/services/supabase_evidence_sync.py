@@ -34,6 +34,7 @@ def sync_collection_run(run_id: str) -> dict:
             ("keyword_suggestions", "source_suggestion_id"),
             ("keyword_trend_points", "source_trend_point_id"),
             ("keyword_listing_snapshots", "source_listing_snapshot_id"),
+            ("keyword_collection_state", "keyword"),
         ):
             _upsert(table, conflict, payloads[table])
         kdb.mark_evidence_collection_sync(run_id, "synced")
@@ -81,8 +82,11 @@ def _payloads(run_id: str) -> dict[str, list[dict[str, Any]]]:
             sources = [dict(row) for row in con.execute(
                 f"SELECT * FROM keyword_sources WHERE keyword IN ({placeholders})", values
             ).fetchall()]
+            collection_states = [dict(row) for row in con.execute(
+                f"SELECT * FROM keyword_collection_state WHERE keyword IN ({placeholders})", values
+            ).fetchall()]
         else:
-            seeds, sources = [], []
+            seeds, sources, collection_states = [], [], []
     return {
         "keyword_seeds": [{
             "keyword": row["keyword"], "domain": row["domain"], "source": row["source"],
@@ -98,6 +102,20 @@ def _payloads(run_id: str) -> dict[str, list[dict[str, Any]]]:
         "keyword_suggestions": [_suggestion_row(row) for row in suggestions],
         "keyword_trend_points": [_trend_row(row) for row in trends],
         "keyword_listing_snapshots": [_listing_row(row) for row in listings],
+        "keyword_collection_state": [
+            {
+                "keyword": row["keyword"],
+                "last_collected_at": row["last_collected_at"],
+                "evidence_status": row["evidence_status"],
+                "listing_count": row.get("listing_count"),
+                "sampled_listing_count": row.get("sampled_listing_count"),
+                "avg_price_usd": row.get("avg_price_usd"),
+                "sources": _json(row.get("sources_json")) or [],
+                "last_run_id": row.get("last_run_id"),
+                "updated_at": row["updated_at"],
+            }
+            for row in collection_states
+        ],
     }
 
 

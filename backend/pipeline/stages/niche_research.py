@@ -30,6 +30,7 @@ from typing import Callable
 from adapters.base.research import NicheSignal
 from adapters.registry import get_llm_with_fallback
 from pipeline.store_config import StoreConfig
+from services.provider_telemetry import record_provider_attempt as _record_provider_attempt
 
 log = logging.getLogger(__name__)
 
@@ -142,8 +143,9 @@ def run(
 
     # ── Step 1: Etsy search scraper (real listing data) ───────────────────────
     keyword_search_data: list[KeywordSearchData] = []
+    marketplace_source: str | None = None
     if not skip_scraper:
-        keyword_search_data = _run_scraper(seed_keywords, _log)
+        keyword_search_data, marketplace_source = _run_scraper(seed_keywords, _log)
 
     # ── Step 2: Signal adapters (autocomplete, trends, Reddit, eRank…) ────────
     adapters = _build_adapters(store_config, adapter_names, _log)
@@ -151,8 +153,18 @@ def run(
     sources_used: list[str] = []
 
     for adapter in adapters:
+        # Marketplace listing evidence was already collected above. Running the
+        # signal adapter too would spend a second Etsy request for the same query.
+        if adapter.name == "etsy_open_api":
+            continue
+        started_at = datetime.now(timezone.utc)
         if not adapter.is_configured():
             _log(f"[niche_research] Skipping {adapter.name} - not configured")
+            _record_provider_attempt(
+                provider=adapter.name, operation="keyword_search", status="not_configured",
+                started_at=started_at, keyword_count=len(seed_keywords), row_count=0,
+                configured=False,
+            )
             continue
         _log(f"[niche_research] {adapter.name}...")
         try:
@@ -161,11 +173,24 @@ def run(
             if sigs:
                 sources_used.append(adapter.name)
             _log(f"[niche_research] {adapter.name}: {len(sigs)} signals")
+            _record_provider_attempt(
+                provider=adapter.name,
+                operation="keyword_search",
+                status="completed" if sigs else "no_data",
+                started_at=started_at,
+                keyword_count=len(seed_keywords),
+                row_count=len(sigs),
+            )
         except Exception as exc:
             _log(f"[niche_research] {adapter.name} error: {exc}")
+            _record_provider_attempt(
+                provider=adapter.name, operation="keyword_search", status="failed",
+                started_at=started_at, keyword_count=len(seed_keywords), row_count=0,
+                error=str(exc),
+            )
 
-    if keyword_search_data:
-        sources_used.append("etsy_search_scraper")
+    if keyword_search_data and marketplace_source:
+        sources_used.append(marketplace_source)
 
     # ── Step 3: Seasonality ───────────────────────────────────────────────────
     if include_seasonality:
@@ -251,10 +276,10 @@ def run(
 def _run_scraper(
     keywords: list[str],
     log_fn: Callable,
-) -> list[KeywordSearchData]:
+) -> tuple[list[KeywordSearchData], str | None]:
     api_results = _run_etsy_open_api_search(keywords, log_fn)
     if api_results:
-        return api_results
+        return api_results, "etsy_open_api"
 
     from adapters.research.etsy_search_scraper import (
         EtsyHtmlBlockedError,
@@ -265,10 +290,10 @@ def _run_scraper(
     html_enabled = os.environ.get("ETSY_HTML_SCRAPER_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
     if not html_enabled:
         log_fn("[niche_research] Etsy listing evidence unavailable: set Etsy Open API credentials, or opt into blocked-prone HTML scraping with ETSY_HTML_SCRAPER_ENABLED=1")
-        return []
+        return [], None
     if is_etsy_html_blocked():
         log_fn(f"[niche_research] Etsy HTML scraper skipped: {get_etsy_html_block_reason()}")
-        return []
+        return [], None
 
     scraper = EtsySearchScraper()
     results: list[KeywordSearchData] = []
@@ -318,33 +343,50 @@ def _run_scraper(
             if isinstance(exc, EtsyHtmlBlockedError) or is_etsy_html_blocked():
                 break
     scraper.close()
-    return results
+    return results, "etsy_search_scraper" if results else None
 
 
 def _run_etsy_open_api_search(
     keywords: list[str],
     log_fn: Callable,
 ) -> list[KeywordSearchData]:
+    started_at = datetime.now(timezone.utc)
     try:
-        from adapters.research.etsy_open_api import EtsyOpenAPIClient, is_etsy_open_api_configured
+        from adapters.research.etsy_open_api import (
+            EtsyOpenAPIClient,
+            etsy_rate_limit_snapshot,
+            is_etsy_open_api_configured,
+        )
     except Exception as exc:
         log_fn(f"[niche_research] Etsy Open API unavailable: {exc}")
+        _record_provider_attempt(
+            provider="etsy_open_api", operation="listing_search", status="failed",
+            started_at=started_at, keyword_count=len(keywords), row_count=0,
+            error=str(exc),
+        )
         return []
 
     if not is_etsy_open_api_configured():
         log_fn("[niche_research] Etsy Open API skipped: missing ETSY_X_API_KEY or ETSY_API_KEYSTRING + ETSY_SHARED_SECRET")
+        _record_provider_attempt(
+            provider="etsy_open_api", operation="listing_search", status="not_configured",
+            started_at=started_at, keyword_count=len(keywords), row_count=0,
+            configured=False,
+        )
         return []
 
     client = EtsyOpenAPIClient()
     results: list[KeywordSearchData] = []
-    targets = keywords[:4]
+    errors: list[str] = []
+    targets = keywords[:5]
     log_fn(f"[niche_research] Fetching Etsy Open API listing evidence for: {targets}")
     try:
         for kw in targets:
             try:
-                sr = client.search_listings(kw, limit=60)
+                sr = client.search_listings(kw, limit=100)
             except Exception as exc:
                 log_fn(f"[niche_research] Etsy Open API error for '{kw}': {exc}")
+                errors.append(f"{kw}: {exc}")
                 continue
             if not sr.listings:
                 log_fn(f"[niche_research] Etsy Open API returned no listings for '{kw}'")
@@ -380,6 +422,19 @@ def _run_etsy_open_api_search(
             )
     finally:
         client.close()
+    row_count = sum(item.sampled_listing_count or 0 for item in results)
+    status = "partial" if results and errors else "completed" if results else "failed" if errors else "no_data"
+    _record_provider_attempt(
+        provider="etsy_open_api",
+        operation="listing_search",
+        status=status,
+        started_at=started_at,
+        keyword_count=len(targets),
+        row_count=row_count,
+        error="; ".join(errors) if errors else None,
+        rate_limit=etsy_rate_limit_snapshot(),
+        metadata={"listings_per_request": 100},
+    )
     return results
 
 

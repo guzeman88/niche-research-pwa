@@ -8,6 +8,8 @@ real Etsy listing evidence; HTML scraping remains an optional fallback only.
 from __future__ import annotations
 
 import os
+import threading
+import time
 from datetime import datetime
 from typing import Any
 
@@ -23,6 +25,14 @@ from adapters.research.etsy_listing_scraper import ListingDetail
 _BASE_URL = os.getenv("ETSY_OPEN_API_BASE_URL", "https://api.etsy.com/v3/application")
 _STORED_CREDENTIAL_PROVIDER = "etsy_open_api"
 _stored_api_key_header: str | None = None
+_RATE_LIMIT_LOCK = threading.Lock()
+_rate_limit_state: dict[str, int | float | None] = {
+    "limit_per_second": None,
+    "remaining_this_second": None,
+    "limit_per_day": None,
+    "remaining_today": None,
+    "retry_after_until": None,
+}
 
 
 def _supabase_api_key_header() -> str:
@@ -73,6 +83,74 @@ def _clear_stored_api_key_cache() -> None:
     """Reset the in-process credential cache for tests and key rotation."""
     global _stored_api_key_header
     _stored_api_key_header = None
+
+
+def _clear_rate_limit_state() -> None:
+    """Reset provider quota observations for isolated tests."""
+    with _RATE_LIMIT_LOCK:
+        for key in _rate_limit_state:
+            _rate_limit_state[key] = None
+
+
+def etsy_rate_limit_snapshot() -> dict[str, int | float | None]:
+    """Return the latest provider-supplied quota state without credentials."""
+    with _RATE_LIMIT_LOCK:
+        return dict(_rate_limit_state)
+
+
+def recommended_request_interval_seconds() -> float | None:
+    """Derive a steady request interval directly from Etsy's live quota headers."""
+    snapshot = etsy_rate_limit_snapshot()
+    retry_until = snapshot.get("retry_after_until")
+    if isinstance(retry_until, (int, float)) and retry_until > time.time():
+        return retry_until - time.time()
+
+    intervals: list[float] = []
+    per_second = snapshot.get("limit_per_second")
+    per_day = snapshot.get("limit_per_day")
+    if isinstance(per_second, (int, float)) and per_second > 0:
+        intervals.append(1.0 / float(per_second))
+    if isinstance(per_day, (int, float)) and per_day > 0:
+        intervals.append(86400.0 / float(per_day))
+    return max(intervals) if intervals else None
+
+
+def _capture_rate_limits(response: httpx.Response) -> None:
+    values = {
+        "limit_per_second": _header_int(response, "x-limit-per-second"),
+        "remaining_this_second": _header_int(
+            response, "x-remaining-this-second", "x-remaining-this-secon"
+        ),
+        "limit_per_day": _header_int(response, "x-limit-per-day"),
+        "remaining_today": _header_int(response, "x-remaining-today"),
+    }
+    retry_after = _header_float(response, "retry-after")
+    with _RATE_LIMIT_LOCK:
+        for key, value in values.items():
+            if value is not None:
+                _rate_limit_state[key] = value
+        if retry_after is not None:
+            _rate_limit_state["retry_after_until"] = time.time() + retry_after
+        elif response.status_code < 429:
+            _rate_limit_state["retry_after_until"] = None
+
+
+def _header_int(response: httpx.Response, *names: str) -> int | None:
+    value = _header_float(response, *names)
+    return int(value) if value is not None else None
+
+
+def _header_float(response: httpx.Response, *names: str) -> float | None:
+    for name in names:
+        raw = response.headers.get(name)
+        if raw is None:
+            continue
+        try:
+            value = float(raw)
+            return value if value >= 0 else None
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 def _api_key_header() -> str:
@@ -155,12 +233,15 @@ class EtsyOpenAPIClient:
             headers["authorization"] = f"Bearer {oauth_token}"
 
         resp = self._client.get(f"{_BASE_URL}{path}", params=params, headers=headers)
+        _capture_rate_limits(resp)
         if resp.status_code == 401:
             raise EtsyOpenAPIError("Etsy Open API rejected credentials (401)")
         if resp.status_code == 403:
             raise EtsyOpenAPIError("Etsy Open API credentials are not authorized for this endpoint (403)")
         if resp.status_code == 429:
-            raise EtsyOpenAPIError("Etsy Open API rate limit hit (429)")
+            retry_after = resp.headers.get("retry-after")
+            detail = f"; retry after {retry_after}s" if retry_after else ""
+            raise EtsyOpenAPIError(f"Etsy Open API rate limit hit (429){detail}")
         resp.raise_for_status()
         try:
             data = resp.json()

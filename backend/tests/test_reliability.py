@@ -207,7 +207,7 @@ def test_schema_v15_clears_unversioned_values_and_adds_raw_evidence_tables(datab
             FROM scans WHERE keyword='legacy estimate'
         """).fetchone()
         seed_columns = {item[1] for item in con.execute("PRAGMA table_info(seeds)").fetchall()}
-    assert database.SCHEMA_VERSION == 15
+    assert database.SCHEMA_VERSION == 16
     assert tuple(row) == (None, None, None, None, None)
     assert "priority" not in seed_columns
     with database._conn() as con:

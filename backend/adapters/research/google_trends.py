@@ -4,11 +4,14 @@ Returns the observed average relative-interest index for the requested period.
 """
 
 import random
+import threading
 import time
 from datetime import datetime, timezone
 from adapters.base.research import BaseResearchAdapter, NicheSignal
 
 _MAX_RETRIES = 3
+_PREFETCH_LOCK = threading.Lock()
+_PREFETCHED: dict[tuple[str, str, str], NicheSignal | None] = {}
 
 
 class GoogleTrendsAdapter(BaseResearchAdapter):
@@ -33,6 +36,38 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
         return self.bulk_search([keyword])
 
     def bulk_search(self, keywords: list[str]) -> list[NicheSignal]:
+        cached: list[NicheSignal] = []
+        missing: list[str] = []
+        with _PREFETCH_LOCK:
+            for keyword in keywords:
+                key = self._cache_key(keyword)
+                if key not in _PREFETCHED:
+                    missing.append(keyword)
+                    continue
+                signal = _PREFETCHED.pop(key)
+                if signal is not None:
+                    cached.append(signal)
+        return cached + (self._fetch(missing) if missing else [])
+
+    def prefetch(self, keywords: list[str]) -> int:
+        """Fetch a scheduler batch once, then serve each keyword from memory."""
+        requested = [keyword for keyword in keywords if keyword.strip()]
+        if not requested:
+            return 0
+        signals = self._fetch(requested)
+        by_keyword = {self._cache_key(signal.keyword): signal for signal in signals}
+        with _PREFETCH_LOCK:
+            for keyword in requested:
+                key = self._cache_key(keyword)
+                # Cache provider-confirmed no-data results too, otherwise the
+                # individual scan would immediately repeat the same request.
+                _PREFETCHED[key] = by_keyword.get(key)
+        return len(signals)
+
+    def _cache_key(self, keyword: str) -> tuple[str, str, str]:
+        return (self._geo, self._timeframe, " ".join(keyword.lower().split()))
+
+    def _fetch(self, keywords: list[str]) -> list[NicheSignal]:
         if not self.is_configured():
             return []
         from pytrends.request import TrendReq
@@ -47,6 +82,7 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
                     df = pt.interest_over_time()
                     if df.empty:
                         break
+                    related = _related_queries(pt)
                     for kw in chunk:
                         if kw not in df.columns:
                             continue
@@ -72,7 +108,11 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
                             observed_at=datetime.now(timezone.utc).isoformat(),
                             geography=self._geo or "worldwide",
                             time_series=points,
-                            metadata={"category": 0, "language": "en-US"},
+                            metadata={
+                                "category": 0,
+                                "language": "en-US",
+                                "related_queries": related.get(kw, []),
+                            },
                         ))
                     # polite delay between chunks
                     time.sleep(2.0 + random.uniform(0, 1.5))
@@ -90,3 +130,26 @@ class GoogleTrendsAdapter(BaseResearchAdapter):
 def _chunks(lst: list, n: int):
     for i in range(0, len(lst), n):
         yield lst[i : i + n]
+
+
+def _related_queries(client) -> dict[str, list[str]]:
+    """Preserve provider-returned related phrases from the current payload."""
+    try:
+        payload = client.related_queries()
+    except Exception:
+        return {}
+    result: dict[str, list[str]] = {}
+    for keyword, groups in (payload or {}).items():
+        values: list[str] = []
+        if not isinstance(groups, dict):
+            continue
+        for group_name in ("rising", "top"):
+            frame = groups.get(group_name)
+            if frame is None or getattr(frame, "empty", True) or "query" not in frame.columns:
+                continue
+            for value in frame["query"].tolist():
+                phrase = " ".join(str(value).lower().split())
+                if phrase and phrase not in values:
+                    values.append(phrase)
+        result[str(keyword)] = values
+    return result

@@ -55,6 +55,7 @@ def import_evidence(*, source: str, text: str, name: str | None = None,
                     observed_at: str | None = None, geography: str | None = None,
                     period_start: str | None = None, period_end: str | None = None,
                     currency_code: str | None = None) -> dict:
+    started_at = datetime.now(timezone.utc)
     clean_source = source.strip().lower()
     if clean_source not in SUPPORTED_SOURCES:
         raise ValueError(f"unsupported evidence source: {source}")
@@ -100,6 +101,21 @@ def import_evidence(*, source: str, text: str, name: str | None = None,
         kdb.finish_evidence_collection(run_id, status, result["observations"])
         from services.supabase_evidence_sync import sync_collection_run
         durable_sync = sync_collection_run(run_id)
+        from services.provider_telemetry import record_provider_attempt
+        record_provider_attempt(
+            provider=clean_source,
+            operation="structured_import",
+            status=status,
+            started_at=started_at,
+            keyword_count=result["keywords"],
+            row_count=result["observations"],
+            metadata={
+                "name": name,
+                "period_start": period_start,
+                "period_end": period_end,
+                "geography": geography,
+            },
+        )
         return {
             "run_id": run_id,
             "source": clean_source,
@@ -109,6 +125,17 @@ def import_evidence(*, source: str, text: str, name: str | None = None,
         }
     except Exception as exc:
         kdb.finish_evidence_collection(run_id, "failed", 0, str(exc))
+        from services.provider_telemetry import record_provider_attempt
+        record_provider_attempt(
+            provider=clean_source,
+            operation="structured_import",
+            status="failed",
+            started_at=started_at,
+            keyword_count=0,
+            row_count=0,
+            error=str(exc),
+            metadata={"name": name},
+        )
         raise
 
 

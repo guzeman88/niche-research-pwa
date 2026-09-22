@@ -45,6 +45,10 @@ class GoogleDailyTrendsAdapter(BaseResearchAdapter):
     def is_configured(self) -> bool:
         return True
 
+    def discovery_interval_seconds(self) -> int:
+        """Use the configured provider-feed cache interval as the polling cadence."""
+        return self._cache_seconds
+
     def search(self, keyword: str, category: str = "") -> list[NicheSignal]:
         del category
         return self.bulk_search([keyword])
