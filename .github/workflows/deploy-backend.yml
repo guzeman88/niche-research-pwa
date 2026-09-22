@@ -13,6 +13,15 @@ jobs:
       RENDER_SERVICE_URL: https://niche-research-api-kqlt.onrender.com
       PIPELINE_API_TOKEN: ${{ secrets.PIPELINE_API_TOKEN }}
     steps:
+      - name: Record current backend process
+        id: previous_backend
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 20 "$RENDER_SERVICE_URL/api/health" --output previous-health.json || echo '{}' > previous-health.json
+          cat previous-health.json
+          BOOT_ID="$(node -e "const h=require('./previous-health.json'); process.stdout.write(h.boot_id || '')")"
+          echo "boot_id=$BOOT_ID" >> "$GITHUB_OUTPUT"
+
       - name: Resolve Render service
         id: render_service
         if: ${{ env.RENDER_API_KEY != '' }}
@@ -162,21 +171,45 @@ jobs:
           echo "Skipped Render deploy because neither RENDER_API_KEY nor RENDER_DEPLOY_HOOK_URL is set."
           echo "Add RENDER_API_KEY so this workflow can resume suspended services and deploy by API."
 
-      - name: Wait for backend
+      - name: Wait for new backend process
         if: ${{ env.RENDER_API_KEY != '' || env.RENDER_DEPLOY_HOOK_URL != '' }}
-        run: sleep 45
+        run: |
+          set -euo pipefail
+          PREVIOUS_BOOT_ID="${{ steps.previous_backend.outputs.boot_id }}"
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 20 "$RENDER_SERVICE_URL/api/health" --output health.json; then
+              cat health.json
+              BOOT_ID="$(node -e "const h=require('./health.json'); process.stdout.write(h.boot_id || '')")"
+              if [ -n "$BOOT_ID" ] && [ "$BOOT_ID" != "$PREVIOUS_BOOT_ID" ]; then
+                echo "New backend process is live: $BOOT_ID"
+                exit 0
+              fi
+            fi
+            echo "Waiting for the deployed backend process (${attempt}/60)..."
+            sleep 10
+          done
+          echo "Timed out waiting for Render to replace the previous backend process."
+          exit 1
 
       - name: Verify backend health and scheduler
         run: |
-          curl -i -fsS https://niche-research-api-kqlt.onrender.com/api/health
-          curl -i -fsS https://niche-research-api-kqlt.onrender.com/api/stats | tee stats.raw
+          set -euo pipefail
+          curl -i -fsS "$RENDER_SERVICE_URL/api/health"
+          curl -i -fsS "$RENDER_SERVICE_URL/api/stats" | tee stats.raw
           sed -n '/^{/,$p' stats.raw > stats.json
           node -e "const s=require('./stats.json'); if ((s.total_seeds || 0) < 13000) throw new Error('Backend has fewer than 13000 keywords')"
           if [ -n "$PIPELINE_API_TOKEN" ]; then
-            curl -fsS https://niche-research-api-kqlt.onrender.com/api/scheduler/status \
-              -H "Authorization: Bearer $PIPELINE_API_TOKEN"
+            curl -fsS --max-time 45 \
+              --request POST \
+              --url "$RENDER_SERVICE_URL/api/scheduler/start" \
+              --header "Authorization: Bearer $PIPELINE_API_TOKEN" \
+              --header 'Content-Type: application/json' \
+              --data '{"mode":"continuous","batch_size":5}' \
+              --output scheduler.json
+            cat scheduler.json
+            node -e "const s=require('./scheduler.json'); if (!s.running || s.paused || s.fatal_error) throw new Error(JSON.stringify(s))"
           else
-            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' https://niche-research-api-kqlt.onrender.com/api/scheduler/status)
+            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$RENDER_SERVICE_URL/api/scheduler/status")
             test "$STATUS" = "401"
             echo "Private scheduler endpoint requires operator authentication."
           fi
