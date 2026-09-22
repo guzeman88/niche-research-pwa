@@ -1,6 +1,7 @@
 """Best-effort durable sync for one completed keyword-evidence collection run."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from typing import Any
@@ -123,7 +124,11 @@ def _observation_row(row: dict[str, Any]) -> dict[str, Any]:
 
 def _suggestion_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
-        "source_suggestion_id": row["id"], "parent_keyword": row["parent_keyword"],
+        "source_suggestion_id": _stable_bigint(
+            "suggestion", row["source"], row["parent_keyword"], row["suggestion"],
+            row["query"], row["observed_at"], row.get("geography"),
+        ),
+        "parent_keyword": row["parent_keyword"],
         "suggestion": row["suggestion"], "source": row["source"], "query": row["query"],
         "position": row["position"], "observed_at": row["observed_at"],
         "geography": row.get("geography"), "collection_run_id": row.get("collection_run_id"),
@@ -133,7 +138,11 @@ def _suggestion_row(row: dict[str, Any]) -> dict[str, Any]:
 
 def _trend_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
-        "source_trend_point_id": row["id"], "keyword": row["keyword"], "source": row["source"],
+        "source_trend_point_id": _stable_bigint(
+            "trend", row["source"], row["keyword"], row["point_at"],
+            row.get("geography"), row.get("timeframe"), row["collected_at"],
+        ),
+        "keyword": row["keyword"], "source": row["source"],
         "point_at": row["point_at"], "value": row["value"], "unit": row["unit"],
         "geography": row.get("geography"), "timeframe": row.get("timeframe"),
         "is_partial": None if row.get("is_partial") is None else bool(row["is_partial"]),
@@ -148,7 +157,9 @@ def _listing_row(row: dict[str, Any]) -> dict[str, Any]:
         "price", "currency_code", "favorites", "review_count", "position", "collection_run_id",
     )}
     result.update({
-        "source_listing_snapshot_id": row["id"],
+        "source_listing_snapshot_id": _stable_bigint(
+            "listing", row["source"], row["keyword"], row["observed_at"], row["listing_id"],
+        ),
         "is_star_seller": None if row.get("is_star_seller") is None else bool(row["is_star_seller"]),
         "is_bestseller": None if row.get("is_bestseller") is None else bool(row["is_bestseller"]),
         "metadata": _json(row.get("metadata_json")),
@@ -182,3 +193,10 @@ def _json(value: Any) -> Any:
         return json.loads(value)
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
+
+
+def _stable_bigint(*parts: Any) -> int:
+    """Create a portable positive bigint instead of reusing a local SQLite row id."""
+    payload = json.dumps(parts, ensure_ascii=False, separators=(",", ":"), default=str)
+    identifier = int.from_bytes(hashlib.sha256(payload.encode("utf-8")).digest()[:8], "big")
+    return (identifier & ((1 << 63) - 1)) or 1

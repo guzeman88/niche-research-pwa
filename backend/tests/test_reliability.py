@@ -302,6 +302,81 @@ def test_marmalead_import_keeps_provider_values(database):
     assert observations["provider_engagement"]["value"] == 62
 
 
+def test_erank_import_preserves_current_average_and_upper_bound(database):
+    from services.evidence_import_service import import_evidence
+
+    result = import_evidence(
+        source="erank",
+        text=(
+            "Keyword,Current searches,Average searches,Average clicks,CTR,Competition listings\n"
+            "cat crochet pattern amigurumi,10620,896,73,<20%,6827"
+        ),
+        period_start="2026-08-01",
+        period_end="2026-08-31",
+        geography="US",
+    )
+    assert result["observations"] == 5
+    observations = {
+        row["metric"]: row
+        for row in database.get_keyword_evidence("cat crochet pattern amigurumi")["observations"]
+    }
+    assert observations["current_period_searches"]["period_start"] == "2026-08-01"
+    assert observations["monthly_searches"]["period_start"] is None
+    assert observations["click_through_rate_upper_bound"]["value"] == 20
+    assert observations["click_through_rate_upper_bound"]["unit"] == "percent_upper_bound"
+
+
+def test_pinterest_trends_import_preserves_bounds_rank_and_series(database):
+    from services.evidence_import_service import import_evidence
+
+    text = '''"Pinterest Trends tool – https://trends.pinterest.com/search/?country=US&amp;trendsPreset=1"
+Selected Filters
+Trend Type,Top monthly trends
+Date Range,30 days before 2026-09-19
+Interests,"All"
+
+,,,,,,Data in the date columns reflects the normalized search volume for this trend type
+Rank,Trend,Normalized volume,Weekly change,Monthly change,Yearly change,2026-09-12,2026-09-19
+1,fall nails,100,"10%","10,000%+","10%",88,100
+'''
+    result = import_evidence(source="pinterest_trends", text=text)
+    assert result["keywords"] == 1
+    assert result["observations"] == 7
+    bundle = database.get_keyword_evidence("fall nails")
+    observations = {row["metric"]: row for row in bundle["observations"]}
+    assert observations["provider_rank"]["value"] == 1
+    assert observations["normalized_volume"]["value"] == 100
+    assert observations["growth_month_over_month_lower_bound"]["value"] == 10000
+    assert observations["growth_month_over_month_lower_bound"]["unit"] == "percent_lower_bound"
+    assert [point["value"] for point in bundle["trend_points"]] == [100, 88]
+    assert {point["geography"] for point in bundle["trend_points"]} == {"US"}
+
+
+def test_supabase_row_ids_are_stable_and_not_local_database_ids():
+    from services.supabase_evidence_sync import _listing_row, _stable_bigint, _trend_row
+
+    trend = {
+        "id": 1, "keyword": "fall nails", "source": "pinterest_trends",
+        "point_at": "2026-09-19", "value": 100, "unit": "relative_interest_index",
+        "geography": "US", "timeframe": "30 days before 2026-09-19",
+        "is_partial": None, "collected_at": "2026-09-22T14:00:00+00:00",
+        "collection_run_id": "run-1", "metadata_json": None,
+    }
+    assert _trend_row(trend)["source_trend_point_id"] == _trend_row({**trend, "id": 999})["source_trend_point_id"]
+    assert _trend_row(trend)["source_trend_point_id"] != 1
+
+    listing = {
+        "id": 1, "keyword": "fall nails", "source": "etsy_open_api",
+        "observed_at": "2026-09-22T14:00:00+00:00", "listing_id": "123",
+        "title": None, "shop_name": None, "url": None, "price": None,
+        "currency_code": None, "favorites": None, "review_count": None,
+        "is_star_seller": None, "is_bestseller": None, "position": 1,
+        "collection_run_id": "run-1", "metadata_json": None,
+    }
+    assert _listing_row(listing)["source_listing_snapshot_id"] == _listing_row({**listing, "id": 42})["source_listing_snapshot_id"]
+    assert _stable_bigint("trend", "a") != _stable_bigint("trend", "b")
+
+
 def test_pinterest_trends_uses_documented_ranked_endpoint(monkeypatch):
     from adapters.research.pinterest_trends import PinterestTrendsAdapter, _CACHE
 
