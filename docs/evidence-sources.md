@@ -15,9 +15,11 @@ stored.
 | Reddit Data API | Reddit commercial-use approval plus credentials | Exact-query post counts and engagement aggregates with source records | Keyword queue only after explicit approval flag |
 
 The GitHub `Evidence Collector Heartbeat` runs every ten minutes, wakes the
-backend, and idempotently starts its continuous queue. Completed collection
-runs sync their raw rows to Supabase when the service-role configuration is
-present.
+backend, and idempotently starts its continuous queue. It uses a short-lived
+GitHub OIDC identity restricted to this repository, the heartbeat workflow,
+and the `main` branch; no shared scheduler secret is stored in GitHub.
+Completed collection runs sync their raw rows to Supabase when the service-role
+configuration is present.
 
 ## Structured imports
 
