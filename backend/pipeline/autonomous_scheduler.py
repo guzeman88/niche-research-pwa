@@ -512,33 +512,51 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
             except ValueError:
                 pass
 
-        try:
-            from adapters.research.pinterest_trends import PinterestTrendsAdapter
-            adapter = PinterestTrendsAdapter()
-            if not adapter.is_configured():
-                return 0
-            signals = adapter.discover()
-            added = 0
-            for signal in signals:
-                if not signal.keyword:
+        from adapters.research.google_daily_trends import GoogleDailyTrendsAdapter
+        from adapters.research.pinterest_trends import PinterestTrendsAdapter
+
+        sources = (
+            (GoogleDailyTrendsAdapter, "daily_search_trends"),
+            (PinterestTrendsAdapter, "visual_trends"),
+        )
+        total_added = 0
+        for adapter_factory, domain in sources:
+            adapter = None
+            try:
+                adapter = adapter_factory()
+                if not adapter.is_configured():
+                    self._log(f"[scheduler] {adapter.name} discovery is not configured")
                     continue
-                if kdb.add_seed(signal.keyword, domain="visual_trends", source="pinterest_trends"):
-                    added += 1
-                report = {
-                    "report_id": f"pinterest_{now.strftime('%Y%m%d%H%M%S')}_{signal.position or 0}",
-                    "generated_at": signal.observed_at or now.isoformat(),
-                    "sources_used": ["pinterest_trends"],
-                    "keyword_signals": [vars(signal)],
-                    "keyword_search_data": [],
-                }
-                kdb.save_scan(signal.keyword, report)
-            self._last_external_discovery_at = now.isoformat()
-            self._save_state(running=self.is_running(), paused=self.is_paused())
-            self._log(f"[scheduler] Pinterest discovery recorded {len(signals)} trends and {added} new seeds")
-            return added
-        except Exception as exc:
-            self._log(f"[scheduler] Pinterest discovery failed: {exc}")
-            return 0
+                signals = adapter.discover()
+                added = 0
+                for signal in signals:
+                    if not signal.keyword:
+                        continue
+                    if kdb.add_seed(signal.keyword, domain=domain, source=adapter.name):
+                        added += 1
+                    report = {
+                        "report_id": (
+                            f"{adapter.name}_{now.strftime('%Y%m%d%H%M%S')}_"
+                            f"{signal.position or 0}"
+                        ),
+                        "generated_at": signal.observed_at or now.isoformat(),
+                        "sources_used": [adapter.name],
+                        "keyword_signals": [vars(signal)],
+                        "keyword_search_data": [],
+                    }
+                    kdb.save_scan(signal.keyword, report)
+                total_added += added
+                self._log(
+                    f"[scheduler] {adapter.name} discovery recorded "
+                    f"{len(signals)} trends and {added} new seeds"
+                )
+            except Exception as exc:
+                name = adapter.name if adapter is not None else adapter_factory.__name__
+                self._log(f"[scheduler] {name} discovery failed: {exc}")
+
+        self._last_external_discovery_at = now.isoformat()
+        self._save_state(running=self.is_running(), paused=self.is_paused())
+        return total_added
 
     def _interruptible_sleep(self, seconds: float) -> None:
         """Sleep that wakes immediately on stop signal."""

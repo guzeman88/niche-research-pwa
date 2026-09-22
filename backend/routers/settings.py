@@ -95,6 +95,11 @@ def adapter_status():
             "requires_credentials": False,
             "evidence": ["relative trend interest"],
         },
+        "google_daily_trends": {
+            "loader": lambda: __import__("adapters.research.google_daily_trends", fromlist=["GoogleDailyTrendsAdapter"]).GoogleDailyTrendsAdapter(),
+            "requires_credentials": False,
+            "evidence": ["dated trending query", "approximate traffic lower bound", "linked news records"],
+        },
         "pinterest_trends": {
             "loader": lambda: __import__("adapters.research.pinterest_trends", fromlist=["PinterestTrendsAdapter"]).PinterestTrendsAdapter(),
             "requires_credentials": True,
