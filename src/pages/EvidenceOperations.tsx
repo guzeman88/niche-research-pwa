@@ -14,6 +14,9 @@ interface ProviderStatus {
   configured?: boolean
   healthy?: boolean
   requires_credentials?: boolean
+  approval_required?: boolean
+  integration_mode?: 'automatic' | 'approved_api' | 'import_or_private_api'
+  status_reason?: string
   evidence?: string[]
   error?: string
 }
@@ -44,7 +47,7 @@ interface EvidenceCoverage {
   }
 }
 
-type ImportSource = 'etsy_marketplace_insights' | 'erank' | 'etsy_shop_stats' | 'google_trends'
+type ImportSource = 'etsy_marketplace_insights' | 'erank' | 'marmalead' | 'etsy_shop_stats' | 'google_keyword_planner' | 'google_trends'
 
 const MARKET_ADAPTERS = [
   'google_suggest',
@@ -60,7 +63,9 @@ const MARKET_ADAPTERS = [
 const IMPORT_SOURCES: Array<{ value: ImportSource; label: string; help: string }> = [
   { value: 'etsy_marketplace_insights', label: 'Etsy Marketplace Insights', help: 'Keyword searches and competing listings from Etsy\'s seller tool.' },
   { value: 'erank', label: 'eRank free export', help: 'Searches, clicks, click rate, and competition exactly as exported.' },
+  { value: 'marmalead', label: 'Marmalead export', help: 'Search, engagement, and competition values exactly as supplied by Marmalead.' },
   { value: 'etsy_shop_stats', label: 'Etsy Shop Stats', help: 'Search terms tied to your own visits, views, orders, and revenue.' },
+  { value: 'google_keyword_planner', label: 'Google Keyword Planner', help: 'Google monthly searches, competition, and optional bid ranges with an explicit geography and reporting period.' },
   { value: 'google_trends', label: 'Google Trends CSV', help: 'The complete dated relative-interest series, not a single average.' },
 ]
 
@@ -187,6 +192,14 @@ export default function EvidenceOperations() {
       setError('Google Trends needs the geography used for the export.')
       return
     }
+    if (importSource === 'etsy_shop_stats' && (!importPeriodStart || !importPeriodEnd)) {
+      setError('Etsy Shop Stats needs the exact reporting period.')
+      return
+    }
+    if (importSource === 'google_keyword_planner' && (!importPeriodStart || !importPeriodEnd || !importGeography.trim())) {
+      setError('Google Keyword Planner needs the exact reporting period and geography.')
+      return
+    }
     action.mutate({
       path: '/api/evidence/import',
       body: {
@@ -236,9 +249,11 @@ export default function EvidenceOperations() {
                 {MARKET_ADAPTERS.map(name => {
                   const provider = providers.data?.[name]
                   const ready = provider?.available && provider?.configured
+                  const importOnly = provider?.integration_mode === 'import_or_private_api' && !provider?.configured
+                  const status = ready ? 'Configured' : importOnly ? 'Import available' : provider?.approval_required ? 'Approval required' : provider?.requires_credentials ? 'Credentials required' : 'Unavailable'
                   return <div key={name} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div><div className="text-[13px] font-bold text-surface-50">{name.split('_').join(' ')}</div><div className="mt-0.5 text-[11px] text-surface-300">{provider?.evidence?.join(' · ') || 'Readiness not checked'}</div></div>
-                    <span className={`text-[11px] font-bold ${ready ? 'text-accent-green' : 'text-accent-amber'}`}>{ready ? 'Configured' : provider?.requires_credentials ? 'Credentials required' : 'Unavailable'}</span>
+                    <div><div className="text-[13px] font-bold text-surface-50">{name.split('_').join(' ')}</div><div className="mt-0.5 text-[11px] text-surface-300">{provider?.evidence?.join(' · ') || 'Readiness not checked'}</div>{provider?.status_reason && <div className="mt-1 max-w-3xl text-[11px] leading-relaxed text-surface-300">{provider.status_reason}</div>}</div>
+                    <span className={`shrink-0 text-[11px] font-bold ${ready ? 'text-accent-green' : 'text-accent-amber'}`}>{status}</span>
                   </div>
                 })}
               </div>
@@ -311,9 +326,9 @@ export default function EvidenceOperations() {
                 <Field label="Source"><select className="input" value={importSource} onChange={event => setImportSource(event.target.value as ImportSource)}>{IMPORT_SOURCES.map(source => <option key={source.value} value={source.value}>{source.label}</option>)}</select></Field>
                 <p className="text-[11px] leading-relaxed text-surface-300">{IMPORT_SOURCES.find(source => source.value === importSource)?.help}</p>
                 <Field label="Import name (optional)"><input className="input" value={importName} onChange={event => setImportName(event.target.value)} placeholder="Export filename or note" /></Field>
-                {(importSource === 'etsy_marketplace_insights' || importSource === 'etsy_shop_stats') && <div className="grid grid-cols-2 gap-3"><Field label="Period start"><input className="input" type="date" value={importPeriodStart} onChange={event => setImportPeriodStart(event.target.value)} /></Field><Field label="Period end"><input className="input" type="date" value={importPeriodEnd} onChange={event => setImportPeriodEnd(event.target.value)} /></Field></div>}
-                {(importSource === 'google_trends' || importSource === 'etsy_marketplace_insights' || importSource === 'erank') && <Field label="Geography (when shown)"><input className="input" value={importGeography} onChange={event => setImportGeography(event.target.value)} placeholder="US, worldwide, or export value" /></Field>}
-                {importSource === 'etsy_shop_stats' && <Field label="Revenue currency (if included)"><input className="input uppercase" maxLength={3} value={importCurrency} onChange={event => setImportCurrency(event.target.value)} placeholder="USD" /></Field>}
+                {(importSource === 'etsy_marketplace_insights' || importSource === 'etsy_shop_stats' || importSource === 'google_keyword_planner') && <div className="grid grid-cols-2 gap-3"><Field label="Period start"><input className="input" type="date" value={importPeriodStart} onChange={event => setImportPeriodStart(event.target.value)} /></Field><Field label="Period end"><input className="input" type="date" value={importPeriodEnd} onChange={event => setImportPeriodEnd(event.target.value)} /></Field></div>}
+                {(importSource === 'google_trends' || importSource === 'google_keyword_planner' || importSource === 'etsy_marketplace_insights' || importSource === 'erank' || importSource === 'marmalead') && <Field label="Geography (when shown)"><input className="input" value={importGeography} onChange={event => setImportGeography(event.target.value)} placeholder="US, worldwide, or export value" /></Field>}
+                {(importSource === 'etsy_shop_stats' || importSource === 'google_keyword_planner') && <Field label="Currency (when money columns are included)"><input className="input uppercase" maxLength={3} value={importCurrency} onChange={event => setImportCurrency(event.target.value)} placeholder="USD" /></Field>}
               </div>
               <div>
                 <Field label="Export data"><textarea className="input min-h-56 resize-y font-mono text-[11px] leading-relaxed" value={importText} onChange={event => setImportText(event.target.value)} placeholder="Paste the unedited CSV or TSV export here" /></Field>

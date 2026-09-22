@@ -17,7 +17,9 @@ from pipeline import keyword_database as kdb
 SUPPORTED_SOURCES = {
     "etsy_marketplace_insights",
     "erank",
+    "marmalead",
     "etsy_shop_stats",
+    "google_keyword_planner",
     "google_trends",
 }
 
@@ -26,7 +28,19 @@ SEARCH_HEADERS = {"searches", "etsy searches", "keyword searches", "search volum
 LISTING_HEADERS = {"listings", "number of listings", "competing listings", "listing count", "competition listings", "etsy competition", "results"}
 CLICK_HEADERS = {"clicks", "avg clicks", "average clicks"}
 CTR_HEADERS = {"ctr", "ctr percent", "click through rate", "click-through rate"}
-COMPETITION_HEADERS = {"competition", "competition score", "keyword difficulty", "difficulty"}
+COMPETITION_HEADERS = {
+    "competition", "competition score", "competition indexed value",
+    "keyword difficulty", "difficulty",
+}
+ENGAGEMENT_HEADERS = {"engagement", "engagement score", "engagement level"}
+LOW_BID_HEADERS = {
+    "top of page bid low range", "top of page bid low range usd",
+    "top of page bid low", "low top of page bid",
+}
+HIGH_BID_HEADERS = {
+    "top of page bid high range", "top of page bid high range usd",
+    "top of page bid high", "high top of page bid",
+}
 VISIT_HEADERS = {"visits", "search visits", "etsy search visits"}
 VIEW_HEADERS = {"views", "listing views"}
 ORDER_HEADERS = {"orders", "sales"}
@@ -45,6 +59,10 @@ def import_evidence(*, source: str, text: str, name: str | None = None,
         raise ValueError("import text is empty")
     if clean_source == "etsy_marketplace_insights" and not (period_start and period_end):
         raise ValueError("Marketplace Insights imports require period_start and period_end")
+    if clean_source == "etsy_shop_stats" and not (period_start and period_end):
+        raise ValueError("Etsy Shop Stats imports require period_start and period_end")
+    if clean_source == "google_keyword_planner" and not (period_start and period_end and geography):
+        raise ValueError("Google Keyword Planner imports require period_start, period_end, and geography")
     if clean_source == "google_trends" and not geography:
         raise ValueError("Google Trends imports require an explicit geography")
 
@@ -108,6 +126,9 @@ def _import_keyword_table(*, text: str, source: str, observed_at: str,
         "clicks": _find_header(headers, CLICK_HEADERS),
         "ctr": _find_header(headers, CTR_HEADERS),
         "competition": _find_header(headers, COMPETITION_HEADERS),
+        "engagement": _find_header(headers, ENGAGEMENT_HEADERS),
+        "low_bid": _find_header(headers, LOW_BID_HEADERS),
+        "high_bid": _find_header(headers, HIGH_BID_HEADERS),
         "visits": _find_header(headers, VISIT_HEADERS),
         "views": _find_header(headers, VIEW_HEADERS),
         "orders": _find_header(headers, ORDER_HEADERS),
@@ -118,6 +139,10 @@ def _import_keyword_table(*, text: str, source: str, observed_at: str,
     definitions = _definitions_for_source(source, indexes, currency_code)
     if source == "etsy_shop_stats" and indexes.get("revenue") is not None and not currency_code:
         warnings.append("Revenue was not imported because no currency code was supplied.")
+    if source == "google_keyword_planner" and (
+        indexes.get("low_bid") is not None or indexes.get("high_bid") is not None
+    ) and not currency_code:
+        warnings.append("Bid ranges were not imported because no currency code was supplied.")
 
     for row_number, row in enumerate(rows[1:], start=2):
         keyword = _cell(row, keyword_index).strip().lower()
@@ -179,6 +204,18 @@ def _definitions_for_source(source: str, indexes: dict[str, int | None],
         add("ctr", "click_through_rate", "percent")
         add("listings", "competition_listings", "count")
         add("competition", "provider_competition", "provider_value")
+    elif source == "marmalead":
+        add("searches", "monthly_searches", "searches_per_month")
+        add("engagement", "provider_engagement", "provider_value")
+        add("competition", "provider_competition", "provider_value")
+        add("listings", "competition_listings", "count")
+    elif source == "google_keyword_planner":
+        add("searches", "monthly_searches", "searches_per_month")
+        add("competition", "provider_competition", "provider_value")
+        if currency_code:
+            unit = currency_code.strip().lower()
+            add("low_bid", "top_of_page_bid_low", unit)
+            add("high_bid", "top_of_page_bid_high", unit)
     elif source == "etsy_shop_stats":
         add("visits", "shop_search_visits", "count")
         add("views", "shop_listing_views", "count")
@@ -264,7 +301,9 @@ def _cell(row: list[str], index: int | None) -> str:
 
 
 def _normalize(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip().lower().replace("_", " ").replace("%", " percent"))
+    clean = value.strip().lower().replace("_", " ").replace("%", " percent")
+    clean = re.sub(r"[().]", " ", clean)
+    return re.sub(r"\s+", " ", clean).strip()
 
 
 def _number(value: str) -> float | None:

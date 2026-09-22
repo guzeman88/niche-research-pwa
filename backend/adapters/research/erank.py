@@ -1,7 +1,9 @@
-"""
-eRank SEO research adapter — requires ERANK_API_KEY.
-eRank provides Etsy-specific keyword data: monthly searches, competition, avg price.
-Docs: https://erank.com/account/api
+"""Optional eRank private-API adapter.
+
+eRank does not document a generally available public API. EtGen therefore has
+no built-in eRank endpoint. The adapter is enabled only when a provider-issued
+endpoint and key are both supplied; ordinary eRank data should use the CSV/TSV
+evidence importer instead.
 """
 
 import os
@@ -9,14 +11,12 @@ import httpx
 from adapters.base.research import BaseResearchAdapter, NicheSignal
 
 
-_BASE_URL = "https://api.erank.com/v2"
-
-
 class ERankAdapter(BaseResearchAdapter):
-    """Fetches Etsy keyword metrics from eRank API."""
+    """Fetch Etsy keyword metrics from an explicitly granted private API."""
 
     def __init__(self):
         self._api_key = os.getenv("ERANK_API_KEY", "")
+        self._api_url = os.getenv("ERANK_API_URL", "").strip().rstrip("/")
         self._client = httpx.Client(timeout=20)
 
     @property
@@ -24,7 +24,11 @@ class ERankAdapter(BaseResearchAdapter):
         return "erank"
 
     def is_configured(self) -> bool:
-        return bool(self._api_key and not self._api_key.startswith("your_"))
+        return bool(
+            self._api_url.startswith("https://")
+            and self._api_key
+            and not self._api_key.startswith("your_")
+        )
 
     def search(self, keyword: str, category: str = "") -> list[NicheSignal]:
         return self.bulk_search([keyword])
@@ -36,7 +40,7 @@ class ERankAdapter(BaseResearchAdapter):
         for kw in keywords:
             try:
                 resp = self._client.get(
-                    f"{_BASE_URL}/keyword",
+                    self._api_url,
                     params={"keyword": kw, "market": "etsy"},
                     headers={"X-Api-Key": self._api_key},
                 )

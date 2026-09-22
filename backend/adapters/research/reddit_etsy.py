@@ -31,6 +31,8 @@ class RedditEtsyAdapter(BaseResearchAdapter):
 
     def is_configured(self) -> bool:
         return bool(
+            os.getenv("REDDIT_DATA_API_APPROVED", "").strip().lower() in {"1", "true", "yes"}
+            and
             os.getenv("REDDIT_CLIENT_ID")
             and os.getenv("REDDIT_CLIENT_SECRET")
         )
