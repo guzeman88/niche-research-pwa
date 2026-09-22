@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import sys
 import asyncio
+import os
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Ensure backend/ is on sys.path so all internal imports resolve
@@ -20,6 +23,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
 from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace, evidence
+
+_PROCESS_BOOT_ID = uuid.uuid4().hex
+_PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
 
 # ── App factory ─────────────────────────────────────────────────────────────
 
@@ -149,4 +155,7 @@ def api_health():
     return {
         "status": "ok",
         "database": "connected" if db_ok else "empty",
+        "boot_id": _PROCESS_BOOT_ID,
+        "started_at": _PROCESS_STARTED_AT,
+        "revision": os.environ.get("RENDER_GIT_COMMIT") or None,
     }
