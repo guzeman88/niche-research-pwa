@@ -331,6 +331,72 @@ def test_pinterest_trends_uses_documented_ranked_endpoint(monkeypatch):
     assert signal.time_series[1]["date"] == "2026-09-08"
 
 
+def test_google_daily_trends_preserves_traffic_as_lower_bound(database, monkeypatch):
+    from adapters.research.google_daily_trends import GoogleDailyTrendsAdapter, _CACHE
+
+    monkeypatch.setenv("GOOGLE_DAILY_TRENDS_GEO", "US")
+    _CACHE.clear()
+    adapter = GoogleDailyTrendsAdapter()
+    response = Mock()
+    response.content = b"""<?xml version="1.0" encoding="UTF-8"?>
+    <rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0">
+      <channel><item>
+        <title>Teacher Appreciation Gifts</title>
+        <ht:approx_traffic>20K+</ht:approx_traffic>
+        <link>https://trends.google.com/trending/rss?geo=US</link>
+        <pubDate>Tue, 22 Sep 2026 05:10:00 -0700</pubDate>
+        <ht:news_item>
+          <ht:news_item_title>Teachers celebrated nationwide</ht:news_item_title>
+          <ht:news_item_url>https://example.com/story</ht:news_item_url>
+          <ht:news_item_source>Example News</ht:news_item_source>
+        </ht:news_item>
+      </item></channel>
+    </rss>"""
+    response.raise_for_status = Mock()
+    adapter._client.get = Mock(return_value=response)
+
+    signal = adapter.search("teacher appreciation gifts")[0]
+    assert adapter._client.get.call_args.kwargs["params"] == {"geo": "US"}
+    assert signal.monthly_searches is None
+    assert signal.observed_at == "2026-09-22T12:10:00+00:00"
+    assert signal.metadata["approx_traffic_display"] == "20K+"
+    assert signal.metadata["traffic_is_lower_bound"] is True
+    assert signal.metadata["observations"] == [{
+        "metric": "approx_search_traffic_lower_bound",
+        "value": 20000,
+        "unit": "searches_lower_bound",
+    }]
+    assert signal.metadata["news_items"][0]["source"] == "Example News"
+
+    database.save_scan(signal.keyword, {
+        "report_id": "google-daily-test",
+        "generated_at": signal.observed_at,
+        "sources_used": [signal.source],
+        "keyword_signals": [vars(signal)],
+        "keyword_search_data": [],
+    })
+    observations = database.get_keyword_evidence(signal.keyword)["observations"]
+    assert observations[0]["metric"] == "approx_search_traffic_lower_bound"
+    assert observations[0]["value"] == 20000
+    assert observations[0]["unit"] == "searches_lower_bound"
+
+
+def test_google_daily_trends_returns_only_exact_feed_matches(monkeypatch):
+    from adapters.research.google_daily_trends import GoogleDailyTrendsAdapter, _CACHE
+
+    _CACHE.clear()
+    adapter = GoogleDailyTrendsAdapter()
+    response = Mock()
+    response.content = b"""<rss xmlns:ht="https://trends.google.com/trending/rss">
+      <channel><item><title>Teacher Mug</title><ht:approx_traffic>500+</ht:approx_traffic></item></channel>
+    </rss>"""
+    response.raise_for_status = Mock()
+    adapter._client.get = Mock(return_value=response)
+
+    assert adapter.search("teacher") == []
+    assert adapter.search(" Teacher   Mug ")[0].keyword == "teacher mug"
+
+
 def test_scan_preserves_suggestion_trend_and_listing_rows(database):
     report = {
         "report_id": "report-one",

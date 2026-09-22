@@ -10,6 +10,7 @@ stored.
 | --- | --- | --- | --- |
 | Google Shopping Suggest | No credential | Exact query, suggestion, returned position, geography, timestamp | Keyword queue, every 30 days by default |
 | Google Trends | No credential; unofficial `pytrends` client | Complete dated relative-interest series and collection context | Keyword queue, every 30 days by default |
+| Google Daily Search Trends | No credential; official public RSS feed | Dated trending query, provider-displayed approximate traffic floor, rank, and linked news records | Daily discovery |
 | Etsy Open API | Etsy approval plus API credentials | Listing count when returned, listing sample, prices, shops, favorites, tags/materials where available | Keyword queue, every 30 days by default |
 | Pinterest Trends | Approved Pinterest business app and token | Ranked current trends, WoW/MoM/YoY growth, one-year weekly relative-interest series | Daily discovery plus exact-keyword queue matches |
 | Reddit Data API | Reddit commercial-use approval plus credentials | Exact-query post counts and engagement aggregates with source records | Keyword queue only after explicit approval flag |
@@ -46,5 +47,6 @@ Currency-dependent values are omitted unless a currency code is supplied.
   connector remains disabled until `REDDIT_DATA_API_APPROVED=1` is deliberately
   set after approval.
 - Google Trends is relative and normalized, not absolute search volume.
+- Google Daily Search Trends traffic is an approximate lower bound (for example, `20K+`), not exact or monthly search volume; it is retained as discovery evidence and does not create an opportunity score.
 - None of these sources proves profitability. Exact product economics and
   observed shop outcomes remain separate required evidence.

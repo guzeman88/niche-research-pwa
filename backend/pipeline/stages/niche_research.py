@@ -449,6 +449,7 @@ def _build_adapters(
     from adapters.research.etsy_autocomplete import EtsyAutocompleteAdapter
     from adapters.research.etsy_open_api import EtsyOpenAPIAdapter
     from adapters.research.google_trends import GoogleTrendsAdapter
+    from adapters.research.google_daily_trends import GoogleDailyTrendsAdapter
     from adapters.research.google_suggest import GoogleSuggestAdapter
     from adapters.research.reddit_etsy import RedditEtsyAdapter
     from adapters.research.erank import ERankAdapter
@@ -459,6 +460,7 @@ def _build_adapters(
         "etsy_open_api": EtsyOpenAPIAdapter,
         "etsy_autocomplete": EtsyAutocompleteAdapter,
         "google_trends": GoogleTrendsAdapter,
+        "google_daily_trends": GoogleDailyTrendsAdapter,
         "google_suggest": GoogleSuggestAdapter,
         "reddit_etsy": RedditEtsyAdapter,
         "erank": ERankAdapter,

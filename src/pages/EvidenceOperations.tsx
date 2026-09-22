@@ -56,6 +56,7 @@ const MARKET_ADAPTERS = [
   'erank',
   'marmalead',
   'google_trends',
+  'google_daily_trends',
   'pinterest_trends',
   'reddit_etsy',
 ]
