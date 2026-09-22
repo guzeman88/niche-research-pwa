@@ -143,4 +143,13 @@ def adapter_status():
                 "error": str(e),
             }
 
+    try:
+        from services.provider_telemetry import get_provider_states
+        runtime_states = get_provider_states()
+        for key, state in runtime_states.items():
+            if key in results:
+                results[key]["runtime"] = state
+    except Exception:
+        pass
+
     return results

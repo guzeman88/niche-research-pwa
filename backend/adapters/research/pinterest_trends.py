@@ -46,6 +46,10 @@ class PinterestTrendsAdapter(BaseResearchAdapter):
     def is_configured(self) -> bool:
         return bool(self._token and not self._token.startswith("your_"))
 
+    def discovery_interval_seconds(self) -> int:
+        """Use the configured provider cache interval as the polling cadence."""
+        return self._cache_seconds
+
     def search(self, keyword: str, category: str = "") -> list[NicheSignal]:
         return self.bulk_search([keyword])
 

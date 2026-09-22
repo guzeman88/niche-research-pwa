@@ -37,14 +37,24 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
 
+class _ClosingConnection(sqlite3.Connection):
+    """Commit or roll back, then release the file handle after every context."""
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 def _conn() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(DB_PATH, timeout=30)
+    con = sqlite3.connect(DB_PATH, timeout=30, factory=_ClosingConnection)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
@@ -323,6 +333,9 @@ def init_db() -> None:
         if version < 15:
             _migrate_v15(con)
             _set_version(con, 15)
+        if version < 16:
+            _migrate_v16(con)
+            _set_version(con, 16)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
 
@@ -646,6 +659,25 @@ def _migrate_v15(con: sqlite3.Connection) -> None:
             pass
 
 
+def _migrate_v16(con: sqlite3.Connection) -> None:
+    """Persist latest collection progress independently of process-local scans."""
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS keyword_collection_state (
+            keyword                 TEXT PRIMARY KEY REFERENCES seeds(keyword) ON DELETE CASCADE,
+            last_collected_at       TEXT NOT NULL,
+            evidence_status        TEXT NOT NULL,
+            listing_count          INTEGER,
+            sampled_listing_count  INTEGER,
+            avg_price_usd           REAL,
+            sources_json            TEXT NOT NULL,
+            last_run_id             TEXT,
+            updated_at              TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_keyword_collection_state_oldest
+            ON keyword_collection_state(last_collected_at ASC);
+    """)
+
+
 # ── Seed management ───────────────────────────────────────────────────────────
 
 def load_seeds_from_library() -> int:
@@ -712,6 +744,77 @@ def add_seeds_bulk(keywords: list[str], domain: str = "discovered", source: str 
                 observation_count=keyword_sources.observation_count + 1
         """, [(keyword, source, now, now) for keyword, _domain, _source, _added in rows])
         return cur.rowcount
+
+
+def merge_remote_collection_state(
+    seeds: list[dict],
+    states: list[dict],
+) -> tuple[int, int]:
+    """Merge durable Supabase seed/progress rows without inflating source counts."""
+    now = datetime.utcnow().isoformat()
+    seed_rows = [
+        (
+            str(row.get("keyword") or "").strip().lower(),
+            str(row.get("domain") or "discovered"),
+            str(row.get("source") or "cloud_sync"),
+            str(row.get("added_at") or now),
+        )
+        for row in seeds
+        if str(row.get("keyword") or "").strip()
+    ]
+    state_rows = [
+        (
+            str(row.get("keyword") or "").strip().lower(),
+            str(row.get("last_collected_at") or ""),
+            str(row.get("evidence_status") or "unverified"),
+            row.get("listing_count"),
+            row.get("sampled_listing_count"),
+            row.get("avg_price_usd"),
+            json.dumps(row.get("sources") or []),
+            row.get("last_run_id"),
+            str(row.get("updated_at") or now),
+        )
+        for row in states
+        if str(row.get("keyword") or "").strip() and row.get("last_collected_at")
+    ]
+    with _conn() as con:
+        before_seeds = int(con.execute("SELECT COUNT(*) FROM seeds").fetchone()[0] or 0)
+        before_states = int(con.execute(
+            "SELECT COUNT(*) FROM keyword_collection_state"
+        ).fetchone()[0] or 0)
+        con.executemany(
+            "INSERT OR IGNORE INTO seeds(keyword, domain, source, added_at) VALUES (?,?,?,?)",
+            seed_rows,
+        )
+        con.executemany("""
+            INSERT OR IGNORE INTO keyword_sources
+                (keyword, source, first_seen_at, last_seen_at, observation_count)
+            VALUES (?, ?, ?, ?, 1)
+        """, [
+            (keyword, source, added_at, added_at)
+            for keyword, _domain, source, added_at in seed_rows
+        ])
+        con.executemany("""
+            INSERT INTO keyword_collection_state
+                (keyword, last_collected_at, evidence_status, listing_count,
+                 sampled_listing_count, avg_price_usd, sources_json, last_run_id, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(keyword) DO UPDATE SET
+                last_collected_at=excluded.last_collected_at,
+                evidence_status=excluded.evidence_status,
+                listing_count=excluded.listing_count,
+                sampled_listing_count=excluded.sampled_listing_count,
+                avg_price_usd=excluded.avg_price_usd,
+                sources_json=excluded.sources_json,
+                last_run_id=excluded.last_run_id,
+                updated_at=excluded.updated_at
+            WHERE excluded.last_collected_at > keyword_collection_state.last_collected_at
+        """, state_rows)
+        after_seeds = int(con.execute("SELECT COUNT(*) FROM seeds").fetchone()[0] or 0)
+        after_states = int(con.execute(
+            "SELECT COUNT(*) FROM keyword_collection_state"
+        ).fetchone()[0] or 0)
+    return after_seeds - before_seeds, after_states - before_states
 
 
 # ── Evidence collection ──────────────────────────────────────────────────────
@@ -1438,6 +1541,25 @@ def save_scan(keyword: str, report) -> None:
             metrics.get("sampled_listings"),
             cur.lastrowid,
         ))
+        con.execute("""
+            INSERT INTO keyword_collection_state
+                (keyword, last_collected_at, evidence_status, listing_count,
+                 sampled_listing_count, avg_price_usd, sources_json, last_run_id, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(keyword) DO UPDATE SET
+                last_collected_at=excluded.last_collected_at,
+                evidence_status=excluded.evidence_status,
+                listing_count=excluded.listing_count,
+                sampled_listing_count=excluded.sampled_listing_count,
+                avg_price_usd=excluded.avg_price_usd,
+                sources_json=excluded.sources_json,
+                last_run_id=excluded.last_run_id,
+                updated_at=excluded.updated_at
+        """, (
+            kw, now, evidence_status, metrics.get("listing_count"),
+            metrics.get("sampled_listings"), metrics.get("avg_price_usd"),
+            json.dumps(sources), collection_run_id, now,
+        ))
         _record_scan_observations(con, kw, now, metrics, sources, collection_run_id)
 
     if collection_run_id:
@@ -1488,12 +1610,12 @@ def _unscanned_candidate_rows(domain: Optional[str], candidate_limit: int) -> li
             return con.execute("""
                 SELECT s.keyword, s.domain, s.source, s.added_at FROM seeds s
                 WHERE s.domain=?
-                  AND NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
+                  AND NOT EXISTS (SELECT 1 FROM keyword_collection_state cs WHERE cs.keyword=s.keyword)
                 ORDER BY s.added_at ASC, s.keyword ASC LIMIT ?
             """, (domain, candidate_limit)).fetchall()
         return con.execute("""
             SELECT s.keyword, s.domain, s.source, s.added_at FROM seeds s
-            WHERE NOT EXISTS (SELECT 1 FROM scans sc WHERE sc.keyword=s.keyword)
+            WHERE NOT EXISTS (SELECT 1 FROM keyword_collection_state cs WHERE cs.keyword=s.keyword)
             ORDER BY s.added_at ASC, s.keyword ASC LIMIT ?
         """, (candidate_limit,)).fetchall()
 
@@ -1514,20 +1636,19 @@ def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> 
     with _conn() as con:
         base = """
             SELECT s.keyword FROM seeds s
-            JOIN (SELECT keyword, MAX(scanned_at) AS last_scan FROM scans GROUP BY keyword) latest
-              ON latest.keyword=s.keyword
-            WHERE latest.last_scan < ?
+            JOIN keyword_collection_state latest ON latest.keyword=s.keyword
+            WHERE latest.last_collected_at < ?
         """
         if domain:
             rows = con.execute(base + """
                 AND s.domain=?
-                ORDER BY latest.last_scan ASC
+                ORDER BY latest.last_collected_at ASC
                 LIMIT ?
             """,
                                (cutoff, domain, limit)).fetchall()
         else:
             rows = con.execute(base + """
-                ORDER BY latest.last_scan ASC
+                ORDER BY latest.last_collected_at ASC
                 LIMIT ?
             """,
                                (cutoff, limit)).fetchall()
@@ -1546,9 +1667,8 @@ def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[s
         rows = con.execute("""
             SELECT s.keyword
             FROM seeds s
-            JOIN scans sc ON sc.keyword=s.keyword
-            WHERE sc.id=(SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
-              AND sc.scanned_at < ?
+            JOIN keyword_collection_state sc ON sc.keyword=s.keyword
+            WHERE sc.last_collected_at < ?
               AND (
                 sc.evidence_status != 'verified'
                 OR sc.sampled_listing_count IS NULL
@@ -1556,7 +1676,7 @@ def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[s
                 OR sc.avg_price_usd IS NULL
                 OR sc.listing_count IS NULL
               )
-            ORDER BY sc.scanned_at ASC
+            ORDER BY sc.last_collected_at ASC
             LIMIT ?
         """, (cutoff, limit)).fetchall()
         return [r[0] for r in rows]
@@ -1584,8 +1704,24 @@ def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
     if remaining > 0:
         _add(get_unscanned(limit=remaining))
 
-    _add(get_stale(days=stale_days, limit=count))
+    remaining = count - len(result)
+    if remaining > 0:
+        _add(get_stale(days=stale_days, limit=remaining))
+    remaining = count - len(result)
+    if remaining > 0:
+        _add(get_oldest_collected(limit=remaining))
     return result[:count]
+
+
+def get_oldest_collected(limit: int = 20) -> list[str]:
+    """Keep the collector cycling after every candidate has initial evidence."""
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT keyword FROM keyword_collection_state
+            ORDER BY last_collected_at ASC, keyword ASC
+            LIMIT ?
+        """, (limit,)).fetchall()
+    return [row["keyword"] for row in rows]
 
 
 def get_all_seeds_with_status(limit: int = 2000) -> list[dict]:
@@ -1797,7 +1933,7 @@ def get_store_idea_signals(limit: int = 800, domain: Optional[str] = None) -> li
 def get_stats() -> dict:
     with _conn() as con:
         total_seeds = con.execute("SELECT COUNT(*) FROM seeds").fetchone()[0]
-        scanned     = con.execute("SELECT COUNT(DISTINCT keyword) FROM scans").fetchone()[0]
+        scanned     = con.execute("SELECT COUNT(*) FROM keyword_collection_state").fetchone()[0]
         total_scans = con.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
         breakouts   = con.execute("SELECT COUNT(*) FROM gap_scores WHERE breakout_flag=1").fetchone()[0]
         expansion_edges = con.execute("SELECT COUNT(*) FROM expansion_tree").fetchone()[0]
@@ -1829,12 +1965,15 @@ def get_stats() -> dict:
         ).fetchall()
 
         quality = con.execute("""SELECT
-            SUM(sc.scan_status IN ('signals','evidence')) AS successful,
-            SUM(sc.scan_status='evidence') AS evidence_backed,
-            SUM(sc.scan_status='failed') AS failed,
-            SUM(sc.scan_status='no_data') AS no_data,
-            SUM(sc.scanned_at < ?) AS stale
-            FROM scans sc JOIN (SELECT keyword, MAX(id) id FROM scans GROUP BY keyword) latest ON latest.id=sc.id
+            SUM(evidence_status != 'failed' AND (
+                evidence_status IN ('partial','verified')
+                OR sources_json NOT IN ('[]','','null')
+            )) AS successful,
+            SUM(evidence_status='verified') AS evidence_backed,
+            SUM(evidence_status='failed') AS failed,
+            SUM(evidence_status='unverified' AND sources_json IN ('[]','','null')) AS no_data,
+            SUM(last_collected_at < ?) AS stale
+            FROM keyword_collection_state
         """, ((datetime.utcnow()-timedelta(days=30)).isoformat(),)).fetchone()
         return {
             "attempted": scanned,

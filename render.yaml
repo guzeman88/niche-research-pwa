@@ -30,8 +30,6 @@ services:
         value: 0
       - key: SCHEDULER_ALLOW_LLM_SYNTHESIS
         value: 0
-      - key: EXTERNAL_DISCOVERY_INTERVAL_HOURS
-        value: 24
       - key: GOOGLE_DAILY_TRENDS_GEO
         value: US
       - key: GOOGLE_DAILY_TRENDS_CACHE_SECONDS
