@@ -96,15 +96,27 @@ def _github_heartbeat_claims_allowed(claims: dict | None) -> bool:
     if not claims:
         return False
     repository = os.getenv("GITHUB_HEARTBEAT_REPOSITORY", "guzeman88/niche-research-pwa")
-    workflow_ref = os.getenv(
+    heartbeat_workflow_ref = os.getenv(
         "GITHUB_HEARTBEAT_WORKFLOW_REF",
         f"{repository}/.github/workflows/keepalive.yml@refs/heads/main",
     )
+    deploy_workflow_ref = os.getenv(
+        "GITHUB_DEPLOY_WORKFLOW_REF",
+        f"{repository}/.github/workflows/deploy-backend.yml@refs/heads/main",
+    )
+    claimed_workflow = str(claims.get("workflow_ref", ""))
+    claimed_event = claims.get("event_name")
+    workflow_allowed = (
+        hmac.compare_digest(claimed_workflow, heartbeat_workflow_ref)
+        and claimed_event in {"schedule", "workflow_dispatch"}
+    ) or (
+        hmac.compare_digest(claimed_workflow, deploy_workflow_ref)
+        and claimed_event == "workflow_dispatch"
+    )
     checks = {
         "repository": hmac.compare_digest(str(claims.get("repository", "")), repository),
-        "workflow_ref": hmac.compare_digest(str(claims.get("workflow_ref", "")), workflow_ref),
+        "workflow_ref": workflow_allowed,
         "ref": hmac.compare_digest(str(claims.get("ref", "")), "refs/heads/main"),
-        "event_name": claims.get("event_name") in {"schedule", "workflow_dispatch"},
     }
     rejected = [name for name, accepted in checks.items() if not accepted]
     if rejected:

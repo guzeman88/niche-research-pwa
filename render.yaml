@@ -40,3 +40,5 @@ services:
         value: guzeman88/niche-research-pwa
       - key: GITHUB_HEARTBEAT_WORKFLOW_REF
         value: guzeman88/niche-research-pwa/.github/workflows/keepalive.yml@refs/heads/main
+      - key: GITHUB_DEPLOY_WORKFLOW_REF
+        value: guzeman88/niche-research-pwa/.github/workflows/deploy-backend.yml@refs/heads/main

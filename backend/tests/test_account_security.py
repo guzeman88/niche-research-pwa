@@ -53,6 +53,23 @@ def test_github_heartbeat_identity_is_exact_and_scheduler_scoped(monkeypatch):
     assert not asyncio.run(security.github_heartbeat_authorized(wrong_path))
 
 
+def test_github_deploy_identity_can_start_scheduler(monkeypatch):
+    claims = {
+        "repository": "guzeman88/niche-research-pwa",
+        "workflow_ref": "guzeman88/niche-research-pwa/.github/workflows/deploy-backend.yml@refs/heads/main",
+        "ref": "refs/heads/main",
+        "event_name": "workflow_dispatch",
+    }
+
+    async def signed_claims(_token):
+        return claims
+
+    monkeypatch.setattr(security, "_github_oidc_claims", signed_claims)
+    authorized = request([(b"authorization", b"Bearer deploy-token")], "/api/scheduler/start")
+
+    assert asyncio.run(security.github_heartbeat_authorized(authorized))
+
+
 @pytest.mark.parametrize("claim,value", [
     ("repository", "someone/else"),
     ("workflow_ref", "guzeman88/niche-research-pwa/.github/workflows/other.yml@refs/heads/main"),
@@ -68,3 +85,12 @@ def test_github_heartbeat_rejects_wrong_identity_claim(monkeypatch, claim, value
     }
     candidate[claim] = value
     assert not security._github_heartbeat_claims_allowed(candidate)
+
+
+def test_github_deploy_identity_rejects_scheduled_event():
+    assert not security._github_heartbeat_claims_allowed({
+        "repository": "guzeman88/niche-research-pwa",
+        "workflow_ref": "guzeman88/niche-research-pwa/.github/workflows/deploy-backend.yml@refs/heads/main",
+        "ref": "refs/heads/main",
+        "event_name": "schedule",
+    })
