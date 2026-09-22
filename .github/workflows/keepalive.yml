@@ -44,6 +44,35 @@ jobs:
           echo "::add-mask::$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
+      - name: Validate issued identity scope
+        env:
+          GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          node <<'NODE'
+          const claims = JSON.parse(Buffer.from(process.env.GITHUB_OIDC_TOKEN.split('.')[1], 'base64url'))
+          const expected = {
+            iss: 'https://token.actions.githubusercontent.com',
+            aud: 'etgen-evidence-collector',
+            repository: 'guzeman88/niche-research-pwa',
+            workflow_ref: 'guzeman88/niche-research-pwa/.github/workflows/keepalive.yml@refs/heads/main',
+            ref: 'refs/heads/main',
+          }
+          for (const [name, value] of Object.entries(expected)) {
+            if (claims[name] !== value) throw new Error(`Unexpected ${name}: ${claims[name] ?? 'missing'}`)
+          }
+          if (!['schedule', 'workflow_dispatch'].includes(claims.event_name)) {
+            throw new Error(`Unexpected event_name: ${claims.event_name ?? 'missing'}`)
+          }
+          console.log(JSON.stringify({
+            issuer: claims.iss,
+            audience: claims.aud,
+            repository: claims.repository,
+            workflow_ref: claims.workflow_ref,
+            ref: claims.ref,
+            event_name: claims.event_name,
+          }))
+          NODE
+
       - name: Ensure continuous collector is running
         env:
           GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
