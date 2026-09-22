@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import logging
 import os
 import time
 import httpx
@@ -17,6 +18,7 @@ GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 GITHUB_OIDC_JWKS_URL = f"{GITHUB_OIDC_ISSUER}/.well-known/jwks"
 GITHUB_HEARTBEAT_PATHS = frozenset({"/api/scheduler/start", "/api/scheduler/status"})
 _github_jwks_cache: dict = {"keys": [], "expires_at": 0.0}
+logger = logging.getLogger(__name__)
 
 
 def allowed_origins() -> list[str]:
@@ -85,7 +87,8 @@ async def _github_oidc_claims(token: str) -> dict | None:
             audience=os.getenv("GITHUB_HEARTBEAT_AUDIENCE", "etgen-evidence-collector"),
             options={"require_exp": True, "require_iat": True, "require_sub": True},
         )
-    except (JWTError, httpx.HTTPError, ValueError, KeyError, TypeError):
+    except (JWTError, httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+        logger.warning("GitHub heartbeat token verification failed: %s", type(error).__name__)
         return None
 
 
@@ -97,12 +100,16 @@ def _github_heartbeat_claims_allowed(claims: dict | None) -> bool:
         "GITHUB_HEARTBEAT_WORKFLOW_REF",
         f"{repository}/.github/workflows/keepalive.yml@refs/heads/main",
     )
-    return all((
-        hmac.compare_digest(str(claims.get("repository", "")), repository),
-        hmac.compare_digest(str(claims.get("workflow_ref", "")), workflow_ref),
-        hmac.compare_digest(str(claims.get("ref", "")), "refs/heads/main"),
-        claims.get("event_name") in {"schedule", "workflow_dispatch"},
-    ))
+    checks = {
+        "repository": hmac.compare_digest(str(claims.get("repository", "")), repository),
+        "workflow_ref": hmac.compare_digest(str(claims.get("workflow_ref", "")), workflow_ref),
+        "ref": hmac.compare_digest(str(claims.get("ref", "")), "refs/heads/main"),
+        "event_name": claims.get("event_name") in {"schedule", "workflow_dispatch"},
+    }
+    rejected = [name for name, accepted in checks.items() if not accepted]
+    if rejected:
+        logger.warning("GitHub heartbeat identity rejected for claims: %s", ", ".join(rejected))
+    return not rejected
 
 
 async def github_heartbeat_authorized(request: Request) -> bool:
