@@ -250,6 +250,7 @@ class AutonomousScheduler:
                 if self._stop_event.is_set():
                     break
                 self._pause_event.wait()
+                scan_started = time.monotonic()
 
                 self._current_keyword = kw
                 try:
@@ -283,9 +284,17 @@ class AutonomousScheduler:
                 finally:
                     self._current_keyword = None
 
-                # Rate-limited sleep between keywords
+                # Hold the interval between scan starts, not after a scan ends.
+                # Provider and persistence work already consume part of the
+                # live quota-derived interval and should not be counted twice.
                 if not self._stop_event.is_set():
-                    self._interruptible_sleep(self._scan_interval_seconds())
+                    elapsed = time.monotonic() - scan_started
+                    self._interruptible_sleep(
+                        _remaining_interval_seconds(
+                            self._scan_interval_seconds(),
+                            elapsed,
+                        )
+                    )
 
         self._log("[scheduler] Loop ended")
 
@@ -744,3 +753,8 @@ def _scheduler_research_adapters() -> list[str]:
     )
     names = [name.strip() for name in raw.split(",") if name.strip()]
     return names or ["etsy_open_api", "google_suggest", "google_trends"]
+
+
+def _remaining_interval_seconds(target_seconds: float, elapsed_seconds: float) -> float:
+    """Return only the unspent part of a provider-derived scan interval."""
+    return max(0.0, float(target_seconds) - max(0.0, float(elapsed_seconds)))

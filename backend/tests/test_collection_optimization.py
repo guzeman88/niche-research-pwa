@@ -9,6 +9,7 @@ from adapters.base.research import NicheSignal
 from adapters.research import etsy_open_api, google_trends
 from adapters.research.etsy_search_scraper import EtsyListingData, EtsySearchResult
 from pipeline import keyword_database as db
+from pipeline.autonomous_scheduler import _remaining_interval_seconds
 from pipeline.stages import niche_research
 
 
@@ -35,6 +36,11 @@ def test_etsy_interval_comes_from_live_quota_headers() -> None:
 
     assert etsy_open_api.recommended_request_interval_seconds() == pytest.approx(17.28)
     assert etsy_open_api.etsy_rate_limit_snapshot()["remaining_today"] == 4999
+
+
+def test_scheduler_does_not_double_count_processing_time_in_quota_interval() -> None:
+    assert _remaining_interval_seconds(17.28, 12.0) == pytest.approx(5.28)
+    assert _remaining_interval_seconds(17.28, 20.0) == 0.0
 
 
 def test_etsy_research_uses_full_page_without_duplicate_adapter_call(monkeypatch) -> None:
