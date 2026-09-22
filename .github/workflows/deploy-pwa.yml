@@ -49,4 +49,4 @@ jobs:
         run: npx --yes netlify-cli deploy --prod --dir=dist --no-build --site="$NETLIFY_SITE_ID"
 
       - name: Verify live snapshot
-        run: node scripts/verify-release.cjs https://etsy-niches.netlify.app
+        run: node scripts/verify-release.cjs https://etgen.netlify.app
