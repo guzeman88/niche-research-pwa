@@ -21,6 +21,58 @@ from adapters.research.etsy_search_scraper import (
 from adapters.research.etsy_listing_scraper import ListingDetail
 
 _BASE_URL = os.getenv("ETSY_OPEN_API_BASE_URL", "https://api.etsy.com/v3/application")
+_STORED_CREDENTIAL_PROVIDER = "etsy_open_api"
+_stored_api_key_header: str | None = None
+
+
+def _supabase_api_key_header() -> str:
+    """Load the Etsy credential from the backend-only provider store.
+
+    Successful reads are cached for the process lifetime. Missing credentials
+    and temporary Supabase failures are not cached, so configuration can recover
+    without restarting the service.
+    """
+    global _stored_api_key_header
+    if _stored_api_key_header is not None:
+        return _stored_api_key_header
+
+    supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not supabase_url or not service_role_key:
+        return ""
+
+    try:
+        response = httpx.get(
+            f"{supabase_url}/rest/v1/provider_credentials",
+            params={
+                "provider": f"eq.{_STORED_CREDENTIAL_PROVIDER}",
+                "select": "secret_value",
+                "limit": "1",
+            },
+            headers={
+                "apikey": service_role_key,
+                "authorization": f"Bearer {service_role_key}",
+                "accept": "application/json",
+            },
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        rows = response.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        return ""
+
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        return ""
+    credential = str(rows[0].get("secret_value") or "").strip()
+    if credential:
+        _stored_api_key_header = credential
+    return credential
+
+
+def _clear_stored_api_key_cache() -> None:
+    """Reset the in-process credential cache for tests and key rotation."""
+    global _stored_api_key_header
+    _stored_api_key_header = None
 
 
 def _api_key_header() -> str:
@@ -38,7 +90,9 @@ def _api_key_header() -> str:
     )
     if keystring and shared_secret:
         return f"{keystring}:{shared_secret}"
-    return keystring
+    if keystring:
+        return keystring
+    return _supabase_api_key_header()
 
 
 def is_etsy_open_api_configured() -> bool:
