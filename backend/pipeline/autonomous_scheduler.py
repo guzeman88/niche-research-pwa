@@ -114,6 +114,7 @@ class AutonomousScheduler:
         except Exception as exc:
             self._log(f"[scheduler] Durable queue hydration failed: {exc}")
         self._load_state()
+        self._hydrate_external_discovery_fingerprints()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -772,6 +773,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                         "covered_rows": covered,
                         "new_rows": new_rows,
                         "duplicate_rows": max(0, covered - new_rows),
+                        "fingerprints": known_ordered[-2000:],
                     },
                 )
                 self._external_discovery_by_source[adapter.name] = now.isoformat()
@@ -856,6 +858,24 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                     }
             except Exception:
                 pass
+
+    def _hydrate_external_discovery_fingerprints(self) -> None:
+        """Restore feed deduplication state from durable provider telemetry."""
+        try:
+            from services.provider_telemetry import get_provider_states
+            for provider, state in get_provider_states().items():
+                metadata = state.get("metadata") if isinstance(state, dict) else None
+                fingerprints = metadata.get("fingerprints") if isinstance(metadata, dict) else None
+                if not isinstance(fingerprints, list):
+                    continue
+                existing = self._external_discovery_fingerprints.get(provider, [])
+                merged = list(dict.fromkeys([
+                    *(str(value) for value in existing if value),
+                    *(str(value) for value in fingerprints if value),
+                ]))
+                self._external_discovery_fingerprints[provider] = merged[-2000:]
+        except Exception as exc:
+            self._log(f"[scheduler] Durable discovery dedup hydration failed: {exc}")
 
 
 # ── Singleton accessor (one scheduler per app process) ────────────────────────
