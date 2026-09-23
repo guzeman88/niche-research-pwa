@@ -9,7 +9,7 @@ from adapters.base.research import NicheSignal
 from adapters.research import etsy_open_api, google_trends
 from adapters.research.etsy_search_scraper import EtsyListingData, EtsySearchResult
 from pipeline import keyword_database as db
-from pipeline.autonomous_scheduler import _remaining_interval_seconds
+from pipeline.autonomous_scheduler import AutonomousScheduler, _remaining_interval_seconds
 from pipeline.autonomous_scheduler import _signal_fingerprint
 from pipeline.stages import niche_research
 from services import collection_quality
@@ -208,6 +208,23 @@ def test_feed_fingerprint_ignores_collector_timestamp() -> None:
     second = NicheSignal(**{**vars(first), "observed_at": "2026-09-23T11:00:00Z"})
 
     assert _signal_fingerprint("google_daily_trends", first) == _signal_fingerprint("google_daily_trends", second)
+
+
+def test_feed_fingerprints_hydrate_from_durable_runtime_state(monkeypatch) -> None:
+    from services import provider_telemetry
+
+    monkeypatch.setattr(provider_telemetry, "get_provider_states", lambda: {
+        "google_daily_trends": {"metadata": {"fingerprints": ["remote-a", "remote-b"]}},
+    })
+    worker = AutonomousScheduler.__new__(AutonomousScheduler)
+    worker._external_discovery_fingerprints = {"google_daily_trends": ["local-a"]}
+    worker._log = lambda _message: None
+
+    worker._hydrate_external_discovery_fingerprints()
+
+    assert worker._external_discovery_fingerprints["google_daily_trends"] == [
+        "local-a", "remote-a", "remote-b",
+    ]
 
 
 def test_quality_rates_require_observed_denominators(database, monkeypatch) -> None:
