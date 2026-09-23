@@ -47,6 +47,26 @@ interface EvidenceCoverage {
   }
 }
 
+interface CollectionQuality {
+  generated_at: string
+  window_hours: number
+  target_min_pct: number
+  target_max_pct: number
+  sources: Array<{
+    source: string
+    metric: string
+    purpose: string
+    configured: boolean | null
+    status: string | null
+    collection_rate_pct: number | null
+    quality_yield_pct: number | null
+    collected: number | null
+    eligible_or_available: number | null
+    new_rows: number | null
+    target_status: 'on_target' | 'below_target' | 'tbd' | 'not_configured'
+  }>
+}
+
 type ImportSource = 'etsy_marketplace_insights' | 'erank' | 'marmalead' | 'etsy_shop_stats' | 'google_keyword_planner' | 'google_trends' | 'pinterest_trends'
 
 const MARKET_ADAPTERS = [
@@ -135,13 +155,19 @@ export default function EvidenceOperations() {
     enabled: connected,
     retry: false,
   })
+  const quality = useQuery<CollectionQuality>({
+    queryKey: ['collection-quality', connectionVersion],
+    queryFn: () => operatorRequest('/api/evidence/quality'),
+    enabled: connected,
+    retry: false,
+  })
 
   const action = useMutation({
     mutationFn: ({ path, body }: { path: string; body: Record<string, unknown> }) => operatorRequest<Record<string, unknown>>(path, body),
     onSuccess: async (result) => {
       setError('')
       setMessage(String(result.message || result.status || 'Recorded.'))
-      await Promise.all([scheduler.refetch(), evidence.refetch(), coverage.refetch()])
+      await Promise.all([scheduler.refetch(), evidence.refetch(), coverage.refetch(), quality.refetch()])
     },
     onError: failure => setError(failure instanceof Error ? failure.message : 'The operation failed.'),
   })
@@ -284,6 +310,35 @@ export default function EvidenceOperations() {
                   <span className={coverage.data?.durability.cloud_sync_configured ? 'text-accent-green' : 'text-accent-amber'}>{coverage.data?.durability.cloud_sync_configured ? 'Configured — completed runs sync to Supabase' : 'Not configured — evidence remains on this backend filesystem'}</span>
                 </div>
               </>
+            )}
+          </section>
+
+          <section className="panel overflow-hidden" aria-labelledby="quality-heading">
+            <div className="border-b border-surface-600/55 px-4 py-3">
+              <h2 id="quality-heading" className="text-sm font-bold">Collection quality</h2>
+              <p className="mt-1 text-[12px] text-surface-300">Measured work completed in the last {quality.data?.window_hours ?? 24} hours. Target: 80–100%. Missing denominators stay TBD.</p>
+            </div>
+            {quality.isError ? <InlineError text={errorText(quality.error)} /> : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[48rem] text-left text-[12px]">
+                  <thead className="bg-surface-900/45 text-[10px] uppercase tracking-wide text-surface-300">
+                    <tr><th className="px-4 py-2">Source</th><th className="px-4 py-2">Rate</th><th className="px-4 py-2">Measured</th><th className="px-4 py-2">Useful yield</th><th className="px-4 py-2">Used for</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-600/35">
+                    {(quality.data?.sources || []).map(row => {
+                      const onTarget = row.target_status === 'on_target'
+                      const measured = row.collected != null && row.eligible_or_available != null ? `${row.collected.toLocaleString()} / ${row.eligible_or_available.toLocaleString()}` : 'TBD'
+                      return <tr key={row.source}>
+                        <td className="px-4 py-3 font-bold text-surface-50">{row.source.split('_').join(' ')}</td>
+                        <td className={`px-4 py-3 font-bold ${onTarget ? 'text-accent-green' : row.collection_rate_pct == null ? 'text-surface-300' : 'text-accent-amber'}`}>{row.collection_rate_pct == null ? 'TBD' : `${row.collection_rate_pct}%`}</td>
+                        <td className="px-4 py-3 tabular-nums text-surface-200">{measured}</td>
+                        <td className="px-4 py-3 tabular-nums text-surface-200">{row.quality_yield_pct == null ? 'TBD' : `${row.quality_yield_pct}%`}</td>
+                        <td className="max-w-sm px-4 py-3 text-surface-300">{row.purpose}</td>
+                      </tr>
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
 

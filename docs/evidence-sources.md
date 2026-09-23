@@ -8,10 +8,10 @@ stored.
 
 | Source | Activation | Stored evidence | Refresh behavior |
 | --- | --- | --- | --- |
-| Google Shopping Suggest | No credential | Exact query, suggestion, returned position, geography, timestamp | Continuous oldest-first keyword queue; suggestions from the completed scan are reused for expansion |
-| Google Trends | No credential; unofficial `pytrends` client | Complete dated relative-interest series, related queries, and collection context | Continuous oldest-first keyword queue; up to five queued keywords share one provider batch |
-| Google Daily Search Trends | No credential; official public RSS feed | Dated trending query, provider-displayed approximate traffic floor, rank, and linked news records | Independent source schedule derived from its configured cache duration |
-| Etsy Open API | Etsy approval plus API credentials | Listing count when returned, up to 100 sampled listings per request, prices, shops, favorites, tags/materials where available | Continuous oldest-first queue paced from the API's live per-second and daily quota headers |
+| Google Shopping Suggest | No credential | Exact query, suggestion, returned position, geography, timestamp | Runs in the primary queue; identical phrases returned by several query prefixes are stored once |
+| Google Trends | No credential; unofficial `pytrends` client | Complete dated relative-interest series, related queries, and collection context | Independent worker; up to five due keywords share one request and do not delay Etsy collection |
+| Google Daily Search Trends | No credential; official public RSS feed | Dated trending query, provider-displayed approximate traffic floor, rank, and linked news records | Independent source cadence; unchanged feed items are recognized rather than stored as new evidence |
+| Etsy Open API | Etsy approval plus API credentials | Listing count when returned, up to 100 sampled listings per request, prices, shops, favorites, tags/materials where available | Primary queue paced from live per-second quota and the requests remaining before the UTC daily reset |
 | Pinterest Trends | Approved Pinterest business app and token | Ranked current trends, WoW/MoM/YoY growth, one-year weekly relative-interest series | Independent source schedule derived from its configured cache duration, plus exact-keyword queue matches |
 | Reddit Data API | Reddit commercial-use approval plus credentials | Exact-query post counts and engagement aggregates with source records | Keyword queue only after explicit approval flag |
 
@@ -31,6 +31,15 @@ provider-state row. These records distinguish successful evidence, valid
 no-data responses, unavailable connectors, rate limits, and failures; they also
 retain observed yield, request duration, and quota fields when the provider
 actually reports them. Provider state never fabricates a missing metric.
+
+`GET /api/evidence/quality` reports the rolling collection rate for each source.
+The target band is 80–100%. Etsy is measured against its provider-reported
+daily request capacity; keyword sources are measured as completed eligible
+keywords divided by scheduled eligible keywords; discovery feeds are measured
+as valid feed rows covered divided by rows returned. Useful-yield is reported
+separately, so a valid no-data response can complete scheduled work without
+being misrepresented as market evidence. Import-only and approval-gated sources
+remain `null`/TBD until they have a real schedule or usable access.
 
 ## Structured imports
 

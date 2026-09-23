@@ -10,7 +10,9 @@ from adapters.research import etsy_open_api, google_trends
 from adapters.research.etsy_search_scraper import EtsyListingData, EtsySearchResult
 from pipeline import keyword_database as db
 from pipeline.autonomous_scheduler import _remaining_interval_seconds
+from pipeline.autonomous_scheduler import _signal_fingerprint
 from pipeline.stages import niche_research
+from services import collection_quality
 
 
 @pytest.fixture
@@ -34,7 +36,9 @@ def test_etsy_interval_comes_from_live_quota_headers() -> None:
 
     etsy_open_api._capture_rate_limits(response)
 
-    assert etsy_open_api.recommended_request_interval_seconds() == pytest.approx(17.28)
+    interval = etsy_open_api.recommended_request_interval_seconds()
+    assert interval is not None
+    assert 0.2 <= interval <= 17.28
     assert etsy_open_api.etsy_rate_limit_snapshot()["remaining_today"] == 4999
 
 
@@ -173,3 +177,74 @@ def test_database_contexts_release_the_sqlite_file(database) -> None:
     database.DB_PATH.unlink()
 
     assert not database.DB_PATH.exists()
+
+
+def test_provider_refresh_state_prevents_duplicate_work_inside_window(database) -> None:
+    keywords = ["teacher gift", "nurse gift"]
+    assert database.provider_keywords_due("google_trends", keywords, stale_days=30) == keywords
+
+    database.record_provider_keyword_attempt(
+        "google_trends",
+        "teacher gift",
+        status="no_data",
+        row_count=0,
+    )
+
+    assert database.provider_keywords_due("google_trends", keywords, stale_days=30) == ["nurse gift"]
+
+
+def test_feed_fingerprint_ignores_collector_timestamp() -> None:
+    first = NicheSignal(
+        keyword="teacher gifts",
+        monthly_searches=None,
+        competition_score=None,
+        avg_price_usd=None,
+        trend_direction=None,
+        source="google_daily_trends",
+        observed_at="2026-09-23T10:00:00Z",
+        position=1,
+        metadata={"rank": 1},
+    )
+    second = NicheSignal(**{**vars(first), "observed_at": "2026-09-23T11:00:00Z"})
+
+    assert _signal_fingerprint("google_daily_trends", first) == _signal_fingerprint("google_daily_trends", second)
+
+
+def test_quality_rates_require_observed_denominators(database, monkeypatch) -> None:
+    monkeypatch.setattr(collection_quality, "get_provider_states", lambda: {
+        "etsy_open_api": {
+            "configured": True,
+            "status": "completed",
+            "rate_limit": {"limit_per_day": 5000, "remaining_today": 1000},
+        },
+        "google_suggest": {"configured": True, "status": "completed"},
+        "pinterest_trends": {"configured": False, "status": "not_configured"},
+    })
+    monkeypatch.setattr(collection_quality, "get_provider_events", lambda hours: [
+        {
+            "provider": "etsy_open_api",
+            "metadata": {
+                "eligible_keywords": 5000,
+                "processed_keywords": 4000,
+                "usable_keywords": 3900,
+            },
+        },
+        {
+            "provider": "google_suggest",
+            "metadata": {
+                "eligible_keywords": 10,
+                "processed_keywords": 8,
+                "usable_keywords": 6,
+            },
+        },
+    ])
+
+    result = collection_quality.get_collection_quality(hours=24)
+    by_source = {row["source"]: row for row in result["sources"]}
+
+    assert by_source["etsy_open_api"]["collection_rate_pct"] == 80.0
+    assert by_source["google_suggest"]["collection_rate_pct"] == 80.0
+    assert by_source["google_suggest"]["quality_yield_pct"] == 75.0
+    assert by_source["pinterest_trends"]["collection_rate_pct"] is None
+    assert by_source["pinterest_trends"]["target_status"] == "not_configured"
+    assert by_source["erank"]["collection_rate_pct"] is None

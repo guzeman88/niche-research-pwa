@@ -37,7 +37,7 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -336,6 +336,9 @@ def init_db() -> None:
         if version < 16:
             _migrate_v16(con)
             _set_version(con, 16)
+        if version < 17:
+            _migrate_v17(con)
+            _set_version(con, 17)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
 
@@ -675,6 +678,24 @@ def _migrate_v16(con: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_keyword_collection_state_oldest
             ON keyword_collection_state(last_collected_at ASC);
+    """)
+
+
+def _migrate_v17(con: sqlite3.Connection) -> None:
+    """Track provider-specific refresh work without inventing evidence values."""
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS provider_keyword_state (
+            provider                TEXT NOT NULL,
+            keyword                 TEXT NOT NULL REFERENCES seeds(keyword) ON DELETE CASCADE,
+            last_attempt_at         TEXT NOT NULL,
+            last_success_at         TEXT,
+            status                  TEXT NOT NULL,
+            row_count               INTEGER NOT NULL DEFAULT 0,
+            error                   TEXT,
+            PRIMARY KEY (provider, keyword)
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_keyword_due
+            ON provider_keyword_state(provider, last_attempt_at ASC);
     """)
 
 
@@ -1583,6 +1604,148 @@ def save_scan(keyword: str, report) -> None:
         except Exception as exc:
             finish_evidence_collection(collection_run_id, "partial", 0, str(exc))
             raise
+
+
+def save_provider_signals(
+    keyword: str,
+    provider: str,
+    signals: list,
+    *,
+    generated_at: str | None = None,
+) -> int:
+    """Persist source-native signals without replacing Etsy collection state.
+
+    Secondary collectors use this path so a trend or community refresh cannot
+    turn a previously verified marketplace scan back into an unverified one.
+    """
+    normalized = keyword.strip().lower()
+    clean_provider = provider.strip().lower()
+    if not normalized or not clean_provider:
+        raise ValueError("keyword and provider are required")
+    timestamp = generated_at or datetime.now(timezone.utc).isoformat()
+    signal_rows = []
+    for signal in signals:
+        if hasattr(signal, "__dataclass_fields__"):
+            import dataclasses
+            row = dataclasses.asdict(signal)
+        else:
+            row = dict(signal)
+        if str(row.get("keyword") or "").strip().lower() == normalized:
+            signal_rows.append(row)
+    run_id = start_evidence_collection(
+        clean_provider,
+        {"keyword": normalized, "provider": clean_provider},
+        run_id=f"{clean_provider}:{normalized}:{uuid.uuid4().hex}",
+    )
+    report = {
+        "generated_at": timestamp,
+        "sources_used": [clean_provider] if signal_rows else [],
+        "keyword_signals": signal_rows,
+        "keyword_search_data": [],
+    }
+    try:
+        count = _record_report_source_evidence(normalized, report, run_id)
+        finish_evidence_collection(run_id, "completed" if count else "no_data", count)
+        try:
+            from services.supabase_evidence_sync import sync_collection_run
+            sync_collection_run(run_id)
+        except Exception:
+            # The local evidence remains valid and its run stays available for a
+            # later durable sync attempt.
+            pass
+        return count
+    except Exception as exc:
+        finish_evidence_collection(run_id, "failed", 0, str(exc))
+        raise
+
+
+def provider_keywords_due(
+    provider: str,
+    keywords: list[str],
+    *,
+    stale_days: int,
+) -> list[str]:
+    """Return requested keywords that have no provider attempt in the refresh window."""
+    init_db()
+    normalized = list(dict.fromkeys(
+        " ".join(str(keyword).lower().split())
+        for keyword in keywords
+        if str(keyword).strip()
+    ))
+    if not normalized:
+        return []
+    cutoff = (datetime.utcnow() - timedelta(days=max(1, int(stale_days)))).isoformat()
+    placeholders = ",".join("?" for _ in normalized)
+    with _conn() as con:
+        rows = con.execute(
+            f"""
+            SELECT keyword, last_attempt_at FROM provider_keyword_state
+            WHERE provider=? AND keyword IN ({placeholders})
+            """,
+            (provider.strip().lower(), *normalized),
+        ).fetchall()
+    attempted = {
+        row["keyword"]
+        for row in rows
+        if row["last_attempt_at"] and row["last_attempt_at"] >= cutoff
+    }
+    return [keyword for keyword in normalized if keyword not in attempted]
+
+
+def record_provider_keyword_attempt(
+    provider: str,
+    keyword: str,
+    *,
+    status: str,
+    row_count: int,
+    error: str | None = None,
+    attempted_at: str | None = None,
+) -> None:
+    """Record provider work separately from market evidence and model scores."""
+    init_db()
+    normalized = " ".join(keyword.lower().split())
+    clean_provider = provider.strip().lower()
+    if not normalized or not clean_provider:
+        return
+    add_seed(normalized, source=f"provider_{clean_provider}")
+    timestamp = attempted_at or datetime.now(timezone.utc).isoformat()
+    success_at = timestamp if status in {"completed", "no_data", "unchanged"} else None
+    with _conn() as con:
+        con.execute("""
+            INSERT INTO provider_keyword_state
+                (provider, keyword, last_attempt_at, last_success_at, status, row_count, error)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider, keyword) DO UPDATE SET
+                last_attempt_at=excluded.last_attempt_at,
+                last_success_at=COALESCE(excluded.last_success_at, provider_keyword_state.last_success_at),
+                status=excluded.status,
+                row_count=excluded.row_count,
+                error=excluded.error
+        """, (
+            clean_provider, normalized, timestamp, success_at, status,
+            max(0, int(row_count)), str(error)[:2000] if error else None,
+        ))
+
+
+def get_provider_keyword_coverage(provider: str, *, hours: int = 24) -> dict:
+    """Return observed provider attempts; an absent denominator remains unknown."""
+    init_db()
+    cutoff = (datetime.utcnow() - timedelta(hours=max(1, int(hours)))).isoformat()
+    with _conn() as con:
+        row = con.execute("""
+            SELECT COUNT(*) AS attempted,
+                   SUM(CASE WHEN status IN ('completed','no_data','unchanged') THEN 1 ELSE 0 END) AS completed,
+                   SUM(CASE WHEN row_count > 0 THEN 1 ELSE 0 END) AS with_data,
+                   SUM(row_count) AS rows
+            FROM provider_keyword_state
+            WHERE provider=? AND last_attempt_at>=?
+        """, (provider.strip().lower(), cutoff)).fetchone()
+    return {
+        "attempted": int(row["attempted"] or 0),
+        "completed": int(row["completed"] or 0),
+        "with_data": int(row["with_data"] or 0),
+        "rows": int(row["rows"] or 0),
+    }
 
 
 def _update_gap_score(keyword: str, new_gap: float, listing_efficiency: float | None = None) -> None:
