@@ -21,6 +21,8 @@ scheduler can resume after app restart.
 """
 
 import json
+import hashlib
+import queue
 import uuid
 import os
 import threading
@@ -77,6 +79,12 @@ class AutonomousScheduler:
         self._on_scan_complete = on_scan_complete  # called after each keyword, for UI refresh
 
         self._thread: Optional[threading.Thread] = None
+        self._secondary_thread: Optional[threading.Thread] = None
+        self._secondary_queue: queue.Queue[str] = queue.Queue()
+        self._secondary_pending: set[str] = set()
+        self._secondary_lock = threading.Lock()
+        self._secondary_current: list[str] = []
+        self._secondary_last_progress_at: Optional[str] = None
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
         self._pause_event.set()  # not paused by default
@@ -88,6 +96,7 @@ class AutonomousScheduler:
         self._started_at: Optional[str] = None
         self._last_external_discovery_at: Optional[str] = None
         self._external_discovery_by_source: dict[str, str] = {}
+        self._external_discovery_fingerprints: dict[str, list[str]] = {}
         self._errors: list[str] = []
 
         kdb.init_db()
@@ -129,7 +138,9 @@ class AutonomousScheduler:
             self._errors.append(str(exc))
             self._log(f"[scheduler] Worker failed: {exc}")
         finally:
-            if self._stop_event.is_set():
+            stop_was_requested = self._stop_event.is_set()
+            self._stop_event.set()
+            if stop_was_requested:
                 status = "stopped"
             if self._run_id:
                 kdb.update_scheduler_run(self._run_id, keywords_scanned=self._keywords_scanned,
@@ -150,7 +161,13 @@ class AutonomousScheduler:
         self._started_at = datetime.utcnow().isoformat()
         self._run_id = kdb.log_scheduler_run(mode=self._mode)
         self._thread = threading.Thread(target=self._run_guarded, daemon=True, name="keyword-scanner")
+        self._secondary_thread = threading.Thread(
+            target=self._secondary_loop,
+            daemon=True,
+            name="secondary-evidence-collector",
+        )
         self._save_state(running=True)
+        self._secondary_thread.start()
         self._thread.start()
         self._log(f"[scheduler] Started in '{self._mode}' mode — {RATES[self._mode]}s between keywords")
 
@@ -169,6 +186,8 @@ class AutonomousScheduler:
         self._pause_event.set()  # unblock if paused
         if self._thread:
             self._thread.join(timeout=10)
+        if self._secondary_thread:
+            self._secondary_thread.join(timeout=10)
         self._save_state(running=self.is_running())
         self._log("[scheduler] Stop requested; current operation will finish before shutdown")
 
@@ -194,6 +213,12 @@ class AutonomousScheduler:
             "started_at":       self._started_at,
             "interval_s":       self._scan_interval_seconds(),
             "errors":           self._errors[-5:],
+            "secondary_collector": {
+                "running": bool(self._secondary_thread and self._secondary_thread.is_alive()),
+                "queued_keywords": self._secondary_queue.qsize(),
+                "current_keywords": list(self._secondary_current),
+                "last_progress_at": self._secondary_last_progress_at,
+            },
         }
 
     def set_mode(self, mode: str) -> None:
@@ -244,8 +269,6 @@ class AutonomousScheduler:
                     self._interruptible_sleep(300)
                 continue
 
-            self._prefetch_batch_sources(keywords)
-
             for kw in keywords:
                 if self._stop_event.is_set():
                     break
@@ -255,6 +278,7 @@ class AutonomousScheduler:
                 self._current_keyword = kw
                 try:
                     new_seeds = self._scan_and_expand(kw)
+                    self._queue_secondary_collection(kw)
                     self._last_progress_at = datetime.utcnow().isoformat()
                     self._consecutive_failures = 0
                     self._keywords_scanned += 1
@@ -306,7 +330,7 @@ class AutonomousScheduler:
         )
 
         self._log(f"[scheduler] Scanning: {keyword}")
-        adapter_names = _scheduler_research_adapters()
+        adapter_names = _primary_scheduler_adapters()
         include_seasonality = os.environ.get("SCHEDULER_INCLUDE_SEASONALITY", "0").strip().lower() in {"1", "true", "yes"}
         allow_llm_synthesis = os.environ.get("SCHEDULER_ALLOW_LLM_SYNTHESIS", "0").strip().lower() in {"1", "true", "yes"}
         report = research_run(
@@ -530,36 +554,137 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
         )
         return result.get("total_added", 0) + self._run_external_discovery()
 
-    def _prefetch_batch_sources(self, keywords: list[str]) -> None:
-        """Use provider batch capacity before processing keywords individually."""
-        if "google_trends" not in _scheduler_research_adapters():
+    def _queue_secondary_collection(self, keyword: str) -> None:
+        """Queue slow sources without delaying the Etsy quota-controlled lane."""
+        normalized = " ".join(keyword.lower().split())
+        if not normalized:
             return
-        from adapters.research.google_trends import GoogleTrendsAdapter
+        with self._secondary_lock:
+            if normalized in self._secondary_pending:
+                return
+            self._secondary_pending.add(normalized)
+        self._secondary_queue.put(normalized)
+
+    def _secondary_loop(self) -> None:
+        """Collect batch-capable and approval-gated keyword sources independently."""
+        while not self._stop_event.is_set():
+            self._pause_event.wait()
+            try:
+                first = self._secondary_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            batch = [first]
+            while len(batch) < 5:
+                try:
+                    batch.append(self._secondary_queue.get_nowait())
+                except queue.Empty:
+                    break
+            self._secondary_current = list(batch)
+            try:
+                if "google_trends" in _scheduler_research_adapters():
+                    self._collect_secondary_provider("google_trends", batch)
+                if "reddit_etsy" in _scheduler_research_adapters():
+                    self._collect_secondary_provider("reddit_etsy", batch)
+                self._secondary_last_progress_at = datetime.utcnow().isoformat()
+            except Exception as exc:
+                self._errors.append(f"secondary collection: {exc}")
+                self._log(f"[scheduler] Secondary collection failed: {exc}")
+            finally:
+                with self._secondary_lock:
+                    self._secondary_pending.difference_update(batch)
+                for _keyword in batch:
+                    self._secondary_queue.task_done()
+                self._secondary_current = []
+
+    def _collect_secondary_provider(self, provider: str, batch: list[str]) -> None:
         from services.provider_telemetry import record_provider_attempt
 
-        adapter = GoogleTrendsAdapter()
+        if provider == "google_trends":
+            from adapters.research.google_trends import GoogleTrendsAdapter
+            adapter = GoogleTrendsAdapter()
+        elif provider == "reddit_etsy":
+            from adapters.research.reddit_etsy import RedditEtsyAdapter
+            adapter = RedditEtsyAdapter()
+        else:
+            return
+
         started_at = datetime.utcnow()
-        try:
-            count = adapter.prefetch(keywords[:5])
+        if not adapter.is_configured():
             record_provider_attempt(
-                provider=adapter.name,
-                operation="batch_prefetch",
-                status="completed" if count else "no_data",
+                provider=provider,
+                operation="batch_keyword_search",
+                status="not_configured",
                 started_at=started_at,
-                keyword_count=min(len(keywords), 5),
-                row_count=count,
-                metadata={"batch_capacity": 5},
+                keyword_count=0,
+                row_count=0,
+                configured=False,
+            )
+            return
+
+        due = kdb.provider_keywords_due(
+            provider,
+            batch,
+            stale_days=self._stale_days,
+        )
+        if not due:
+            return
+        try:
+            signals = adapter.bulk_search(due)
+            by_keyword: dict[str, list] = {keyword: [] for keyword in due}
+            for signal in signals:
+                normalized = " ".join(str(signal.keyword).lower().split())
+                if normalized in by_keyword:
+                    by_keyword[normalized].append(signal)
+            useful_keywords = 0
+            stored_rows = 0
+            for keyword in due:
+                keyword_signals = by_keyword[keyword]
+                evidence_rows = kdb.save_provider_signals(keyword, provider, keyword_signals)
+                stored_rows += evidence_rows
+                if keyword_signals:
+                    useful_keywords += 1
+                kdb.record_provider_keyword_attempt(
+                    provider,
+                    keyword,
+                    status="completed" if keyword_signals else "no_data",
+                    row_count=evidence_rows,
+                )
+            record_provider_attempt(
+                provider=provider,
+                operation="batch_keyword_search",
+                status="completed" if signals else "no_data",
+                started_at=started_at,
+                keyword_count=len(due),
+                row_count=stored_rows,
+                metadata={
+                    "batch_capacity": 5 if provider == "google_trends" else None,
+                    "eligible_keywords": len(due),
+                    "processed_keywords": len(due),
+                    "usable_keywords": useful_keywords,
+                },
             )
         except Exception as exc:
-            self._log(f"[scheduler] Google Trends batch prefetch failed: {exc}")
+            for keyword in due:
+                kdb.record_provider_keyword_attempt(
+                    provider,
+                    keyword,
+                    status="failed",
+                    row_count=0,
+                    error=str(exc),
+                )
             record_provider_attempt(
-                provider=adapter.name,
-                operation="batch_prefetch",
+                provider=provider,
+                operation="batch_keyword_search",
                 status="failed",
                 started_at=started_at,
-                keyword_count=min(len(keywords), 5),
+                keyword_count=len(due),
                 row_count=0,
                 error=str(exc),
+                metadata={
+                    "eligible_keywords": len(due),
+                    "processed_keywords": 0,
+                    "usable_keywords": 0,
+                },
             )
 
     def _run_external_discovery(self) -> int:
@@ -604,36 +729,50 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                     continue
                 signals = adapter.discover()
                 added = 0
+                covered = 0
+                new_rows = 0
+                known_ordered = list(self._external_discovery_fingerprints.get(adapter.name, []))
+                known = set(known_ordered)
                 for signal in signals:
                     if not signal.keyword:
                         continue
+                    covered += 1
+                    fingerprint = _signal_fingerprint(adapter.name, signal)
+                    if fingerprint in known:
+                        continue
+                    known.add(fingerprint)
+                    known_ordered.append(fingerprint)
+                    new_rows += 1
                     if kdb.add_seed(signal.keyword, domain=domain, source=adapter.name):
                         added += 1
-                    report = {
-                        "report_id": (
-                            f"{adapter.name}_{now.strftime('%Y%m%d%H%M%S')}_"
-                            f"{signal.position or 0}"
-                        ),
-                        "generated_at": signal.observed_at or now.isoformat(),
-                        "sources_used": [adapter.name],
-                        "keyword_signals": [vars(signal)],
-                        "keyword_search_data": [],
-                    }
-                    kdb.save_scan(signal.keyword, report)
+                    kdb.save_provider_signals(
+                        signal.keyword,
+                        adapter.name,
+                        [signal],
+                        generated_at=signal.observed_at or now.isoformat(),
+                    )
                 total_added += added
+                self._external_discovery_fingerprints[adapter.name] = known_ordered[-2000:]
                 self._log(
                     f"[scheduler] {adapter.name} discovery recorded "
-                    f"{len(signals)} trends and {added} new seeds"
+                    f"{new_rows} changed trends from {covered} available and {added} new seeds"
                 )
                 from services.provider_telemetry import record_provider_attempt
                 record_provider_attempt(
                     provider=adapter.name,
                     operation="discovery",
-                    status="completed" if signals else "no_data",
+                    status="completed" if new_rows else "unchanged" if signals else "no_data",
                     started_at=started_at,
                     keyword_count=len(signals),
-                    row_count=len(signals),
-                    metadata={"new_seeds": added, "domain": domain},
+                    row_count=new_rows,
+                    metadata={
+                        "new_seeds": added,
+                        "domain": domain,
+                        "provider_rows": len(signals),
+                        "covered_rows": covered,
+                        "new_rows": new_rows,
+                        "duplicate_rows": max(0, covered - new_rows),
+                    },
                 )
                 self._external_discovery_by_source[adapter.name] = now.isoformat()
             except Exception as exc:
@@ -688,6 +827,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
             "new_seeds_found":  self._new_seeds_found,
             "last_external_discovery_at": self._last_external_discovery_at,
             "external_discovery_by_source": self._external_discovery_by_source,
+            "external_discovery_fingerprints": self._external_discovery_fingerprints,
             "last_updated":     datetime.utcnow().isoformat(),
         }
         temporary = STATE_FILE.with_name(f".{STATE_FILE.name}.{uuid.uuid4().hex}.tmp")
@@ -706,6 +846,13 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                 if isinstance(source_state, dict):
                     self._external_discovery_by_source = {
                         str(key): str(value) for key, value in source_state.items() if value
+                    }
+                fingerprints = state.get("external_discovery_fingerprints")
+                if isinstance(fingerprints, dict):
+                    self._external_discovery_fingerprints = {
+                        str(source): [str(value) for value in values[-2000:]]
+                        for source, values in fingerprints.items()
+                        if isinstance(values, list)
                     }
             except Exception:
                 pass
@@ -755,6 +902,29 @@ def _scheduler_research_adapters() -> list[str]:
     return names or ["etsy_open_api", "google_suggest", "google_trends"]
 
 
+def _primary_scheduler_adapters() -> list[str]:
+    """Sources safe to run inline with the quota-controlled Etsy lane."""
+    secondary = {"google_trends", "pinterest_trends", "reddit_etsy"}
+    return [name for name in _scheduler_research_adapters() if name not in secondary]
+
+
 def _remaining_interval_seconds(target_seconds: float, elapsed_seconds: float) -> float:
     """Return only the unspent part of a provider-derived scan interval."""
     return max(0.0, float(target_seconds) - max(0.0, float(elapsed_seconds)))
+
+
+def _signal_fingerprint(provider: str, signal) -> str:
+    """Hash provider content while ignoring collector-generated timestamps."""
+    if hasattr(signal, "__dataclass_fields__"):
+        import dataclasses
+        payload = dataclasses.asdict(signal)
+    else:
+        payload = dict(signal)
+    payload.pop("observed_at", None)
+    raw = json.dumps(
+        {"provider": provider, "signal": payload},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()

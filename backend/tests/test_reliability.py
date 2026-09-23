@@ -207,13 +207,13 @@ def test_schema_v15_clears_unversioned_values_and_adds_raw_evidence_tables(datab
             FROM scans WHERE keyword='legacy estimate'
         """).fetchone()
         seed_columns = {item[1] for item in con.execute("PRAGMA table_info(seeds)").fetchall()}
-    assert database.SCHEMA_VERSION == 16
+    assert database.SCHEMA_VERSION == 17
     assert tuple(row) == (None, None, None, None, None)
     assert "priority" not in seed_columns
     with database._conn() as con:
         tables = {item[0] for item in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         observation_columns = {item[1] for item in con.execute("PRAGMA table_info(keyword_observations)")}
-    assert {"evidence_collection_runs", "keyword_suggestions", "keyword_trend_points", "keyword_listing_snapshots"} <= tables
+    assert {"evidence_collection_runs", "keyword_suggestions", "keyword_trend_points", "keyword_listing_snapshots", "provider_keyword_state"} <= tables
     assert {"geography", "period_start", "period_end", "provider_record_id", "collection_run_id"} <= observation_columns
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -39,6 +39,35 @@ def get_provider_states() -> dict[str, dict[str, Any]]:
         for row in rows
         if isinstance(row, dict) and row.get("provider")
     }
+
+
+def get_provider_events(*, hours: int = 24) -> list[dict[str, Any]]:
+    """Return recent collection facts for measured coverage calculations."""
+    url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not url or not key:
+        return []
+    since = datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours)))
+    try:
+        response = httpx.get(
+            f"{url}/rest/v1/provider_collection_events",
+            params={
+                "select": (
+                    "provider,operation,status,started_at,completed_at,keyword_count,"
+                    "row_count,error,rate_limit,metadata"
+                ),
+                "completed_at": f"gte.{since.isoformat()}",
+                "order": "completed_at.asc",
+                "limit": "10000",
+            },
+            headers={"apikey": key, "authorization": f"Bearer {key}"},
+            timeout=20,
+        )
+        response.raise_for_status()
+        rows = response.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        return []
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
 
 
 def record_provider_attempt(
@@ -90,7 +119,7 @@ def record_provider_attempt(
         "metadata": metadata,
         "updated_at": completed_at.isoformat(),
     }
-    if status in {"completed", "no_data", "partial"}:
+    if status in {"completed", "no_data", "partial", "unchanged"}:
         state["last_success_at"] = completed_at.isoformat()
     headers = {
         "apikey": key,

@@ -98,11 +98,14 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
                 continue
 
         # Dedup and limit
-        seen: set[tuple[str, str]] = set()
+        # The same phrase often appears for several prefix queries.  Preserve
+        # its first provider position, but do not store duplicate evidence just
+        # because a second query surface returned it too.
+        seen: set[str] = set()
         unique = []
         for record in suggestions:
-            key = (record["query"], record["suggestion"])
+            key = record["suggestion"]
             if key not in seen:
                 seen.add(key)
                 unique.append(record)
-        return unique[:25]
+        return unique

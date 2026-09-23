@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -99,7 +99,12 @@ def etsy_rate_limit_snapshot() -> dict[str, int | float | None]:
 
 
 def recommended_request_interval_seconds() -> float | None:
-    """Derive a steady request interval directly from Etsy's live quota headers."""
+    """Use Etsy's observed quota evenly before its UTC daily reset.
+
+    The remaining-count calculation lets a restarted collector catch up instead
+    of permanently losing the unused part of that day's quota.  No interval is
+    invented when Etsy has not supplied a usable limit.
+    """
     snapshot = etsy_rate_limit_snapshot()
     retry_until = snapshot.get("retry_after_until")
     if isinstance(retry_until, (int, float)) and retry_until > time.time():
@@ -107,11 +112,19 @@ def recommended_request_interval_seconds() -> float | None:
 
     intervals: list[float] = []
     per_second = snapshot.get("limit_per_second")
-    per_day = snapshot.get("limit_per_day")
+    remaining_today = snapshot.get("remaining_today")
     if isinstance(per_second, (int, float)) and per_second > 0:
         intervals.append(1.0 / float(per_second))
-    if isinstance(per_day, (int, float)) and per_day > 0:
-        intervals.append(86400.0 / float(per_day))
+    if isinstance(remaining_today, (int, float)):
+        now = datetime.now(timezone.utc)
+        reset_at = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0,
+        )
+        seconds_remaining = max(1.0, (reset_at - now).total_seconds())
+        if remaining_today > 0:
+            intervals.append(seconds_remaining / float(remaining_today))
+        else:
+            intervals.append(seconds_remaining)
     return max(intervals) if intervals else None
 
 

@@ -19,6 +19,12 @@ def evidence_coverage(run_limit: int = Query(default=20, ge=1, le=100)):
     return _db().get_evidence_coverage(run_limit=run_limit)
 
 
+@router.get("/quality")
+def collection_quality(hours: int = Query(default=24, ge=1, le=168)):
+    from services.collection_quality import get_collection_quality
+    return get_collection_quality(hours=hours)
+
+
 @router.post("/import", status_code=201)
 def import_keyword_evidence(req: EvidenceImportRequest):
     from services.evidence_import_service import import_evidence

@@ -113,6 +113,7 @@ class SchedulerStatus(BaseModel):
     started_at: str | None
     interval_s: float
     errors: list[str]
+    secondary_collector: dict = Field(default_factory=dict)
 
 
 class SchedulerAction(BaseModel):

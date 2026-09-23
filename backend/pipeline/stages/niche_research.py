@@ -180,14 +180,51 @@ def run(
                 started_at=started_at,
                 keyword_count=len(seed_keywords),
                 row_count=len(sigs),
+                metadata={
+                    "eligible_keywords": len(seed_keywords),
+                    "processed_keywords": len(seed_keywords),
+                    "usable_keywords": len({
+                        str(signal.keyword).strip().lower()
+                        for signal in sigs if signal.keyword
+                    }),
+                },
             )
+            from pipeline import keyword_database as kdb
+            signal_keywords = {
+                str(signal.keyword).strip().lower() for signal in sigs if signal.keyword
+            }
+            for requested_keyword in seed_keywords:
+                normalized = " ".join(requested_keyword.lower().split())
+                # Suggest returns child phrases, so any returned rows make the
+                # parent request useful even though their keywords differ.
+                useful = bool(sigs) if adapter.name == "google_suggest" else normalized in signal_keywords
+                kdb.record_provider_keyword_attempt(
+                    adapter.name,
+                    normalized,
+                    status="completed" if useful else "no_data",
+                    row_count=(len(sigs) if adapter.name == "google_suggest" else int(useful)),
+                )
         except Exception as exc:
             _log(f"[niche_research] {adapter.name} error: {exc}")
             _record_provider_attempt(
                 provider=adapter.name, operation="keyword_search", status="failed",
                 started_at=started_at, keyword_count=len(seed_keywords), row_count=0,
                 error=str(exc),
+                metadata={
+                    "eligible_keywords": len(seed_keywords),
+                    "processed_keywords": 0,
+                    "usable_keywords": 0,
+                },
             )
+            from pipeline import keyword_database as kdb
+            for requested_keyword in seed_keywords:
+                kdb.record_provider_keyword_attempt(
+                    adapter.name,
+                    requested_keyword,
+                    status="failed",
+                    row_count=0,
+                    error=str(exc),
+                )
 
     if keyword_search_data and marketplace_source:
         sources_used.append(marketplace_source)
@@ -433,8 +470,31 @@ def _run_etsy_open_api_search(
         row_count=row_count,
         error="; ".join(errors) if errors else None,
         rate_limit=etsy_rate_limit_snapshot(),
-        metadata={"listings_per_request": 100},
+        metadata={
+            "listings_per_request": 100,
+            "eligible_keywords": len(targets),
+            "processed_keywords": len(targets) - len(errors),
+            "usable_keywords": len(results),
+        },
     )
+    from pipeline import keyword_database as kdb
+    result_rows = {item.keyword.lower(): item.sampled_listing_count for item in results}
+    error_keywords = {item.split(":", 1)[0].strip().lower() for item in errors}
+    for target in targets:
+        normalized = " ".join(target.lower().split())
+        if normalized in error_keywords:
+            attempt_status = "failed"
+        elif normalized in result_rows:
+            attempt_status = "completed"
+        else:
+            attempt_status = "no_data"
+        kdb.record_provider_keyword_attempt(
+            "etsy_open_api",
+            normalized,
+            status=attempt_status,
+            row_count=result_rows.get(normalized, 0),
+            error=next((item for item in errors if item.lower().startswith(normalized + ":")), None),
+        )
     return results
 
 
