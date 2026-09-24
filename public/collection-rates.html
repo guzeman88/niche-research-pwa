@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EtGen Data Collection Rates</title>
+  <style>
+    :root{--ink:hsl(216 36% 15%);--muted:hsl(216 12% 42%);--line:hsl(216 18% 82%);--stripe:hsl(216 28% 96%);--header:hsl(216 34% 17%);--blue:hsl(210 86% 42%);--green:hsl(151 50% 27%);--green-bg:hsl(149 52% 91%);--amber:hsl(36 80% 29%);--amber-bg:hsl(39 92% 91%);--red:hsl(4 63% 40%);--red-bg:hsl(5 78% 94%)}
+    *{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(1540px,calc(100% - 48px));margin:0 auto;padding:42px 0 56px}header{display:flex;align-items:end;justify-content:space-between;gap:28px;margin-bottom:22px}h1{margin:0;font-size:clamp(30px,3.2vw,46px);line-height:1;letter-spacing:-.045em}header p{margin:0;color:var(--muted);font-size:12px;line-height:1.55;text-align:right}.table-wrap{overflow-x:auto;border-top:2px solid var(--ink);border-bottom:1px solid var(--ink)}table{width:100%;min-width:1180px;border-collapse:collapse;table-layout:fixed}col:nth-child(1){width:13%}col:nth-child(2){width:15%}col:nth-child(3){width:23%}col:nth-child(4){width:11%}col:nth-child(5){width:17%}col:nth-child(6){width:12%}col:nth-child(7){width:9%}th,td{padding:16px 14px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th:last-child,td:last-child{border-right:0}tbody tr:last-child td{border-bottom:0}th{background:var(--header);color:#fff;font-size:11px;font-weight:700;letter-spacing:.015em}td{font-size:12px;line-height:1.45}tbody tr:nth-child(even){background:var(--stripe)}.source,.primary{display:block;font-weight:750}.primary{font-size:15px;line-height:1.25;letter-spacing:-.015em}.sub{display:block;margin-top:5px;color:var(--muted);font-size:10.5px;line-height:1.45}.rate-value{display:block;font-size:18px;font-weight:800;letter-spacing:-.03em}.bar{height:5px;margin-top:7px;overflow:hidden;border-radius:999px;background:hsl(216 18% 84%)}.bar>span{display:block;width:var(--value);height:100%;border-radius:inherit;background:var(--blue)}.state{display:inline-block;border-radius:4px;padding:5px 8px;font-size:10px;font-weight:750;white-space:nowrap}.running{color:var(--green);background:var(--green-bg)}.gated{color:var(--red);background:var(--red-bg)}.manual{color:var(--amber);background:var(--amber-bg)}.neutral,.na{color:var(--muted)}footer{display:grid;grid-template-columns:1.1fr .9fr;gap:30px;margin-top:18px;color:var(--muted);font-size:10.5px;line-height:1.55}footer p{margin:0 0 7px}footer strong{color:var(--ink)}footer a{color:hsl(210 75% 38%)}@media(max-width:760px){main{width:calc(100% - 20px);padding-top:26px}header{align-items:flex-start;flex-direction:column}header p{text-align:left}footer{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main>
+    <header><h1>EtGen collection capacity</h1><p id="updated" aria-live="polite">Loading verified production data…<br>Refreshes hourly while this page is open</p></header>
+    <div class="table-wrap"><table aria-label="EtGen data collection capacity and utilization"><colgroup><col><col><col><col><col><col><col></colgroup><thead><tr><th>Source</th><th>Stored in last 24h</th><th>Maximum achievable rate</th><th>Collection rate</th><th>Used for</th><th>State</th><th>Total stored</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <footer><div><p><strong>Calculation basis.</strong> “Pieces” are source-native stored rows. Collection rate means live quota utilization for Etsy, eligible-keyword coverage for keyword queues, and returned-row coverage for feeds/imports. Useful yield remains separate. Missing denominators are TBD, never zero or inferred.</p><p><strong>Data source.</strong> Counts come directly from the production Supabase evidence tables. State and Etsy quota values come from the latest provider runtime record.</p></div><div><p><strong>References.</strong></p><p><a href="https://developers.etsy.com/documentation/essentials/rate-limits/">Etsy API rate limits</a> · <a href="https://developers.pinterest.com/docs/analytics-and-reports/trends/">Pinterest Trends API</a> · <a href="https://developers.pinterest.com/docs/key-concepts/access-tiers/">Pinterest access tiers</a> · <a href="https://redditinc.com/policies/data-api-terms">Reddit Data API terms</a></p><p><a href="https://developers.google.com/search/apis/trends">Google Trends API availability</a> · <a href="https://developers.google.com/google-ads/api/docs/best-practices/quotas">Google Ads API quotas</a> · <a href="https://help.etsy.com/hc/en-us/articles/35122361353239-How-Do-I-Use-Etsy-s-Marketplace-Insights-Tool">Etsy Marketplace Insights limits</a> · <a href="https://github.com/guzeman88/niche-research-pwa/blob/main/docs/evidence-sources.md">EtGen collection behavior</a></p></div></footer>
+  </main>
+  <script type="module">
+    const sourceNames=['Etsy Open API','Google Shopping Suggest','Google Trends automatic','Google Daily Search Trends','Pinterest Trends','Reddit Data API','Etsy Marketplace Insights','Etsy Shop Stats','Google Keyword Planner','eRank','Marmalead','Google Trends CSV'];
+    const tbody=document.querySelector('#rows'), updated=document.querySelector('#updated');
+    const format=value=>typeof value==='number'?new Intl.NumberFormat('en-US').format(value):'TBD';
+    const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node};
+    function addSub(cell,text){if(text)cell.append(el('span','sub',text))}
+    function partsText(parts){const real=(parts||[]).filter(part=>typeof part.value==='number');return real.length>1?real.map(part=>`${format(part.value)} ${part.label}`).join(' + '):real.length===1?real[0].label:''}
+    function showEmpty(message='Awaiting verified production data'){
+      tbody.replaceChildren(...sourceNames.map(name=>{const row=document.createElement('tr');const values=[name,'TBD','TBD','TBD','TBD','TBD','TBD'];values.forEach((value,index)=>{const cell=document.createElement('td');cell.append(el('span',index===0?'source':index===3?'rate-value na':'primary',value));if(index===3)addSub(cell,message);row.append(cell)});return row}));
+    }
+    function render(report){
+      tbody.replaceChildren(...report.sources.map(source=>{
+        const row=document.createElement('tr');
+        const sourceCell=document.createElement('td');sourceCell.append(el('span','source',source.name));row.append(sourceCell);
+        const day=document.createElement('td');day.append(el('span','primary',typeof source.stored_24h==='number'?`${format(source.stored_24h)} pieces`:'TBD'));addSub(day,partsText(source.stored_24h_parts));row.append(day);
+        const maximum=document.createElement('td');maximum.append(el('span','primary',source.maximum?.headline||'TBD'));addSub(maximum,source.maximum?.detail);row.append(maximum);
+        const rate=document.createElement('td');const pct=source.rate?.value;rate.append(el('span',typeof pct==='number'?'rate-value':'rate-value na',typeof pct==='number'?`${format(pct)}%`:'TBD'));if(typeof pct==='number'){const bar=el('div','bar');bar.setAttribute('aria-label',`${pct} percent`);const fill=document.createElement('span');fill.style.setProperty('--value',`${Math.min(100,pct)}%`);bar.append(fill);rate.append(bar);addSub(rate,`${format(source.rate.numerator)} ÷ ${format(source.rate.denominator)} measured coverage${typeof source.rate.yield_pct==='number'?`; useful yield ${format(source.rate.yield_pct)}%`:''}`)}else addSub(rate,source.rate?.target_status==='not_configured'?'No eligible approved collection queue exists yet':'No verified numerator and denominator are available');row.append(rate);
+        const purpose=document.createElement('td');purpose.textContent=source.purpose;row.append(purpose);
+        const state=document.createElement('td');state.append(el('span',`state ${source.state?.tone||'neutral'}`,source.state?.label||'TBD'));const stateTime=source.state?.last_attempt_at?new Date(source.state.last_attempt_at).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';addSub(state,[source.state?.detail,stateTime].filter(Boolean).join(' · '));row.append(state);
+        const total=document.createElement('td');total.append(el('span','primary',format(source.total_stored)));addSub(total,partsText(source.total_parts));row.append(total);
+        return row;
+      }));
+      const stamp=new Date(report.generated_at);updated.replaceChildren(document.createTextNode(`${report.data_status==='partial'?'Partial':'Live'} production snapshot · Updated ${stamp.toLocaleString([], {year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})}`),document.createElement('br'),document.createTextNode('Refreshes hourly while this page is open'));
+    }
+    async function refresh(){
+      try{const hour=Math.floor(Date.now()/3600000);const response=await fetch(`/api/collection-rates?h=${hour}`,{headers:{accept:'application/json'}});if(!response.ok)throw new Error();const report=await response.json();if(!Array.isArray(report.sources))throw new Error();render(report)}
+      catch{showEmpty('Live refresh failed; no fallback values are shown');updated.replaceChildren(document.createTextNode('Live production data is temporarily unavailable'),document.createElement('br'),document.createTextNode('No fallback values are shown'))}
+    }
+    showEmpty();refresh();setInterval(refresh,3600000);
+  </script>
+</body>
+</html>
