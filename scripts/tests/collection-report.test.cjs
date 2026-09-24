@@ -22,6 +22,7 @@ test('collection report uses measured counts and coverage without defaults', asy
   assert.equal(byId.google_suggest.rate.value,80);
   assert.equal(byId.google_suggest.rate.yield_pct,75);
   assert.match(byId.google_suggest.maximum.headline,/4,000 keyword cycles\/day\*/);
+  assert.equal(report.sources.some(source => source.maximum.headline.includes('≈')),false);
   assert.equal(byId.pinterest_trends.rate.value,null);
   assert.equal(byId.pinterest_trends.state.label,'Not configured');
   assert.equal(byId.erank.total_stored,null);
