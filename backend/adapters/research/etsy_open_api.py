@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -99,11 +99,12 @@ def etsy_rate_limit_snapshot() -> dict[str, int | float | None]:
 
 
 def recommended_request_interval_seconds() -> float | None:
-    """Use Etsy's observed quota evenly before its UTC daily reset.
+    """Pace Etsy requests to the configured share of its rolling QPD limit.
 
-    The remaining-count calculation lets a restarted collector catch up instead
-    of permanently losing the unused part of that day's quota.  No interval is
-    invented when Etsy has not supplied a usable limit.
+    Etsy's daily quota is a sliding 24-hour window, not a midnight-reset
+    allowance.  A stable interval derived from the provider's live limit is
+    therefore the only honest way to converge on and maintain the requested
+    utilization.  No provider limit is invented when Etsy has not supplied it.
     """
     snapshot = etsy_rate_limit_snapshot()
     retry_until = snapshot.get("retry_after_until")
@@ -112,20 +113,32 @@ def recommended_request_interval_seconds() -> float | None:
 
     intervals: list[float] = []
     per_second = snapshot.get("limit_per_second")
-    remaining_today = snapshot.get("remaining_today")
+    limit_per_day = snapshot.get("limit_per_day")
     if isinstance(per_second, (int, float)) and per_second > 0:
         intervals.append(1.0 / float(per_second))
-    if isinstance(remaining_today, (int, float)):
-        now = datetime.now(timezone.utc)
-        reset_at = (now + timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0,
-        )
-        seconds_remaining = max(1.0, (reset_at - now).total_seconds())
-        if remaining_today > 0:
-            intervals.append(seconds_remaining / float(remaining_today))
-        else:
-            intervals.append(seconds_remaining)
+    if isinstance(limit_per_day, (int, float)) and limit_per_day > 0:
+        target_pct = _quota_target_percent()
+        target_requests = float(limit_per_day) * target_pct / 100.0
+        if target_requests > 0:
+            intervals.append(24 * 60 * 60 / target_requests)
     return max(intervals) if intervals else None
+
+
+def _quota_target_percent() -> float:
+    """Return the explicit Etsy rolling-window utilization target.
+
+    Eighty percent is the product requirement.  Operators can lower it, but
+    values above 100 or non-numeric values are rejected instead of silently
+    creating an unsafe request rate.
+    """
+    raw = os.getenv("ETSY_DAILY_QUOTA_TARGET_PCT", "80").strip()
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError("ETSY_DAILY_QUOTA_TARGET_PCT must be numeric") from exc
+    if not 0 < value <= 100:
+        raise ValueError("ETSY_DAILY_QUOTA_TARGET_PCT must be greater than 0 and at most 100")
+    return value
 
 
 def _capture_rate_limits(response: httpx.Response) -> None:

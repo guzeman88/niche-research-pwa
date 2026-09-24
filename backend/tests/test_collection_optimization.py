@@ -22,7 +22,8 @@ def database(tmp_path, monkeypatch):
     return db
 
 
-def test_etsy_interval_comes_from_live_quota_headers() -> None:
+def test_etsy_interval_targets_eighty_percent_of_rolling_quota(monkeypatch) -> None:
+    monkeypatch.setenv("ETSY_DAILY_QUOTA_TARGET_PCT", "80")
     etsy_open_api._clear_rate_limit_state()
     response = Mock(
         status_code=200,
@@ -37,9 +38,20 @@ def test_etsy_interval_comes_from_live_quota_headers() -> None:
     etsy_open_api._capture_rate_limits(response)
 
     interval = etsy_open_api.recommended_request_interval_seconds()
-    assert interval is not None
-    assert 0.2 <= interval <= 17.28
+    assert interval == pytest.approx(21.6)
     assert etsy_open_api.etsy_rate_limit_snapshot()["remaining_today"] == 4999
+
+
+def test_etsy_interval_rejects_invalid_quota_target(monkeypatch) -> None:
+    monkeypatch.setenv("ETSY_DAILY_QUOTA_TARGET_PCT", "not-a-number")
+    etsy_open_api._clear_rate_limit_state()
+    etsy_open_api._capture_rate_limits(Mock(
+        status_code=200,
+        headers={"x-limit-per-second": "5", "x-limit-per-day": "5000"},
+    ))
+
+    with pytest.raises(ValueError, match="must be numeric"):
+        etsy_open_api.recommended_request_interval_seconds()
 
 
 def test_scheduler_does_not_double_count_processing_time_in_quota_interval() -> None:
@@ -265,3 +277,41 @@ def test_quality_rates_require_observed_denominators(database, monkeypatch) -> N
     assert by_source["pinterest_trends"]["collection_rate_pct"] is None
     assert by_source["pinterest_trends"]["target_status"] == "not_configured"
     assert by_source["erank"]["collection_rate_pct"] is None
+
+
+def test_etsy_quality_prefers_provider_remaining_quota(database, monkeypatch) -> None:
+    monkeypatch.setattr(collection_quality, "get_provider_states", lambda: {
+        "etsy_open_api": {
+            "configured": True,
+            "status": "completed",
+            "rate_limit": {"limit_per_day": 5000, "remaining_today": 1000},
+        },
+    })
+    monkeypatch.setattr(collection_quality, "get_provider_events", lambda hours: [{
+        "provider": "etsy_open_api",
+        "metadata": {"processed_keywords": 12},
+    }])
+
+    result = collection_quality.get_collection_quality(hours=24)
+    etsy = next(row for row in result["sources"] if row["source"] == "etsy_open_api")
+
+    assert etsy["collection_rate_pct"] == 80.0
+    assert etsy["collected"] == 4000
+    assert etsy["eligible_or_available"] == 5000
+
+
+def test_import_row_coverage_uses_observed_rows(database, monkeypatch) -> None:
+    monkeypatch.setattr(collection_quality, "get_provider_states", lambda: {
+        "erank": {"configured": True, "status": "completed"},
+    })
+    monkeypatch.setattr(collection_quality, "get_provider_events", lambda hours: [{
+        "provider": "erank",
+        "metadata": {"provider_rows": 10, "covered_rows": 8, "new_rows": 24},
+    }])
+
+    result = collection_quality.get_collection_quality(hours=24)
+    erank = next(row for row in result["sources"] if row["source"] == "erank")
+
+    assert erank["collection_rate_pct"] == 80.0
+    assert erank["new_rows"] == 24
+    assert erank["target_status"] == "on_target"

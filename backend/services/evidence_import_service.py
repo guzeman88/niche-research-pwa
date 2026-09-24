@@ -22,6 +22,7 @@ SUPPORTED_SOURCES = {
     "etsy_shop_stats",
     "google_keyword_planner",
     "google_trends",
+    "google_trends_csv",
     "pinterest_trends",
 }
 
@@ -67,7 +68,7 @@ def import_evidence(*, source: str, text: str, name: str | None = None,
         raise ValueError("Etsy Shop Stats imports require period_start and period_end")
     if clean_source == "google_keyword_planner" and not (period_start and period_end and geography):
         raise ValueError("Google Keyword Planner imports require period_start, period_end, and geography")
-    if clean_source == "google_trends" and not geography:
+    if clean_source in {"google_trends", "google_trends_csv"} and not geography:
         raise ValueError("Google Trends imports require an explicit geography")
 
     timestamp = observed_at or datetime.now(timezone.utc).isoformat()
@@ -80,7 +81,7 @@ def import_evidence(*, source: str, text: str, name: str | None = None,
     }
     run_id = kdb.start_evidence_collection(clean_source, request)
     try:
-        if clean_source == "google_trends":
+        if clean_source in {"google_trends", "google_trends_csv"}:
             result = _import_google_trends(
                 text=text, source=clean_source, collected_at=timestamp,
                 geography=geography or "", run_id=run_id,
@@ -102,6 +103,8 @@ def import_evidence(*, source: str, text: str, name: str | None = None,
         from services.supabase_evidence_sync import sync_collection_run
         durable_sync = sync_collection_run(run_id)
         from services.provider_telemetry import record_provider_attempt
+        provider_rows = max(0, int(result["rows"]))
+        covered_rows = max(0, provider_rows - int(result["skipped"]))
         record_provider_attempt(
             provider=clean_source,
             operation="structured_import",
@@ -114,6 +117,12 @@ def import_evidence(*, source: str, text: str, name: str | None = None,
                 "period_start": period_start,
                 "period_end": period_end,
                 "geography": geography,
+                "provider_rows": provider_rows,
+                "covered_rows": covered_rows,
+                "new_rows": int(result["observations"]),
+                "eligible_keywords": provider_rows,
+                "processed_keywords": covered_rows,
+                "usable_keywords": int(result["keywords"]),
             },
         )
         return {

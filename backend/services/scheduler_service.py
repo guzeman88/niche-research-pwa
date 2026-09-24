@@ -13,7 +13,7 @@ from services.runtime_safety import safe_log
 
 _scheduler = None
 DEFAULT_SCHEDULER_MODE = os.environ.get("SCHEDULER_MODE", "burst")
-DEFAULT_BATCH_SIZE = int(os.environ.get("SCHEDULER_BATCH_SIZE", os.environ.get("SCHEDULER_BATCH", "20")))
+DEFAULT_BATCH_SIZE = int(os.environ.get("SCHEDULER_BATCH_SIZE", os.environ.get("SCHEDULER_BATCH", "30")))
 
 
 def _scheduler_log(msg: str) -> None:

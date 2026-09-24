@@ -24,11 +24,12 @@ _SOURCES = (
     ("google_daily_trends", "feed_coverage", "Current breakout search topics"),
     ("pinterest_trends", "feed_coverage", "Visual product trends after API approval"),
     ("reddit_etsy", "eligible_keyword_coverage", "Customer language and unmet needs after API approval"),
-    ("erank", "scheduled_import_coverage", "Imported Etsy search, click, and competition metrics"),
-    ("marmalead", "scheduled_import_coverage", "Imported keyword engagement and competition metrics"),
-    ("etsy_marketplace_insights", "scheduled_import_coverage", "Imported first-party Etsy keyword metrics"),
-    ("etsy_shop_stats", "scheduled_import_coverage", "Imported own-shop visits, orders, and revenue"),
-    ("google_keyword_planner", "scheduled_import_coverage", "Imported Google demand and bid ranges"),
+    ("etsy_marketplace_insights", "import_row_coverage", "Imported first-party Etsy keyword metrics"),
+    ("etsy_shop_stats", "import_row_coverage", "Imported own-shop visits, orders, and revenue"),
+    ("google_keyword_planner", "import_row_coverage", "Imported Google demand and bid ranges"),
+    ("erank", "import_row_coverage", "Imported Etsy search, click, and competition metrics"),
+    ("marmalead", "import_row_coverage", "Imported keyword engagement and competition metrics"),
+    ("google_trends_csv", "import_row_coverage", "Imported dated Google Trends series"),
 )
 
 
@@ -99,8 +100,15 @@ def get_collection_quality(*, hours: int = 24) -> dict[str, Any]:
         if metric == "quota_utilization":
             rate_limit = state.get("rate_limit") if isinstance(state.get("rate_limit"), dict) else {}
             limit = rate_limit.get("limit_per_day")
+            remaining = rate_limit.get("remaining_today")
             processed = int(provider_totals.get("processed", 0))
-            if isinstance(limit, (int, float)) and limit > 0 and processed > 0:
+            if (
+                isinstance(limit, (int, float)) and limit > 0
+                and isinstance(remaining, (int, float))
+            ):
+                denominator = int(limit)
+                numerator = max(0, min(int(limit), int(limit) - int(remaining)))
+            elif isinstance(limit, (int, float)) and limit > 0 and processed > 0:
                 denominator = int(limit)
                 numerator = processed
         elif metric == "eligible_keyword_coverage":
@@ -115,12 +123,11 @@ def get_collection_quality(*, hours: int = 24) -> dict[str, Any]:
                 denominator = local["attempted"]
                 numerator = local["completed"]
                 yield_pct = _pct(local["with_data"], local["completed"])
-        elif metric == "feed_coverage":
+        elif metric in {"feed_coverage", "import_row_coverage"}:
             provider_rows = int(provider_totals.get("provider_rows", 0))
             if provider_rows > 0:
                 denominator = provider_rows
                 numerator = int(provider_totals.get("covered_rows", 0))
-        # Import-only providers have no schedule until the operator supplies one.
 
         rate_pct = _pct(numerator, denominator)
         rows.append({
