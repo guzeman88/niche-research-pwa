@@ -13,7 +13,24 @@ from services.runtime_safety import safe_log
 
 _scheduler = None
 DEFAULT_SCHEDULER_MODE = os.environ.get("SCHEDULER_MODE", "burst")
-DEFAULT_BATCH_SIZE = int(os.environ.get("SCHEDULER_BATCH_SIZE", os.environ.get("SCHEDULER_BATCH", "30")))
+MIN_CONTINUOUS_BATCH_SIZE = int(os.environ.get("COLLECTION_TARGET_BATCH_SIZE", "30"))
+_CONFIGURED_BATCH_SIZE = int(os.environ.get("SCHEDULER_BATCH_SIZE", os.environ.get("SCHEDULER_BATCH", "30")))
+
+
+def collection_batch_size(mode: str, requested: int) -> int:
+    """Keep continuous collection large enough to survive free-host suspension.
+
+    Render can retain an older environment value even after a Blueprint change.
+    The 80% collection requirement therefore has to be enforced in code before
+    the first batch is selected, not only by the heartbeat after startup.
+    """
+    value = max(1, min(int(requested), 50))
+    if mode == "continuous":
+        return max(value, max(1, min(MIN_CONTINUOUS_BATCH_SIZE, 50)))
+    return value
+
+
+DEFAULT_BATCH_SIZE = collection_batch_size(DEFAULT_SCHEDULER_MODE, _CONFIGURED_BATCH_SIZE)
 
 
 def _scheduler_log(msg: str) -> None:
@@ -53,6 +70,7 @@ def _apply_scheduler_settings(s, mode: str, batch_size: int) -> bool:
 
 
 def start_scheduler(mode: str = DEFAULT_SCHEDULER_MODE, batch_size: int = DEFAULT_BATCH_SIZE) -> dict:
+    batch_size = collection_batch_size(mode, batch_size)
     s = get_scheduler()
     if s.is_running():
         changed = _apply_scheduler_settings(s, mode, batch_size)

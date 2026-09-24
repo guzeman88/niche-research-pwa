@@ -26,6 +26,8 @@ services:
         value: 30
       - key: ETSY_DAILY_QUOTA_TARGET_PCT
         value: 80
+      - key: COLLECTION_TARGET_BATCH_SIZE
+        value: 30
       - key: SCHEDULER_RESEARCH_ADAPTERS
         value: etsy_open_api,google_suggest,google_trends,pinterest_trends,reddit_etsy
       - key: SCHEDULER_INCLUDE_SEASONALITY
