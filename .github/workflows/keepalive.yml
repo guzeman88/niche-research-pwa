@@ -82,7 +82,7 @@ jobs:
             -X POST "$BACKEND_URL/api/scheduler/start" \
             -H "Authorization: Bearer $GITHUB_OIDC_TOKEN" \
             -H 'Content-Type: application/json' \
-            --data '{"mode":"continuous","batch_size":5}' \
+            --data '{"mode":"continuous","batch_size":30}' \
             > scheduler.json
           cat scheduler.json
           node -e "const s=require('./scheduler.json'); if (!s.running || s.paused || s.fatal_error) throw new Error(JSON.stringify(s))"

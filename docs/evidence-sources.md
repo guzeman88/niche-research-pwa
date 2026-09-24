@@ -11,12 +11,14 @@ stored.
 | Google Shopping Suggest | No credential | Exact query, suggestion, returned position, geography, timestamp | Runs in the primary queue; identical phrases returned by several query prefixes are stored once |
 | Google Trends | No credential; unofficial `pytrends` client | Complete dated relative-interest series, related queries, and collection context | Independent worker; up to five due keywords share one request and do not delay Etsy collection |
 | Google Daily Search Trends | No credential; official public RSS feed | Dated trending query, provider-displayed approximate traffic floor, rank, and linked news records | Independent source cadence; unchanged feed items are recognized rather than stored as new evidence |
-| Etsy Open API | Etsy approval plus API credentials | Listing count when returned, up to 100 sampled listings per request, prices, shops, favorites, tags/materials where available | Primary queue paced from live per-second quota and the requests remaining before the UTC daily reset |
+| Etsy Open API | Etsy approval plus API credentials | Listing count when returned, up to 100 sampled listings per request, prices, shops, favorites, tags/materials where available | Primary queue paced to 80% of the provider-reported rolling 24-hour quota while respecting the live per-second limit |
 | Pinterest Trends | Approved Pinterest business app and token | Ranked current trends, WoW/MoM/YoY growth, one-year weekly relative-interest series | Independent source schedule derived from its configured cache duration, plus exact-keyword queue matches |
 | Reddit Data API | Reddit commercial-use approval plus credentials | Exact-query post counts and engagement aggregates with source records | Keyword queue only after explicit approval flag |
 
 The GitHub `Evidence Collector Heartbeat` runs every ten minutes, wakes the
-backend, and idempotently starts its continuous queue. It uses a short-lived
+backend, and idempotently starts a 30-keyword continuous-queue batch. The batch
+size prevents free-host suspension between five-keyword bursts while the Etsy
+pacer still controls the actual request interval. It uses a short-lived
 GitHub OIDC identity restricted to this repository, the heartbeat workflow,
 and the `main` branch; no shared scheduler secret is stored in GitHub.
 Completed collection runs sync their raw rows and durable per-keyword collection
@@ -50,11 +52,14 @@ The Evidence Operations page accepts unedited CSV or tab-separated exports for:
 - eRank
 - Marmalead
 - Google Keyword Planner
-- Google Trends
+- Google Trends CSV
 
 Marketplace Insights, Shop Stats, and Keyword Planner require explicit
 reporting dates. Keyword Planner and Google Trends also require geography.
 Currency-dependent values are omitted unless a currency code is supplied.
+Each import records eligible rows and successfully covered rows, allowing the
+quality endpoint to report measured import completeness instead of a guessed
+rate.
 
 ## Provider limitations
 

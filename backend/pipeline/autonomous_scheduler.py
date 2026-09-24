@@ -279,7 +279,6 @@ class AutonomousScheduler:
                 self._current_keyword = kw
                 try:
                     new_seeds = self._scan_and_expand(kw)
-                    self._queue_secondary_collection(kw)
                     self._last_progress_at = datetime.utcnow().isoformat()
                     self._consecutive_failures = 0
                     self._keywords_scanned += 1
@@ -353,6 +352,13 @@ class AutonomousScheduler:
             )
         kdb.save_scan(keyword, report)
         report_dict = self._report_to_dict(report)
+
+        # Slow secondary providers should only spend requests on phrases that
+        # already have marketplace evidence.  This keeps scheduled coverage at
+        # 100% while removing unsupported phrases that previously drove the
+        # Google Trends useful-yield rate down.
+        if has_market_data:
+            self._queue_secondary_collection(keyword)
 
         # Gap analysis — runs after every scan to score the 6 gap types
         if not self._skip_scraper and has_market_data:

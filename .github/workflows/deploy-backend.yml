@@ -238,7 +238,7 @@ jobs:
             --url "$RENDER_SERVICE_URL/api/scheduler/start" \
             --header "Authorization: Bearer $GITHUB_OIDC_TOKEN" \
             --header 'Content-Type: application/json' \
-            --data '{"mode":"continuous","batch_size":5}' \
+            --data '{"mode":"continuous","batch_size":30}' \
             --output scheduler.json
           cat scheduler.json
           node -e "const s=require('./scheduler.json'); if (!s.running || s.paused || s.fatal_error) throw new Error(JSON.stringify(s))"
