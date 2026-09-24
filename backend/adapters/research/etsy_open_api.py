@@ -99,12 +99,14 @@ def etsy_rate_limit_snapshot() -> dict[str, int | float | None]:
 
 
 def recommended_request_interval_seconds() -> float | None:
-    """Pace Etsy requests to the configured share of its rolling QPD limit.
+    """Use active host windows while preserving the rolling-QPD reserve.
 
     Etsy's daily quota is a sliding 24-hour window, not a midnight-reset
-    allowance.  A stable interval derived from the provider's live limit is
-    therefore the only honest way to converge on and maintain the requested
-    utilization.  No provider limit is invented when Etsy has not supplied it.
+    allowance.  The free host suspends background CPU between heartbeat wakes,
+    so uniform wall-clock pacing cannot consume the requested quota.  While the
+    process is awake we collect at the configured burst interval, then stop at
+    the exact provider-reported reserve implied by the target percentage.
+    No provider limit or remaining count is invented.
     """
     snapshot = etsy_rate_limit_snapshot()
     retry_until = snapshot.get("retry_after_until")
@@ -114,12 +116,21 @@ def recommended_request_interval_seconds() -> float | None:
     intervals: list[float] = []
     per_second = snapshot.get("limit_per_second")
     limit_per_day = snapshot.get("limit_per_day")
+    remaining_today = snapshot.get("remaining_today")
     if isinstance(per_second, (int, float)) and per_second > 0:
         intervals.append(1.0 / float(per_second))
     if isinstance(limit_per_day, (int, float)) and limit_per_day > 0:
         target_pct = _quota_target_percent()
         target_requests = float(limit_per_day) * target_pct / 100.0
-        if target_requests > 0:
+        if isinstance(remaining_today, (int, float)):
+            reserve = float(limit_per_day) - target_requests
+            if float(remaining_today) <= reserve:
+                intervals.append(_positive_env_seconds("ETSY_QUOTA_RECHECK_SECONDS", "600"))
+            else:
+                intervals.append(_positive_env_seconds("ETSY_ACTIVE_BURST_INTERVAL_SECONDS", "1"))
+        elif target_requests > 0:
+            # Until the first response supplies a remaining count, use a
+            # uniform safe pace derived only from Etsy's observed limit.
             intervals.append(24 * 60 * 60 / target_requests)
     return max(intervals) if intervals else None
 
@@ -138,6 +149,17 @@ def _quota_target_percent() -> float:
         raise ValueError("ETSY_DAILY_QUOTA_TARGET_PCT must be numeric") from exc
     if not 0 < value <= 100:
         raise ValueError("ETSY_DAILY_QUOTA_TARGET_PCT must be greater than 0 and at most 100")
+    return value
+
+
+def _positive_env_seconds(name: str, default: str) -> float:
+    raw = os.getenv(name, default).strip()
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be numeric") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be greater than 0")
     return value
 
 

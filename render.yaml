@@ -28,6 +28,10 @@ services:
         value: 80
       - key: COLLECTION_TARGET_BATCH_SIZE
         value: 30
+      - key: ETSY_ACTIVE_BURST_INTERVAL_SECONDS
+        value: 1
+      - key: ETSY_QUOTA_RECHECK_SECONDS
+        value: 600
       - key: SCHEDULER_RESEARCH_ADAPTERS
         value: etsy_open_api,google_suggest,google_trends,pinterest_trends,reddit_etsy
       - key: SCHEDULER_INCLUDE_SEASONALITY

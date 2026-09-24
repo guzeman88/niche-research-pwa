@@ -23,8 +23,9 @@ def database(tmp_path, monkeypatch):
     return db
 
 
-def test_etsy_interval_targets_eighty_percent_of_rolling_quota(monkeypatch) -> None:
+def test_etsy_interval_bursts_until_eighty_percent_reserve(monkeypatch) -> None:
     monkeypatch.setenv("ETSY_DAILY_QUOTA_TARGET_PCT", "80")
+    monkeypatch.setenv("ETSY_ACTIVE_BURST_INTERVAL_SECONDS", "1")
     etsy_open_api._clear_rate_limit_state()
     response = Mock(
         status_code=200,
@@ -39,8 +40,35 @@ def test_etsy_interval_targets_eighty_percent_of_rolling_quota(monkeypatch) -> N
     etsy_open_api._capture_rate_limits(response)
 
     interval = etsy_open_api.recommended_request_interval_seconds()
-    assert interval == pytest.approx(21.6)
+    assert interval == pytest.approx(1.0)
     assert etsy_open_api.etsy_rate_limit_snapshot()["remaining_today"] == 4999
+
+
+def test_etsy_interval_waits_at_eighty_percent_reserve(monkeypatch) -> None:
+    monkeypatch.setenv("ETSY_DAILY_QUOTA_TARGET_PCT", "80")
+    monkeypatch.setenv("ETSY_QUOTA_RECHECK_SECONDS", "600")
+    etsy_open_api._clear_rate_limit_state()
+    etsy_open_api._capture_rate_limits(Mock(
+        status_code=200,
+        headers={
+            "x-limit-per-second": "5",
+            "x-limit-per-day": "5000",
+            "x-remaining-today": "1000",
+        },
+    ))
+
+    assert etsy_open_api.recommended_request_interval_seconds() == pytest.approx(600.0)
+
+
+def test_etsy_interval_uses_limit_only_until_remaining_is_observed(monkeypatch) -> None:
+    monkeypatch.setenv("ETSY_DAILY_QUOTA_TARGET_PCT", "80")
+    etsy_open_api._clear_rate_limit_state()
+    etsy_open_api._capture_rate_limits(Mock(
+        status_code=200,
+        headers={"x-limit-per-second": "5", "x-limit-per-day": "5000"},
+    ))
+
+    assert etsy_open_api.recommended_request_interval_seconds() == pytest.approx(21.6)
 
 
 def test_etsy_interval_rejects_invalid_quota_target(monkeypatch) -> None:
