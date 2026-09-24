@@ -88,6 +88,27 @@ def test_scheduler_does_not_double_count_processing_time_in_quota_interval() -> 
     assert _remaining_interval_seconds(17.28, 20.0) == 0.0
 
 
+def test_valid_no_data_scan_does_not_stop_scheduler(database, monkeypatch) -> None:
+    from pipeline.stages import niche_research
+
+    monkeypatch.setattr(niche_research, "run", lambda **_kwargs: {
+        "sources_used": [],
+        "keyword_search_data": [],
+        "keyword_signals": [],
+        "scan_error": None,
+    })
+    monkeypatch.setattr(database, "save_scan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(database, "get_expansion_depth", lambda _keyword: 99)
+
+    worker = AutonomousScheduler.__new__(AutonomousScheduler)
+    worker._store_slug = "__global__"
+    worker._skip_scraper = False
+    worker._log = lambda _message: None
+    worker._queue_secondary_collection = lambda _keyword: None
+
+    assert worker._scan_and_expand("valid sparse phrase") == 0
+
+
 def test_continuous_collection_enforces_target_batch_size(monkeypatch) -> None:
     monkeypatch.setattr(scheduler_service, "MIN_CONTINUOUS_BATCH_SIZE", 30)
 

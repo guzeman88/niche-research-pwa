@@ -345,7 +345,14 @@ class AutonomousScheduler:
         has_market_data = _report_has_market_data(report)
         source_data = self._report_to_dict(report)
         if not has_market_data and not source_data.get("sources_used"):
-            raise RuntimeError("No research source returned usable data; check provider availability")
+            # A successful provider response with no matching evidence is a
+            # valid market result, not a worker failure.  Provider telemetry
+            # separately records configuration, request, and transport errors.
+            # Keeping this result as no-data prevents five sparse keywords from
+            # stopping the entire collection queue.
+            self._log(
+                f"[scheduler]   No market evidence for '{keyword}' - recording null evidence and continuing"
+            )
         if not has_market_data:
             self._log(
                 f"[scheduler]   Thin market evidence for '{keyword}' - saving no-data scores and queuing for evidence refresh"
