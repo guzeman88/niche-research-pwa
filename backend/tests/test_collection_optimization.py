@@ -13,6 +13,7 @@ from pipeline.autonomous_scheduler import AutonomousScheduler, _remaining_interv
 from pipeline.autonomous_scheduler import _signal_fingerprint
 from pipeline.stages import niche_research
 from services import collection_quality
+from services import scheduler_service
 
 
 @pytest.fixture
@@ -57,6 +58,14 @@ def test_etsy_interval_rejects_invalid_quota_target(monkeypatch) -> None:
 def test_scheduler_does_not_double_count_processing_time_in_quota_interval() -> None:
     assert _remaining_interval_seconds(17.28, 12.0) == pytest.approx(5.28)
     assert _remaining_interval_seconds(17.28, 20.0) == 0.0
+
+
+def test_continuous_collection_enforces_target_batch_size(monkeypatch) -> None:
+    monkeypatch.setattr(scheduler_service, "MIN_CONTINUOUS_BATCH_SIZE", 30)
+
+    assert scheduler_service.collection_batch_size("continuous", 5) == 30
+    assert scheduler_service.collection_batch_size("continuous", 40) == 40
+    assert scheduler_service.collection_batch_size("slow", 5) == 5
 
 
 def test_etsy_research_uses_full_page_without_duplicate_adapter_call(monkeypatch) -> None:
