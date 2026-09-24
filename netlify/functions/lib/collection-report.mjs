@@ -30,6 +30,10 @@ function number(value) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : null;
 }
 
+function integer(value) {
+  return Math.round(value).toLocaleString('en-US');
+}
+
 function sumParts(source, counts, suffix) {
   const values = source.parts.map(part => number(counts[`${part}_${suffix}`]));
   return values.some(value => value === null) ? null : values.reduce((sum, value) => sum + value, 0);
@@ -49,33 +53,40 @@ function eventTotals(events) {
   for (const event of events || []) {
     const provider = String(event?.provider || '');
     if (!provider) continue;
-    const row = totals[provider] ||= {eligible:0, processed:0, usable:0, providerRows:0, coveredRows:0, newRows:0};
+    const row = totals[provider] ||= {eligible:0, processed:0, usable:0, providerRows:0, coveredRows:0, newRows:0, latestProviderRows:null};
     const metadata = event?.metadata && typeof event.metadata === 'object' ? event.metadata : {};
     for (const [key, target] of [['eligible_keywords','eligible'],['processed_keywords','processed'],['usable_keywords','usable'],['provider_rows','providerRows'],['covered_rows','coveredRows'],['new_rows','newRows']]) {
       const value = number(metadata[key]);
       if (value !== null) row[target] += value;
     }
+    const latestProviderRows = number(metadata.provider_rows);
+    if (latestProviderRows !== null) row.latestProviderRows = latestProviderRows;
   }
   return totals;
 }
 
-function maximum(source, denominator) {
+function maximum(source, denominator, totals) {
   if (source.id === 'etsy_open_api') {
     return denominator === null
       ? {headline:'TBD from live provider quota', detail:'EtGen does not substitute a default quota when Etsy has not reported one.'}
-      : {headline:`${denominator} requests/provider quota day`, detail:`The operating target is ${Math.round(denominator * TARGET_MIN_PCT / 100)} requests (${TARGET_MIN_PCT}%), retaining the remainder as a safety reserve.`};
+      : {headline:`${integer(denominator)} verified requests/day`, detail:`Up to ${integer(denominator * 100)} listing rows/day* at 100 listings per response. Operating goal: ${integer(denominator * TARGET_MIN_PCT / 100)} requests (${TARGET_MIN_PCT}%).`};
   }
-  if (source.id === 'google_suggest') return {headline:'No published provider maximum', detail:denominator === null ? 'Capacity is measured from actual eligible keywords scheduled in the rolling window.' : `${denominator} eligible keywords were scheduled in the rolling window.`};
-  if (source.id === 'google_trends') return {headline:'No published stable maximum', detail:denominator === null ? 'Coverage is measured from actual eligible marketplace-supported series.' : `${denominator} marketplace-supported keyword series were eligible in the rolling window.`};
-  if (source.id === 'google_daily_trends') return {headline:'No fixed provider maximum', detail:denominator === null ? 'Capacity is the number of rows actually returned by the provider feed.' : `The measured feeds returned ${denominator} available rows.`};
-  if (source.id === 'pinterest_trends') return {headline:'Up to 50 results/request after approval', detail:'Actual account capacity remains TBD until Pinterest assigns an approved access tier.'};
-  if (source.id === 'reddit_etsy') return {headline:'TBD until commercial approval', detail:'Approved commercial terms control usable request capacity.'};
-  if (source.id === 'etsy_marketplace_insights') return {headline:'15 manual searches/week free', detail:'Imported row volume depends on the actual dated export.'};
-  if (source.id === 'google_keyword_planner') return {headline:'No EtGen import cap', detail:'The current path is a manual export; API capacity remains TBD until Google Ads access is configured.'};
-  if (source.id === 'erank') return {headline:'No EtGen import cap', detail:'Usable volume depends on the supplied export and the user’s eRank plan.'};
-  if (source.id === 'marmalead') return {headline:'No EtGen import cap', detail:'Usable volume depends on the supplied export and account access.'};
-  if (source.id === 'google_trends_csv') return {headline:'No EtGen import cap', detail:'Manual file size controls the rate; this remains separate from the automatic collector.'};
-  return {headline:'No EtGen import cap', detail:'Limited by the rows present in the supplied source export.'};
+  if (source.id === 'google_suggest') return {headline:'≈4,000 keyword cycles/day*', detail:`EtGen planning goal aligned to the 80% Etsy queue target; four prefixed queries run per cycle. ${denominator === null ? 'Actual stored suggestions vary and are deduplicated.' : `${integer(denominator)} eligible cycles were measured in the rolling window.`}`};
+  if (source.id === 'google_trends') return {headline:'≈4,000 keyword series/day*', detail:`EtGen planning goal aligned to the 80% keyword queue; five due series share one request. ${denominator === null ? 'The provider publishes no stable quota.' : `${integer(denominator)} eligible series were measured in the rolling window.`}`};
+  if (source.id === 'google_daily_trends') {
+    const perPoll = number(totals.latestProviderRows);
+    return perPoll === null
+      ? {headline:'Estimated feed capacity TBD', detail:'The estimate will appear after a provider feed is observed.'}
+      : {headline:`≈${integer(perPoll * 24)} feed rows/day*`, detail:`24 hourly polls × ${integer(perPoll)} rows in the latest feed. The estimate changes with provider feed size; ${integer(denominator ?? 0)} rows were measured in the rolling window.`};
+  }
+  if (source.id === 'pinterest_trends') return {headline:'≈200 trend keywords/day*', detail:'Four scheduled polls × the configured 50-result request size after approval. Actual account capacity depends on Pinterest’s access tier.'};
+  if (source.id === 'reddit_etsy') return {headline:'≈4,000 keyword aggregates/day*', detail:'Planning goal aligned to the 80% keyword queue after commercial approval; approved terms control actual capacity.'};
+  if (source.id === 'etsy_marketplace_insights') return {headline:'15 searches/week verified', detail:'Planning goal: use at least 12 searches/week (80%) and import every valid exported row.'};
+  if (source.id === 'google_keyword_planner') return {headline:'100% of supplied export rows*', detail:'Planning goal: import at least 80% of valid dated, geography-specific rows. API capacity remains TBD until access is configured.'};
+  if (source.id === 'erank') return {headline:'100% of supplied export rows*', detail:'Planning goal: import at least 80% of valid rows; available volume depends on the user’s eRank plan.'};
+  if (source.id === 'marmalead') return {headline:'100% of supplied export rows*', detail:'Planning goal: import at least 80% of valid rows; available volume depends on account access.'};
+  if (source.id === 'google_trends_csv') return {headline:'100% of supplied CSV rows*', detail:'Planning goal: import at least 80% of valid dated rows; this remains separate from the automatic collector.'};
+  return {headline:'100% of supplied export rows*', detail:'Planning goal: import at least 80% of valid rows from the supplied source export.'};
 }
 
 function stateFor(source, state) {
@@ -120,12 +131,13 @@ export function buildCollectionReport({counts = {}, states = [], events = [], no
   const totals = eventTotals(events);
   const rows = SOURCES.map(source => {
     const state = stateMap[source.id];
-    const rate = rateFor(source, state, totals[source.id] || {eligible:0,processed:0,usable:0,providerRows:0,coveredRows:0,newRows:0});
+    const providerTotals = totals[source.id] || {eligible:0,processed:0,usable:0,providerRows:0,coveredRows:0,newRows:0,latestProviderRows:null};
+    const rate = rateFor(source, state, providerTotals);
     return {
       id:source.id, name:source.name, purpose:source.purpose,
       stored_24h:sumParts(source, counts, '24h'), stored_24h_parts:detailParts(source, counts, '24h'),
       total_stored:sumParts(source, counts, 'total'), total_parts:detailParts(source, counts, 'total'),
-      maximum:maximum(source, rate.denominator), rate, state:stateFor(source, state),
+      maximum:maximum(source, rate.denominator, providerTotals), rate, state:stateFor(source, state),
     };
   });
   return {generated_at:new Date(now).toISOString(), window_hours:24, refresh_seconds:3600, target_min_pct:TARGET_MIN_PCT, data_status:dataStatus, sources:rows};
