@@ -83,7 +83,10 @@ function stateFor(source, state) {
   if (!state) return {label:'TBD', tone:'neutral', detail:'No verified runtime state is available'};
   if (state.configured === false) return {label:'Not configured', tone:'gated', detail:'Provider access or credentials are required'};
   if (state.status === 'failed') return {label:'Attention', tone:'gated', detail:'Latest attempt failed', last_attempt_at:state.last_attempt_at || null};
-  if (state.configured === true) return {label:'Running', tone:'running', detail:`Latest ${state.status || 'recorded'} attempt`, last_attempt_at:state.last_attempt_at || null};
+  if (state.configured === true) {
+    const status = state.status === 'no_data' ? 'no-data' : state.status || 'recorded';
+    return {label:'Running', tone:'running', detail:`Latest ${status} attempt`, last_attempt_at:state.last_attempt_at || null};
+  }
   return {label:'TBD', tone:'neutral', detail:'Configuration state has not been verified'};
 }
 
