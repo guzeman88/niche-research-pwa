@@ -69,24 +69,24 @@ function maximum(source, denominator, totals) {
   if (source.id === 'etsy_open_api') {
     return denominator === null
       ? {headline:'TBD from live provider quota', detail:'EtGen does not substitute a default quota when Etsy has not reported one.'}
-      : {headline:`${integer(denominator)} verified requests/day`, detail:`Up to ${integer(denominator * 100)} listing rows/day* at 100 listings per response. Operating goal: ${integer(denominator * TARGET_MIN_PCT / 100)} requests (${TARGET_MIN_PCT}%).`};
+      : {headline:`${integer(denominator * 100)} listing rows/day*`, detail:`${integer(denominator)} verified requests/day × 100 listings per response. Provider ceiling: 5 requests/second. Operating goal: ${integer(denominator * TARGET_MIN_PCT / 100)} requests (${TARGET_MIN_PCT}%).`};
   }
-  if (source.id === 'google_suggest') return {headline:'4,000 keyword cycles/day*', detail:`EtGen planning goal aligned to the 80% Etsy queue target; four prefixed queries run per cycle. ${denominator === null ? 'Actual stored suggestions vary and are deduplicated.' : `${integer(denominator)} eligible cycles were measured in the rolling window.`}`};
-  if (source.id === 'google_trends') return {headline:'4,000 keyword series/day*', detail:`EtGen planning goal aligned to the 80% keyword queue; five due series share one request. ${denominator === null ? 'The provider publishes no stable quota.' : `${integer(denominator)} eligible series were measured in the rolling window.`}`};
+  if (source.id === 'google_suggest') return {headline:'125,000 suggestions/day*', detail:`5,000 keyword cycles × up to 25 stored suggestions. Four prefixed queries run per cycle, requiring up to 20,000 requests/day. ${denominator === null ? 'Google publishes no stable quota; results vary and are deduplicated.' : `${integer(denominator)} eligible cycles were measured in the rolling window.`}`};
+  if (source.id === 'google_trends') return {headline:'5,000 keyword series/day*', detail:`Five keywords per batch, or up to 1,000 batch runs/day. Points per series vary, and the unofficial provider path can be throttled. ${denominator === null ? 'The provider publishes no stable quota.' : `${integer(denominator)} eligible series were measured in the rolling window.`}`};
   if (source.id === 'google_daily_trends') {
     const perPoll = number(totals.latestProviderRows);
     return perPoll === null
       ? {headline:'Estimated feed capacity TBD', detail:'The estimate will appear after a provider feed is observed.'}
-      : {headline:`${integer(perPoll * 24)} feed rows/day*`, detail:`24 hourly polls × ${integer(perPoll)} rows in the latest feed. The estimate changes with provider feed size; ${integer(denominator ?? 0)} rows were measured in the rolling window.`};
+      : {headline:'24 feed snapshots/day*', detail:`Hourly polling × ${integer(perPoll)} rows in the latest feed = ${integer(perPoll * 24)} returned rows/day*. Google controls the feed size; ${integer(denominator ?? 0)} rows were measured in the rolling window.`};
   }
-  if (source.id === 'pinterest_trends') return {headline:'200 trend keywords/day*', detail:'Four scheduled polls × the configured 50-result request size after approval. Actual account capacity depends on Pinterest’s access tier.'};
-  if (source.id === 'reddit_etsy') return {headline:'4,000 keyword aggregates/day*', detail:'Planning goal aligned to the 80% keyword queue after commercial approval; approved terms control actual capacity.'};
+  if (source.id === 'pinterest_trends') return {headline:'200 trend keywords/day*', detail:'Four useful daily pulls × 50 results after approval. Trial capacity can allow 1,000 requests/day, but additional pulls would mostly repeat unchanged daily data.'};
+  if (source.id === 'reddit_etsy') return {headline:'5,000 keyword aggregates/day*', detail:'After commercial approval: up to 250,000 posts across five subreddits using 25,000 searches/day. Approved terms control actual capacity; published OAuth capacity is 100 requests/minute.'};
   if (source.id === 'etsy_marketplace_insights') return {headline:'15 searches/week verified', detail:'Planning goal: use at least 12 searches/week (80%) and import every valid exported row.'};
-  if (source.id === 'google_keyword_planner') return {headline:'100% of supplied export rows*', detail:'Planning goal: import at least 80% of valid dated, geography-specific rows. API capacity remains TBD until access is configured.'};
-  if (source.id === 'erank') return {headline:'100% of supplied export rows*', detail:'Planning goal: import at least 80% of valid rows; available volume depends on the user’s eRank plan.'};
-  if (source.id === 'marmalead') return {headline:'100% of supplied export rows*', detail:'Planning goal: import at least 80% of valid rows; available volume depends on account access.'};
-  if (source.id === 'google_trends_csv') return {headline:'100% of supplied CSV rows*', detail:'Planning goal: import at least 80% of valid dated rows; this remains separate from the automatic collector.'};
-  return {headline:'100% of supplied export rows*', detail:'Planning goal: import at least 80% of valid rows from the supplied source export.'};
+  if (source.id === 'google_keyword_planner') return {headline:'2,880–15,000 operations/day*', detail:'Future API capacity: 2,880 operations/day with Explorer access or 15,000/day with Basic access; planning requests are also capped at 1/second. The current manual import path has no EtGen row cap.'};
+  if (source.id === 'erank') return {headline:'No EtGen import cap', detail:'Automatic capacity is unavailable because eRank has no generally available public API. File volume and the user’s plan determine the usable maximum.'};
+  if (source.id === 'marmalead') return {headline:'No EtGen import cap', detail:'Automatic capacity is unavailable because Marmalead has no generally available public API. File volume and account access determine the usable maximum.'};
+  if (source.id === 'google_trends_csv') return {headline:'No EtGen import cap', detail:'Manual file size controls the rate; this remains separate from the automatic collector.'};
+  return {headline:'No EtGen import cap', detail:'Limited by the rows present in the supplied source export.'};
 }
 
 function stateFor(source, state) {
