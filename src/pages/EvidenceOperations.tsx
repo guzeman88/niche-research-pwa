@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import Icon from '../components/Icon'
 import {
   clearConnection,
@@ -110,6 +111,8 @@ const OUTCOME_MONEY_FIELDS = [
 ] as const
 
 export default function EvidenceOperations() {
+  const [searchParams] = useSearchParams()
+  const initialKeyword = (searchParams.get('keyword') || '').trim().toLowerCase()
   const initialConnection = readConnection()
   const [url, setUrl] = useState(initialConnection.url)
   const [token, setToken] = useState(initialConnection.token)
@@ -117,8 +120,8 @@ export default function EvidenceOperations() {
   const connected = Boolean(readConnection().url)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [lookup, setLookup] = useState('')
-  const [selectedKeyword, setSelectedKeyword] = useState('')
+  const [lookup, setLookup] = useState(initialKeyword)
+  const [selectedKeyword, setSelectedKeyword] = useState(initialKeyword)
   const [researchKeywords, setResearchKeywords] = useState('')
   const [selectedAdapters, setSelectedAdapters] = useState<string[]>([])
   const [mode, setMode] = useState('')

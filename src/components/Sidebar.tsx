@@ -5,10 +5,11 @@ import { useAppMode, type AppMode } from '../lib/appMode'
 import BrandLogo from './BrandLogo'
 import {useAuth} from '../lib/auth'
 
-const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconName }[] = [
+const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconName; adminOnly?: boolean }[] = [
   { to: '/', label: 'Dashboard', icon: 'home' },
   { to: '/keywords', label: 'Keywords', icon: 'search' },
   { to: '/store-generator', label: 'Store Generator', shortLabel: 'Generator', icon: 'layers' },
+  { to: '/launch', label: 'Launch Lab', shortLabel: 'Launch', icon: 'target', adminOnly: true },
   { to: '/stores', label: 'My Stores', icon: 'package' },
 ]
 
@@ -17,14 +18,15 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const auth = useAuth()
   const fastDataReady = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0'
   const statusOk = fastDataReady || import.meta.env.DEV
+  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || auth.profile?.role === 'admin')
 
   if (mobile) {
     return (
       <div className="p-1.5">
         <div className="flex items-center gap-2"><div className="flex-1">{auth.profile?.role === 'admin' && <ModeSwitch mode={mode} onModeChange={setMode} compact />}</div>
           {auth.profile?.role === 'admin' && <Link to="/evidence" className="text-xs text-surface-100 px-2 py-2">Evidence</Link>}<Link to="/workspace" className="text-xs text-surface-100 px-2 py-2">Backups</Link><Link to="/account" className="text-xs text-surface-100 px-2 py-2">Account</Link></div>
-        <div className="mt-1 grid grid-cols-4 gap-1">
-          {NAV_ITEMS.map(({ to, label, shortLabel, icon }) => (
+        <div className={`mt-1 grid gap-1 ${visibleItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+          {visibleItems.map(({ to, label, shortLabel, icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -72,7 +74,7 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {NAV_ITEMS.map(({ to, label, icon }) => (
+        {visibleItems.map(({ to, label, icon }) => (
           <NavLink
             key={to}
             to={to}

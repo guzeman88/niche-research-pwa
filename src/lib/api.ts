@@ -100,7 +100,7 @@ function tunnelBypassHeaders(baseUrl: string): Record<string, string> {
 
 async function fetchApi(path: string, options?: RequestInit, timeoutMs = 8000): Promise<Response | null> {
   const isGet = !options?.method || options.method === 'GET';
-  if (!isGet || /^\/api\/(settings|scheduler|stores|workspace|stream)(\/|\?|$)/.test(path)) {
+  if (!isGet || /^\/api\/(evidence|settings|scheduler|stores|workspace|stream)(\/|\?|$)/.test(path)) {
     try {
       const data = await accountRequest('/backend',{path,method:options?.method || 'GET',body:typeof options?.body === 'string' ? JSON.parse(options.body) : undefined});
       return new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
@@ -266,6 +266,83 @@ export function getGapReport(keyword: string): Promise<GapReport> {
 
 export function getProfitableStoreIdeas(limit = 12): Promise<StoreIdea[]> {
   return request(`/api/store-ideas/profitable?limit=${limit}`);
+}
+
+// ── Evidence-gated launch decisions ───────────────────────────────────
+
+export interface OpportunityDecision {
+  keyword: string;
+  product_type: string;
+  model_version: string;
+  evaluated_at: string;
+  status: 'blocked' | 'hold' | 'review' | 'advance';
+  score: number | null;
+  confidence: number;
+  ready_to_advance: boolean;
+  components: {
+    demand: number | null;
+    market_balance: number | null;
+    contribution_margin: number | null;
+    sample_depth: number | null;
+  };
+  evidence: {
+    keyword: string;
+    product_type: string;
+    market_pair: null | {
+      source: string;
+      geography: string | null;
+      period_start: string | null;
+      period_end: string | null;
+      observed_at: string;
+      demand: number;
+      demand_metric: string;
+      demand_unit: string;
+      supply: number;
+      supply_metric: string;
+      supply_unit: string;
+    };
+    unit_economics: null | Record<string, string | number | null>;
+    listing_sample_count: number;
+    trend: null | Record<string, string | number | null>;
+    outcome_period_count: number;
+    evidence_age_days: number | null;
+  };
+  blockers: string[];
+  cautions: string[];
+  input_fingerprint: string;
+  model_notes: string[];
+  economics: {
+    contribution_profit_usd: number | null;
+    contribution_margin_rate: number | null;
+  };
+}
+
+export interface ProductEconomicsInput {
+  keyword: string;
+  product_type: string;
+  source: string;
+  sale_price_usd: number;
+  production_cost_usd: number;
+  shipping_cost_usd: number;
+  marketplace_fees_usd: number;
+  advertising_cost_usd: number;
+  refund_allowance_usd: number;
+  observed_at?: string;
+}
+
+export function getOpportunityDecision(keyword: string, productType: string): Promise<OpportunityDecision> {
+  const params = new URLSearchParams({ product_type: productType });
+  return request(`/api/evidence/${encodeURIComponent(keyword)}/decision?${params}`);
+}
+
+export function recordProductEconomics(payload: ProductEconomicsInput): Promise<{
+  status: string;
+  contribution_profit_usd: number;
+}> {
+  return request('/api/evidence/economics', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 // Design Providers

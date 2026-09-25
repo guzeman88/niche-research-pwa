@@ -165,6 +165,24 @@ class EvidenceImportRequest(BaseModel):
     currency_code: str | None = Field(default=None, min_length=3, max_length=3)
 
 
+class OpportunityDecisionResponse(BaseModel):
+    keyword: str
+    product_type: str
+    model_version: str
+    evaluated_at: str
+    status: str
+    score: float | None = None
+    confidence: float
+    ready_to_advance: bool
+    components: dict[str, float | None]
+    evidence: dict[str, Any]
+    blockers: list[str]
+    cautions: list[str]
+    input_fingerprint: str
+    model_notes: list[str]
+    economics: dict[str, float | None]
+
+
 # ── Stats ───────────────────────────────────────────────────────────────────
 
 class StatsResponse(BaseModel):
