@@ -34,6 +34,12 @@ no-data responses, unavailable connectors, rate limits, and failures; they also
 retain observed yield, request duration, and quota fields when the provider
 actually reports them. Provider state never fabricates a missing metric.
 
+The public collection-capacity dashboard uses a planning metric: configured
+output over a complete target period divided by the maximum displayed for that
+source. It does not treat an incomplete rolling 24-hour count as a daily rate.
+Approval-gated sources show zero while explicitly disabled, unknown runtime
+state remains TBD, and sources without a numeric maximum show N/A.
+
 `GET /api/evidence/quality` reports the rolling collection rate for each source.
 The target band is 80–100%. Etsy is measured against its provider-reported
 daily request capacity; keyword sources are measured as completed eligible

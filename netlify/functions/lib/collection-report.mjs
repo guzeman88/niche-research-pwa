@@ -65,19 +65,20 @@ function eventTotals(events) {
   return totals;
 }
 
-function maximum(source, denominator, totals) {
+function maximum(source, state, totals) {
   if (source.id === 'etsy_open_api') {
-    return denominator === null
+    const limit = number(state?.rate_limit?.limit_per_day);
+    return limit === null || limit <= 0
       ? {headline:'TBD from live provider quota', detail:'EtGen does not substitute a default quota when Etsy has not reported one.'}
-      : {headline:`${integer(denominator * 100)} listing rows/day*`, detail:`${integer(denominator)} verified requests/day × 100 listings per response. Provider ceiling: 5 requests/second. Operating goal: ${integer(denominator * TARGET_MIN_PCT / 100)} requests (${TARGET_MIN_PCT}%).`};
+      : {headline:`${integer(limit * 100)} listing rows/day*`, detail:`${integer(limit)} verified requests/day × 100 listings per response. Provider ceiling: 5 requests/second. Operating goal: ${integer(limit * TARGET_MIN_PCT / 100)} requests (${TARGET_MIN_PCT}%).`};
   }
-  if (source.id === 'google_suggest') return {headline:'125,000 suggestions/day*', detail:`5,000 keyword cycles × up to 25 stored suggestions. Four prefixed queries run per cycle, requiring up to 20,000 requests/day. ${denominator === null ? 'Google publishes no stable quota; results vary and are deduplicated.' : `${integer(denominator)} eligible cycles were measured in the rolling window.`}`};
-  if (source.id === 'google_trends') return {headline:'5,000 keyword series/day*', detail:`Five keywords per batch, or up to 1,000 batch runs/day. Points per series vary, and the unofficial provider path can be throttled. ${denominator === null ? 'The provider publishes no stable quota.' : `${integer(denominator)} eligible series were measured in the rolling window.`}`};
+  if (source.id === 'google_suggest') return {headline:'125,000 suggestions/day*', detail:'5,000 keyword cycles × up to 25 stored suggestions. Four prefixed queries run per cycle, requiring up to 20,000 requests/day. Google publishes no stable quota; results vary and are deduplicated.'};
+  if (source.id === 'google_trends') return {headline:'5,000 keyword series/day*', detail:'Five keywords per batch, or up to 1,000 batch runs/day. Points per series vary, and the unofficial provider path can be throttled.'};
   if (source.id === 'google_daily_trends') {
     const perPoll = number(totals.latestProviderRows);
     return perPoll === null
-      ? {headline:'Estimated feed capacity TBD', detail:'The estimate will appear after a provider feed is observed.'}
-      : {headline:'24 feed snapshots/day*', detail:`Hourly polling × ${integer(perPoll)} rows in the latest feed = ${integer(perPoll * 24)} returned rows/day*. Google controls the feed size; ${integer(denominator ?? 0)} rows were measured in the rolling window.`};
+      ? {headline:'24 feed snapshots/day*', detail:'Hourly polling is configured; returned-row capacity remains TBD until a provider feed is observed.'}
+      : {headline:'24 feed snapshots/day*', detail:`Hourly polling × ${integer(perPoll)} rows in the latest feed = ${integer(perPoll * 24)} returned rows/day*. Google controls the feed size.`};
   }
   if (source.id === 'pinterest_trends') return {headline:'200 trend keywords/day*', detail:'Four useful daily pulls × 50 results after approval. Trial capacity can allow 1,000 requests/day, but additional pulls would mostly repeat unchanged daily data.'};
   if (source.id === 'reddit_etsy') return {headline:'5,000 keyword aggregates/day*', detail:'After commercial approval: up to 250,000 posts across five subreddits using 25,000 searches/day. Approved terms control actual capacity; published OAuth capacity is 100 requests/minute.'};
@@ -101,29 +102,38 @@ function stateFor(source, state) {
   return {label:'TBD', tone:'neutral', detail:'Configuration state has not been verified'};
 }
 
-function rateFor(source, state, totals) {
-  let numerator = null;
-  let denominator = null;
-  let yieldPct = null;
-  if (source.metric === 'quota') {
-    const limit = number(state?.rate_limit?.limit_per_day);
-    const remaining = number(state?.rate_limit?.remaining_today);
-    if (limit !== null && limit > 0 && remaining !== null) {
-      denominator = limit;
-      numerator = Math.min(limit, Math.max(0, limit - remaining));
-    }
-  } else if (source.metric === 'eligible') {
-    if (totals.eligible > 0) {
-      denominator = totals.eligible;
-      numerator = totals.processed;
-      yieldPct = percent(totals.usable, totals.processed);
-    }
-  } else if ((source.metric === 'feed' || source.metric === 'import') && totals.providerRows > 0) {
-    denominator = totals.providerRows;
-    numerator = totals.coveredRows;
-  }
+function projectedRate(numerator, denominator, detail, targetStatus = null) {
   const value = percent(numerator, denominator);
-  return {value, numerator, denominator, yield_pct:yieldPct, target_status:value === null ? (state?.configured === false ? 'not_configured' : 'tbd') : value >= TARGET_MIN_PCT ? 'on_target' : 'below_target'};
+  return {
+    basis:'configured_schedule', value, numerator:number(numerator), denominator:number(denominator), detail,
+    target_status:targetStatus || (value === null ? 'tbd' : value >= TARGET_MIN_PCT ? 'on_target' : 'below_target'),
+  };
+}
+
+function rateFor(source, state) {
+  if (source.id === 'etsy_open_api') {
+    const requestLimit = number(state?.rate_limit?.limit_per_day);
+    if (requestLimit === null || requestLimit <= 0) return projectedRate(null, null, 'A live Etsy daily quota is required to calculate the configured utilization.');
+    const maximumRows = requestLimit * 100;
+    const plannedRows = maximumRows * TARGET_MIN_PCT / 100;
+    return projectedRate(plannedRows, maximumRows, `${integer(plannedRows)} planned listing rows/day ÷ ${integer(maximumRows)} maximum (${integer(requestLimit * TARGET_MIN_PCT / 100)} of ${integer(requestLimit)} requests).`);
+  }
+  if (source.id === 'google_suggest') return projectedRate(100000, 125000, '100,000 planned suggestions/day ÷ 125,000 maximum (4,000 keyword cycles × 25).');
+  if (source.id === 'google_trends') return projectedRate(4000, 5000, '4,000 planned keyword series/day ÷ 5,000 maximum.');
+  if (source.id === 'google_daily_trends') return projectedRate(24, 24, '24 scheduled hourly feed snapshots/day ÷ 24 maximum.');
+  if (source.id === 'pinterest_trends') {
+    if (state?.configured === true) return projectedRate(200, 200, '200 scheduled trend keywords/day ÷ 200 maximum (four pulls × 50).');
+    if (state?.configured === false) return projectedRate(0, 200, '0 scheduled output while Pinterest access is not configured; the enabled schedule is four pulls × 50.', 'not_configured');
+    return projectedRate(null, null, 'Pinterest configuration state is not verified.');
+  }
+  if (source.id === 'reddit_etsy') {
+    if (state?.configured === true) return projectedRate(4000, 5000, '4,000 planned keyword aggregates/day ÷ 5,000 maximum.');
+    if (state?.configured === false) return projectedRate(0, 5000, '0 scheduled output while commercial Data API access is not configured.', 'not_configured');
+    return projectedRate(null, null, 'Reddit approval and configuration state is not verified.');
+  }
+  if (source.id === 'etsy_marketplace_insights') return projectedRate(0, 15, '0 automated searches/week ÷ 15 available; this source is manual.');
+  if (source.id === 'google_keyword_planner') return projectedRate(0, 2880, '0 API operations scheduled; the current path is manual and no Google Ads access tier is configured.');
+  return {basis:'configured_schedule', value:null, numerator:null, denominator:null, detail:'No numeric EtGen maximum exists, so a utilization percentage does not apply.', target_status:'not_applicable'};
 }
 
 export function buildCollectionReport({counts = {}, states = [], events = [], now = new Date(), dataStatus = 'complete'} = {}) {
@@ -132,13 +142,13 @@ export function buildCollectionReport({counts = {}, states = [], events = [], no
   const rows = SOURCES.map(source => {
     const state = stateMap[source.id];
     const providerTotals = totals[source.id] || {eligible:0,processed:0,usable:0,providerRows:0,coveredRows:0,newRows:0,latestProviderRows:null};
-    const rate = rateFor(source, state, providerTotals);
+    const rate = rateFor(source, state);
     return {
       id:source.id, name:source.name, purpose:source.purpose,
       stored_24h:sumParts(source, counts, '24h'), stored_24h_parts:detailParts(source, counts, '24h'),
       total_stored:sumParts(source, counts, 'total'), total_parts:detailParts(source, counts, 'total'),
-      maximum:maximum(source, rate.denominator, providerTotals), rate, state:stateFor(source, state),
+      maximum:maximum(source, state, providerTotals), rate, state:stateFor(source, state),
     };
   });
-  return {generated_at:new Date(now).toISOString(), window_hours:24, refresh_seconds:3600, target_min_pct:TARGET_MIN_PCT, data_status:dataStatus, sources:rows};
+  return {generated_at:new Date(now).toISOString(), window_hours:24, refresh_seconds:3600, target_min_pct:TARGET_MIN_PCT, rate_basis:'configured_schedule', data_status:dataStatus, sources:rows};
 }
