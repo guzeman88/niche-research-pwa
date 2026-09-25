@@ -5,6 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { collectionScanStatus, summarizeCollectionStates } = require('./collection-state.cjs');
 
 let API = process.env.VITE_API_URL || '';
 const OUT = process.env.SNAPSHOT_OUTPUT_DIR || path.join(__dirname, '..', 'public', 'data');
@@ -123,10 +124,15 @@ function byKeyword(rows) {
 }
 
 async function supabaseStats() {
-  const statsRows = await supabaseRows('keyword_stats', { select: '*' }, 1, 1);
+  const [statsRows, collectionStates, seedDomains] = await Promise.all([
+    supabaseRows('keyword_stats', { select: '*' }, 1, 1),
+    supabaseRows('keyword_collection_state', {
+      select: 'keyword,last_collected_at,evidence_status,sources', order: 'keyword.asc',
+    }, Infinity, 1000),
+    supabaseRows('keyword_seeds', { select: 'domain' }, Infinity, 1000),
+  ]);
   const stats = statsRows[0] || {};
-  const quality = (await supabaseRows('keyword_research_quality', {select:'*'}, 1, 1))[0] || {};
-  const seedDomains = await supabaseRows('keyword_seeds', { select: 'domain' }, Infinity, 1000);
+  const quality = summarizeCollectionStates(collectionStates, seedDomains.length);
   const domainCounts = new Map();
   for (const row of seedDomains) {
     const domain = row.domain || 'unknown';
@@ -140,11 +146,8 @@ async function supabaseStats() {
   );
   return {
     ...quality,
-    total_seeds: numeric(stats.total_seeds, 0),
-    scanned: numeric(stats.scanned, 0),
-    unscanned: numeric(stats.unscanned, 0),
+    total_seeds: seedDomains.length,
     total_scans: numeric(stats.total_scans, 0),
-    coverage_pct: numeric(stats.coverage_pct),
     avg_opportunity: numeric(stats.avg_opportunity),
     avg_gap_score: numeric(stats.avg_gap_score),
     breakout_count: numeric(stats.breakout_count, 0),
@@ -160,9 +163,13 @@ async function supabaseStats() {
 }
 
 async function supabaseKeywords() {
-  const [seeds, attempts, evidence] = await Promise.all([
+  const [seeds, collectionStates, attempts, evidence] = await Promise.all([
     supabaseRows('keyword_seeds', {
       select: 'keyword,domain,source,added_at',
+      order: 'keyword.asc',
+    }, Infinity, 1000),
+    supabaseRows('keyword_collection_state', {
+      select: 'keyword,last_collected_at,evidence_status,listing_count,sampled_listing_count,avg_price_usd,sources',
       order: 'keyword.asc',
     }, Infinity, 1000),
     supabaseRows('keyword_latest_attempts', {
@@ -172,29 +179,32 @@ async function supabaseKeywords() {
       select: 'keyword,scanned_at,opportunity_score,gap_score,trajectory,profitability_index,evidence_status,score_version,evidence_details,observed_search_volume,listing_count,sampled_listing_count,avg_price_usd', order: 'keyword.asc',
     }, Infinity, 1000),
   ]);
+  const collectionByKeyword = byKeyword(collectionStates);
   const attemptByKeyword = byKeyword(attempts);
   const evidenceByKeyword = byKeyword(evidence);
   return seeds.map((seed) => {
     const key = String(seed.keyword || '').toLowerCase();
+    const state = collectionByKeyword.get(key) || {};
     const attempt = attemptByKeyword.get(key) || {};
     const scan = evidenceByKeyword.get(key) || {};
     const primaryScore = scan.score_version ? numeric(scan.profitability_index ?? scan.opportunity_score ?? scan.gap_score) : null;
+    const lastScannedAt = state.last_collected_at || attempt.scanned_at || null;
     return {
       keyword: seed.keyword,
       domain: seed.domain || 'unknown',
       source: seed.source || 'library',
       added_at: seed.added_at || '',
-      scanned: Boolean(attempt.scanned_at),
-      last_scanned_at: attempt.scanned_at || null,
-      scan_status: attempt.scan_status || null,
+      scanned: Boolean(lastScannedAt),
+      last_scanned_at: lastScannedAt,
+      scan_status: collectionScanStatus(state) || attempt.scan_status || null,
       scan_error: attempt.scan_error || null,
-      evidence_status: attempt.evidence_status || 'unverified',
+      evidence_status: state.evidence_status || attempt.evidence_status || 'unverified',
       evidence_details_json: attempt.evidence_details ? JSON.stringify(attempt.evidence_details) : null,
       score_version: scan.score_version || null,
       observed_search_volume: numeric(scan.observed_search_volume),
-      listing_count: numeric(scan.listing_count),
-      sampled_listing_count: numeric(scan.sampled_listing_count),
-      avg_price_usd: numeric(scan.avg_price_usd),
+      listing_count: numeric(state.listing_count ?? scan.listing_count),
+      sampled_listing_count: numeric(state.sampled_listing_count ?? scan.sampled_listing_count),
+      avg_price_usd: numeric(state.avg_price_usd ?? scan.avg_price_usd),
       primary_score: primaryScore,
       primary_score_source: scan.profitability_index != null ? 'profitability_index'
         : scan.opportunity_score != null ? 'opportunity_score'

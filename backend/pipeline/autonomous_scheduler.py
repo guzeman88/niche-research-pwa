@@ -27,7 +27,7 @@ import uuid
 import os
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -48,6 +48,11 @@ DISCOVER_EVERY_N_SCANS = max(25, int(os.environ.get("DISCOVER_EVERY_N_SCANS", "1
 
 # Max expansion depth — don't expand keywords that are already 3 levels deep
 MAX_EXPANSION_DEPTH = max(1, int(os.environ.get("MAX_EXPANSION_DEPTH", "2")))
+
+
+def _utc_now() -> datetime:
+    """Return naive UTC for compatibility with existing scheduler state files."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 
@@ -159,7 +164,7 @@ class AutonomousScheduler:
         self._errors = []
         self._fatal_error = None
         self._consecutive_failures = 0
-        self._started_at = datetime.utcnow().isoformat()
+        self._started_at = _utc_now().isoformat()
         self._run_id = kdb.log_scheduler_run(mode=self._mode)
         self._thread = threading.Thread(target=self._run_guarded, daemon=True, name="keyword-scanner")
         self._secondary_thread = threading.Thread(
@@ -279,7 +284,7 @@ class AutonomousScheduler:
                 self._current_keyword = kw
                 try:
                     new_seeds = self._scan_and_expand(kw)
-                    self._last_progress_at = datetime.utcnow().isoformat()
+                    self._last_progress_at = _utc_now().isoformat()
                     self._consecutive_failures = 0
                     self._keywords_scanned += 1
                     self._new_seeds_found += new_seeds
@@ -599,7 +604,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                     self._collect_secondary_provider("google_trends", batch)
                 if "reddit_etsy" in _scheduler_research_adapters():
                     self._collect_secondary_provider("reddit_etsy", batch)
-                self._secondary_last_progress_at = datetime.utcnow().isoformat()
+                self._secondary_last_progress_at = _utc_now().isoformat()
             except Exception as exc:
                 self._errors.append(f"secondary collection: {exc}")
                 self._log(f"[scheduler] Secondary collection failed: {exc}")
@@ -622,7 +627,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
         else:
             return
 
-        started_at = datetime.utcnow()
+        started_at = _utc_now()
         if not adapter.is_configured():
             record_provider_attempt(
                 provider=provider,
@@ -703,7 +708,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
 
     def _run_external_discovery(self) -> int:
         """Collect each source-native discovery feed on its own cache cadence."""
-        now = datetime.utcnow()
+        now = _utc_now()
 
         from adapters.research.google_daily_trends import GoogleDailyTrendsAdapter
         from adapters.research.pinterest_trends import PinterestTrendsAdapter
@@ -715,7 +720,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
         total_added = 0
         for adapter_factory, domain in sources:
             adapter = None
-            started_at = datetime.utcnow()
+            started_at = _utc_now()
             try:
                 adapter = adapter_factory()
                 interval_seconds = adapter.discovery_interval_seconds()
@@ -843,7 +848,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
             "last_external_discovery_at": self._last_external_discovery_at,
             "external_discovery_by_source": self._external_discovery_by_source,
             "external_discovery_fingerprints": self._external_discovery_fingerprints,
-            "last_updated":     datetime.utcnow().isoformat(),
+            "last_updated":     _utc_now().isoformat(),
         }
         temporary = STATE_FILE.with_name(f".{STATE_FILE.name}.{uuid.uuid4().hex}.tmp")
         temporary.write_text(json.dumps(state, indent=2), encoding="utf-8")
