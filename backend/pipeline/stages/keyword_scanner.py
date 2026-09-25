@@ -15,7 +15,7 @@ import re
 import time
 from collections import Counter
 from calendar import month_name
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -312,7 +312,7 @@ _GOOGLE_SUGGEST_DISCOVERY_LANES = {
 def _daily_rotated_roots(roots: list[str], limit: int, lane: str) -> list[str]:
     if not roots or limit <= 0:
         return []
-    offset = (datetime.utcnow().toordinal() + len(lane) * 7) % len(roots)
+    offset = (datetime.now(timezone.utc).toordinal() + len(lane) * 7) % len(roots)
     rotated = roots[offset:] + roots[:offset]
     return rotated[:min(limit, len(rotated))]
 

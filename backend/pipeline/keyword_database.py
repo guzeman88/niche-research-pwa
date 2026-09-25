@@ -472,7 +472,7 @@ def _migrate_v10(con: sqlite3.Connection) -> None:
             ON keyword_outcomes(keyword, product_type, period_end DESC);
     """)
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     con.execute("""
         INSERT OR IGNORE INTO keyword_sources
             (keyword, source, first_seen_at, last_seen_at, observation_count)
@@ -706,7 +706,7 @@ def load_seeds_from_library() -> int:
         return 0
     with open(SEED_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     rows = []
     for domain, keywords in data.get("domains", {}).items():
         for kw in keywords:
@@ -726,7 +726,7 @@ def load_seeds_from_library() -> int:
 
 def add_seed(keyword: str, domain: str = "discovered", source: str = "auto") -> bool:
     """Add an unranked discovery candidate."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     normalized = keyword.strip().lower()
     with _conn() as con:
         cur = con.execute(
@@ -746,7 +746,7 @@ def add_seed(keyword: str, domain: str = "discovered", source: str = "auto") -> 
 
 def add_seeds_bulk(keywords: list[str], domain: str = "discovered", source: str = "auto") -> int:
     """Add unranked discovery candidates."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     rows = [(kw.strip().lower(), domain, source, now)
             for kw in keywords if kw.strip()]
     if not rows:
@@ -772,7 +772,7 @@ def merge_remote_collection_state(
     states: list[dict],
 ) -> tuple[int, int]:
     """Merge durable Supabase seed/progress rows without inflating source counts."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     seed_rows = [
         (
             str(row.get("keyword") or "").strip().lower(),
@@ -1087,7 +1087,7 @@ def record_expansion(parent: str, children: list[str], source: str,
     """
     if not children:
         return 0
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     parent_kw = parent.strip().lower()
     child_rows = [(parent_kw, c.strip().lower(), source, depth, now)
                   for c in children if c.strip()]
@@ -1486,7 +1486,7 @@ def save_scan(keyword: str, report) -> None:
     else:
         r = dict(report)
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     kw = keyword.strip().lower()
     report_id = str(r.get("report_id") or "").strip()
     collection_run_id = None
@@ -1674,7 +1674,7 @@ def provider_keywords_due(
     ))
     if not normalized:
         return []
-    cutoff = (datetime.utcnow() - timedelta(days=max(1, int(stale_days)))).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max(1, int(stale_days)))).isoformat()
     placeholders = ",".join("?" for _ in normalized)
     with _conn() as con:
         rows = con.execute(
@@ -1730,7 +1730,7 @@ def record_provider_keyword_attempt(
 def get_provider_keyword_coverage(provider: str, *, hours: int = 24) -> dict:
     """Return observed provider attempts; an absent denominator remains unknown."""
     init_db()
-    cutoff = (datetime.utcnow() - timedelta(hours=max(1, int(hours)))).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours)))).isoformat()
     with _conn() as con:
         row = con.execute("""
             SELECT COUNT(*) AS attempted,
@@ -1795,7 +1795,7 @@ def get_unscanned(limit: int = 20, domain: Optional[str] = None) -> list[str]:
 
 
 def get_stale(days: int = 30, limit: int = 20, domain: Optional[str] = None) -> list[str]:
-    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     with _conn() as con:
         base = """
             SELECT s.keyword FROM seeds s
@@ -1825,7 +1825,7 @@ def get_breakouts(limit: int = 20) -> list[str]:
 
 def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[str]:
     """Old attempts missing one or more required market observations."""
-    cutoff = (datetime.utcnow() - timedelta(hours=min_age_hours)).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=min_age_hours)).isoformat()
     with _conn() as con:
         rows = con.execute("""
             SELECT s.keyword
@@ -1895,22 +1895,29 @@ def get_all_seeds_with_status(limit: int = 2000) -> list[dict]:
                    COALESCE((SELECT GROUP_CONCAT(ks.source, ', ')
                              FROM keyword_sources ks WHERE ks.keyword=s.keyword), s.source) AS source,
                    s.added_at,
-                   attempt.scanned_at,
-                   attempt.scan_status,
+                   COALESCE(state.last_collected_at, attempt.scanned_at) AS scanned_at,
+                   CASE
+                     WHEN state.last_collected_at IS NULL THEN attempt.scan_status
+                     WHEN state.evidence_status='failed' THEN 'failed'
+                     WHEN state.evidence_status='unverified'
+                       AND state.sources_json IN ('[]','','null') THEN 'no_data'
+                     ELSE 'signals'
+                   END AS scan_status,
                    attempt.scan_error,
-                   attempt.evidence_status,
+                   COALESCE(state.evidence_status, attempt.evidence_status, 'unverified') AS evidence_status,
                    attempt.evidence_details_json,
                    evidence.opportunity_score,
                    evidence.gap_score,
                    evidence.trajectory,
                    evidence.observed_search_volume,
-                   evidence.listing_count,
-                   evidence.sampled_listing_count,
-                   evidence.avg_price_usd,
+                   COALESCE(state.listing_count, evidence.listing_count) AS listing_count,
+                   COALESCE(state.sampled_listing_count, evidence.sampled_listing_count) AS sampled_listing_count,
+                   COALESCE(state.avg_price_usd, evidence.avg_price_usd) AS avg_price_usd,
                    0 AS breakout_flag,
                    evidence.listing_efficiency,
                    evidence.score_version
             FROM seeds s
+            LEFT JOIN keyword_collection_state state ON state.keyword=s.keyword
             LEFT JOIN scans attempt ON attempt.keyword = s.keyword
               AND attempt.id = (SELECT MAX(id) FROM scans sc2 WHERE sc2.keyword=s.keyword)
             LEFT JOIN scans evidence ON evidence.keyword = s.keyword
@@ -1919,8 +1926,8 @@ def get_all_seeds_with_status(limit: int = 2000) -> list[dict]:
                   WHERE sc3.keyword=s.keyword AND sc3.evidence_status='verified'
               )
             ORDER BY
-                CASE WHEN attempt.scanned_at IS NULL THEN 0 ELSE 1 END,
-                attempt.scanned_at DESC,
+                CASE WHEN COALESCE(state.last_collected_at, attempt.scanned_at) IS NULL THEN 0 ELSE 1 END,
+                COALESCE(state.last_collected_at, attempt.scanned_at) DESC,
                 s.keyword ASC
             LIMIT ?
         """, (limit,)).fetchall()
@@ -2137,7 +2144,7 @@ def get_stats() -> dict:
             SUM(evidence_status='unverified' AND sources_json IN ('[]','','null')) AS no_data,
             SUM(last_collected_at < ?) AS stale
             FROM keyword_collection_state
-        """, ((datetime.utcnow()-timedelta(days=30)).isoformat(),)).fetchone()
+        """, ((datetime.now(timezone.utc)-timedelta(days=30)).isoformat(),)).fetchone()
         return {
             "attempted": scanned,
             "successful": quality["successful"] or 0,
@@ -2250,7 +2257,7 @@ def record_product_economics(
 
     contribution = round(float(sale_price_usd) - sum(float(value) for value in values[1:]), 4)
     add_seed(keyword, source="economics")
-    timestamp = observed_at or datetime.utcnow().isoformat()
+    timestamp = observed_at or datetime.now(timezone.utc).isoformat()
     with _conn() as con:
         con.execute("""
             INSERT OR REPLACE INTO keyword_product_economics
@@ -2507,8 +2514,9 @@ def _durability_rows() -> list[sqlite3.Row]:
 
 def log_scheduler_run(mode: str = "continuous") -> int:
     """Start a new scheduler run record. Returns run ID."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with _conn() as con:
+        _recover_interrupted_scheduler_runs(con, now)
         cur = con.execute(
             "INSERT INTO scheduler_log (started_at, mode, status) VALUES (?,?,?)",
             (now, mode, "running")
@@ -2516,10 +2524,27 @@ def log_scheduler_run(mode: str = "continuous") -> int:
         return cur.lastrowid
 
 
+def _recover_interrupted_scheduler_runs(con: sqlite3.Connection, completed_at: str) -> int:
+    cursor = con.execute("""
+        UPDATE scheduler_log
+        SET status='interrupted', completed_at=?,
+            error_msg=COALESCE(error_msg, 'Process exited before the scheduler run completed.')
+        WHERE status='running' AND completed_at IS NULL
+    """, (completed_at,))
+    return int(cursor.rowcount or 0)
+
+
+def recover_interrupted_scheduler_runs() -> int:
+    """Close scheduler records left running by an earlier process crash or restart."""
+    now = datetime.now(timezone.utc).isoformat()
+    with _conn() as con:
+        return _recover_interrupted_scheduler_runs(con, now)
+
+
 def update_scheduler_run(run_id: int, keywords_scanned: int = 0,
                          new_seeds: int = 0, status: str = "running",
                          error_msg: Optional[str] = None) -> None:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with _conn() as con:
         con.execute("""
             UPDATE scheduler_log SET keywords_scanned=?, new_seeds_found=?,
@@ -2565,7 +2590,7 @@ def export_json(path: str | Path, include_raw_scans: bool = False) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     payload: dict = {
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "stats": get_stats(),
         "top_gaps": get_top_gaps(limit=500),
         "top_opportunities": get_top_opportunities(limit=500),
@@ -2587,7 +2612,7 @@ def backup(backup_dir: str | Path = "workspace/_keyword_db/backups") -> Path:
     """Copy the SQLite file to a timestamped backup. Returns backup path."""
     backup_dir = Path(backup_dir)
     backup_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     dest = backup_dir / f"keywords_{ts}.sqlite"
     shutil.copy2(DB_PATH, dest)
     # Keep only last 10 backups
@@ -2663,7 +2688,7 @@ def save_gap_report(
     score_version: str | None = None,
 ) -> int:
     """Persist observed gap inputs; only an explicit complete score is rankable."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     kw = keyword.strip().lower()
     evidence_status = "verified" if listings_analyzed > 0 else "unverified"
     accepted_score_version = (

@@ -96,6 +96,9 @@ async def startup():
     initialize_workspace(kdb.DB_PATH.resolve(), kdb.SEED_DB_PATH.resolve())
 
     kdb.init_db()
+    recovered_runs = kdb.recover_interrupted_scheduler_runs()
+    if recovered_runs:
+        safe_log(f"[startup] Marked {recovered_runs} interrupted scheduler run(s) as closed.")
     count = kdb.load_seeds_from_library()
     safe_log(f"[startup] Keyword DB initialized. {count} library seeds loaded.")
 

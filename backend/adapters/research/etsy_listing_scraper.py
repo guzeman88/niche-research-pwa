@@ -21,7 +21,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import httpx
@@ -351,7 +351,7 @@ def _extract_listed_date(detail: ListingDetail, html: str) -> None:
         # Unix timestamp
         if raw.isdigit() and len(raw) == 10:
             try:
-                detail.listed_date = datetime.utcfromtimestamp(int(raw)).date()
+                detail.listed_date = datetime.fromtimestamp(int(raw), tz=timezone.utc).date()
                 return
             except Exception:
                 continue
@@ -409,8 +409,8 @@ def _populate_shop_detail(detail: ShopDetail, html: str) -> None:
         m = re.search(pat, html)
         if m:
             try:
-                created = datetime.utcfromtimestamp(int(m.group(1)))
-                delta_months = (datetime.utcnow() - created).days / 30.44
+                created = datetime.fromtimestamp(int(m.group(1)), tz=timezone.utc)
+                delta_months = (datetime.now(timezone.utc) - created).days / 30.44
                 detail.shop_age_months = round(max(1, delta_months), 1)
                 break
             except Exception:

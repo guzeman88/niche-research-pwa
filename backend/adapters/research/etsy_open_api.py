@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -409,7 +409,7 @@ def _listing_detail_from_api(listing_id: str, row: dict[str, Any]) -> ListingDet
     )
     if created:
         detail.listed_date = created.date()
-        detail.listing_age_months = round(max(0, (datetime.utcnow().date() - detail.listed_date).days) / 30.4375, 1)
+        detail.listing_age_months = round(max(0, (datetime.now(timezone.utc).date() - detail.listed_date).days) / 30.4375, 1)
     return detail
 
 
@@ -473,7 +473,7 @@ def _timestamp_value(value: Any) -> datetime | None:
         return None
     try:
         if isinstance(value, (int, float)) or str(value).isdigit():
-            return datetime.utcfromtimestamp(int(value))
+            return datetime.fromtimestamp(int(value), tz=timezone.utc).replace(tzinfo=None)
         return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
     except Exception:
         return None

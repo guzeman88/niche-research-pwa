@@ -47,6 +47,16 @@ def test_worker_failure_finalizes_run(database, tmp_path, monkeypatch):
     assert database.get_scheduler_history(1)[0]["status"] == "failed"
 
 
+def test_new_scheduler_run_recovers_interrupted_predecessor(database):
+    previous_id = database.log_scheduler_run("continuous")
+    current_id = database.log_scheduler_run("continuous")
+
+    history = {row["id"]: row for row in database.get_scheduler_history(10)}
+    assert history[previous_id]["status"] == "interrupted"
+    assert history[previous_id]["completed_at"] is not None
+    assert history[current_id]["status"] == "running"
+
+
 def test_watchdog_respects_stop_and_pause(monkeypatch):
     worker = Mock()
     monkeypatch.setattr(scheduler_service, "_scheduler", worker)

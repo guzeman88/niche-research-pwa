@@ -88,12 +88,9 @@ export default function Stores() {
   const stores = useMemo(() => (rawStores || []).filter((store) => storeMatchesMode(store, mode)), [rawStores, mode])
   const [selected, setSelected] = useState<string>('')
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('dashboard')
-  const [workspaceVersion, setWorkspaceVersion] = useState(0)
+  const [, setWorkspaceVersion] = useState(0)
   const current = stores.find((store) => store.slug === selected)
-  const workspace = useMemo(
-    () => current ? readStoreWorkspace(current.slug) : emptyWorkspace(),
-    [current, workspaceVersion],
-  )
+  const workspace = current ? readStoreWorkspace(current.slug) : emptyWorkspace()
   const showDetail = !!current
   const refresh = () => {
     setWorkspaceVersion((value) => value + 1)
