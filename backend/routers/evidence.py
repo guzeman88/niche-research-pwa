@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from models.schemas import EvidenceImportRequest, KeywordOutcomeRequest, ProductEconomicsRequest
+from models.schemas import (
+    EvidenceImportRequest,
+    KeywordOutcomeRequest,
+    OpportunityDecisionResponse,
+    ProductEconomicsRequest,
+)
 
 router = APIRouter(prefix="/api/evidence", tags=["evidence"])
 
@@ -23,6 +28,19 @@ def evidence_coverage(run_limit: int = Query(default=20, ge=1, le=100)):
 def collection_quality(hours: int = Query(default=24, ge=1, le=168)):
     from services.collection_quality import get_collection_quality
     return get_collection_quality(hours=hours)
+
+
+@router.get("/{keyword}/decision", response_model=OpportunityDecisionResponse)
+def opportunity_decision(
+    keyword: str,
+    product_type: str = Query(min_length=1, max_length=120),
+):
+    """Evaluate a keyword/product pair without persisting or inventing inputs."""
+    evidence = _db().get_keyword_evidence(keyword, limit=500)
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Keyword not found")
+    from services.opportunity_decision import evaluate_opportunity
+    return evaluate_opportunity(evidence, product_type)
 
 
 @router.post("/import", status_code=201)

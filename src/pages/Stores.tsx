@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { generateDesignAsset, getDesignProviders, getStores } from '../lib/api'
 import type { DesignProviderInfo, GeneratedDesignAsset, StoreItem } from '../lib/api'
 import Icon from '../components/Icon'
@@ -82,12 +83,16 @@ interface ManualDesignAsset {
 
 export default function Stores() {
   const qc = useQueryClient()
+  const [searchParams] = useSearchParams()
   const { mode } = useAppMode()
   const { data: rawStores, isLoading, isError } = useQuery<StoreItem[]>({ queryKey: ['stores'], queryFn: getStores })
   const { data: designProviders } = useQuery<DesignProviderInfo[]>({ queryKey: ['design-providers'], queryFn: getDesignProviders })
   const stores = useMemo(() => (rawStores || []).filter((store) => storeMatchesMode(store, mode)), [rawStores, mode])
-  const [selected, setSelected] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('dashboard')
+  const requestedTab = searchParams.get('tab')
+  const [selected, setSelected] = useState<string>(() => searchParams.get('store') || '')
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => (
+    requestedTab === 'products' || requestedTab === 'listings' ? requestedTab : 'dashboard'
+  ))
   const [, setWorkspaceVersion] = useState(0)
   const current = stores.find((store) => store.slug === selected)
   const workspace = current ? readStoreWorkspace(current.slug) : emptyWorkspace()
