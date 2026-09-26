@@ -1659,6 +1659,170 @@ def save_provider_signals(
         raise
 
 
+def save_provider_signal_batch(
+    provider: str,
+    signals: list,
+    *,
+    requested_keywords: list[str] | None = None,
+    operation: str = "bulk_keyword_metrics",
+    generated_at: str | None = None,
+) -> dict:
+    """Persist a large provider response in one transaction and one evidence run.
+
+    The single-keyword helper remains useful for interactive collection.  Bulk
+    providers such as Google Keyword Planner can return thousands of rows at
+    once, so opening a transaction and cloud-sync run for every keyword would
+    be unnecessarily slow and expensive.
+    """
+    clean_provider = provider.strip().lower()
+    if not clean_provider:
+        raise ValueError("provider is required")
+    timestamp = generated_at or datetime.now(timezone.utc).isoformat()
+    rows: list[dict] = []
+    for signal in signals:
+        if hasattr(signal, "__dataclass_fields__"):
+            import dataclasses
+            row = dataclasses.asdict(signal)
+        else:
+            row = dict(signal)
+        keyword = " ".join(str(row.get("keyword") or "").lower().split())
+        if keyword:
+            row["keyword"] = keyword
+            rows.append(row)
+
+    requested = list(dict.fromkeys(
+        " ".join(str(keyword).lower().split())
+        for keyword in (requested_keywords or [])
+        if str(keyword).strip()
+    ))
+    all_keywords = list(dict.fromkeys([*requested, *(row["keyword"] for row in rows)]))
+    if all_keywords:
+        add_seeds_bulk(all_keywords, domain="discovered", source=f"provider_{clean_provider}")
+
+    run_id = start_evidence_collection(
+        clean_provider,
+        {
+            "operation": operation,
+            "requested_keyword_count": len(requested),
+            "returned_keyword_count": len(rows),
+        },
+    )
+    observation_rows = []
+    trend_rows = []
+    result_keywords = {row["keyword"] for row in rows}
+    try:
+        for row in rows:
+            keyword = row["keyword"]
+            observed_at = str(row.get("observed_at") or timestamp)
+            geography = row.get("geography")
+            metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            period_start = metadata.get("period_start")
+            period_end = metadata.get("period_end")
+            base_metadata = {key: value for key, value in metadata.items() if key != "observations"}
+            for field, metric, unit in (
+                ("monthly_searches", "monthly_searches", "searches_per_month"),
+                ("competition_score", "provider_competition", "provider_value"),
+                ("avg_price_usd", "average_price", "usd"),
+                ("relative_interest", "relative_interest", "provider_index"),
+            ):
+                value = _present_number(row.get(field))
+                if value is None:
+                    continue
+                observation_rows.append((
+                    keyword, clean_provider, observed_at, metric, value, unit,
+                    None, json.dumps(base_metadata, sort_keys=True) if base_metadata else None,
+                    geography, period_start, period_end, None, run_id,
+                ))
+            for provider_row in metadata.get("observations") or []:
+                if not isinstance(provider_row, dict):
+                    continue
+                value = _present_number(provider_row.get("value"))
+                metric = str(provider_row.get("metric") or "").strip().lower()
+                unit = str(provider_row.get("unit") or "").strip().lower()
+                if value is None or not metric or not unit:
+                    continue
+                observation_rows.append((
+                    keyword, clean_provider, observed_at, metric, value, unit,
+                    None, json.dumps(base_metadata, sort_keys=True) if base_metadata else None,
+                    geography,
+                    provider_row.get("period_start") or period_start,
+                    provider_row.get("period_end") or period_end,
+                    None, run_id,
+                ))
+            for point in row.get("time_series") or []:
+                if not isinstance(point, dict):
+                    continue
+                point_at = str(point.get("date") or point.get("point_at") or "").strip()
+                value = _present_number(point.get("value"))
+                if not point_at or value is None:
+                    continue
+                partial = point.get("is_partial")
+                trend_rows.append((
+                    keyword, clean_provider, point_at, value,
+                    str(point.get("unit") or "provider_index").strip().lower(),
+                    point.get("geography") or geography,
+                    point.get("timeframe") or row.get("relative_interest_period"),
+                    None if partial is None else int(bool(partial)), observed_at,
+                    run_id,
+                    json.dumps(base_metadata, sort_keys=True) if base_metadata else None,
+                ))
+
+        with _conn() as con:
+            before = con.total_changes
+            con.executemany("""
+                INSERT OR REPLACE INTO keyword_observations
+                    (keyword, source, observed_at, metric, value, unit, sample_size,
+                     metadata_json, geography, period_start, period_end,
+                     provider_record_id, collection_run_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, observation_rows)
+            con.executemany("""
+                INSERT OR IGNORE INTO keyword_trend_points
+                    (keyword, source, point_at, value, unit, geography, timeframe,
+                     is_partial, collected_at, collection_run_id, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, trend_rows)
+            attempt_keywords = requested or list(result_keywords)
+            con.executemany("""
+                INSERT INTO provider_keyword_state
+                    (provider, keyword, last_attempt_at, last_success_at, status, row_count, error)
+                VALUES (?, ?, ?, ?, ?, ?, NULL)
+                ON CONFLICT(provider, keyword) DO UPDATE SET
+                    last_attempt_at=excluded.last_attempt_at,
+                    last_success_at=excluded.last_success_at,
+                    status=excluded.status,
+                    row_count=excluded.row_count,
+                    error=NULL
+            """, [
+                (
+                    clean_provider, keyword, timestamp, timestamp,
+                    "completed" if keyword in result_keywords else "no_data",
+                    1 if keyword in result_keywords else 0,
+                )
+                for keyword in attempt_keywords
+            ])
+            stored_rows = con.total_changes - before
+
+        evidence_rows = len(observation_rows) + len(trend_rows)
+        finish_evidence_collection(run_id, "completed" if rows else "no_data", evidence_rows)
+        try:
+            from services.supabase_evidence_sync import sync_collection_run
+            sync_collection_run(run_id)
+        except Exception:
+            pass
+        return {
+            "run_id": run_id,
+            "requested_keywords": len(requested),
+            "returned_keywords": len(result_keywords),
+            "observations": len(observation_rows),
+            "trend_points": len(trend_rows),
+            "stored_rows": stored_rows,
+        }
+    except Exception as exc:
+        finish_evidence_collection(run_id, "failed", 0, str(exc))
+        raise
+
+
 def provider_keywords_due(
     provider: str,
     keywords: list[str],
@@ -1690,6 +1854,32 @@ def provider_keywords_due(
         if row["last_attempt_at"] and row["last_attempt_at"] >= cutoff
     }
     return [keyword for keyword in normalized if keyword not in attempted]
+
+
+def get_provider_due_keywords(
+    provider: str,
+    *,
+    stale_days: int,
+    limit: int = 50_000,
+) -> list[str]:
+    """Return the oldest provider work across the full candidate database."""
+    init_db()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max(1, int(stale_days)))).isoformat()
+    row_limit = max(1, min(int(limit), 250_000))
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT s.keyword
+            FROM seeds s
+            LEFT JOIN provider_keyword_state state
+              ON state.keyword=s.keyword AND state.provider=?
+            WHERE state.last_attempt_at IS NULL OR state.last_attempt_at < ?
+            ORDER BY CASE WHEN state.last_attempt_at IS NULL THEN 0 ELSE 1 END,
+                     state.last_attempt_at ASC,
+                     s.added_at ASC,
+                     s.keyword ASC
+            LIMIT ?
+        """, (provider.strip().lower(), cutoff, row_limit)).fetchall()
+    return [row["keyword"] for row in rows if is_scanworthy_seed(row["keyword"])]
 
 
 def record_provider_keyword_attempt(
@@ -2223,6 +2413,31 @@ def get_all_seeds(domain: Optional[str] = None) -> list[dict]:
             ORDER BY gs.gap_score DESC NULLS LAST, s.keyword ASC
         """, args).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_keywords_by_observation(
+    source: str,
+    metric: str,
+    *,
+    limit: int = 2_000,
+) -> list[str]:
+    """Return keywords ordered by their latest exact provider observation."""
+    row_limit = max(1, min(int(limit), 50_000))
+    with _conn() as con:
+        rows = con.execute("""
+            WITH latest AS (
+                SELECT keyword, MAX(id) AS id
+                FROM keyword_observations
+                WHERE source=? AND metric=?
+                GROUP BY keyword
+            )
+            SELECT observation.keyword
+            FROM latest
+            JOIN keyword_observations observation ON observation.id=latest.id
+            ORDER BY observation.value DESC, observation.keyword ASC
+            LIMIT ?
+        """, (source.strip().lower(), metric.strip().lower(), row_limit)).fetchall()
+    return [row["keyword"] for row in rows]
 
 
 def get_domains() -> list[str]:

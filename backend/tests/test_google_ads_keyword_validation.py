@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+import pytest
+
+from adapters.base.research import NicheSignal
+from adapters.research.google_ads_keyword_planner import GoogleAdsKeywordPlannerAdapter
+from pipeline import keyword_database as db
+from services import keyword_validation_pipeline as validation
+
+
+@pytest.fixture
+def database(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "keywords.sqlite")
+    monkeypatch.setattr(validation, "REPORT_PATH", tmp_path / "validation_report.json")
+    monkeypatch.setattr(validation, "STATE_PATH", tmp_path / "validation_state.json")
+    db.init_db()
+    return db
+
+
+def google_signal(keyword: str = "teacher mug") -> NicheSignal:
+    return NicheSignal(
+        keyword=keyword,
+        monthly_searches=2400,
+        competition_score=72,
+        avg_price_usd=None,
+        trend_direction="rising",
+        source=validation.PROVIDER,
+        observed_at="2026-09-01T00:00:00+00:00",
+        geography="US",
+        relative_interest_period="rolling_12_months",
+        time_series=[
+            {"date": "2026-01-01", "value": 1000, "unit": "searches"},
+            {"date": "2026-08-01", "value": 1600, "unit": "searches"},
+        ],
+        metadata={
+            "period_start": "2025-09-01",
+            "period_end": "2026-08-31",
+            "observations": [
+                {"metric": "google_ads_competition_index", "value": 72, "unit": "index_0_100"},
+                {"metric": "average_cpc", "value": 1.8, "unit": "usd"},
+            ],
+        },
+    )
+
+
+def test_adapter_maps_google_response_to_auditable_signal(monkeypatch):
+    monkeypatch.setenv("GOOGLE_ADS_GEO_TARGET_IDS", "2840")
+    adapter = GoogleAdsKeywordPlannerAdapter()
+    signal = adapter._signal_from_result({
+        "text": "Teacher Mug",
+        "keywordMetrics": {
+            "avgMonthlySearches": "2400",
+            "competition": "HIGH",
+            "competitionIndex": "72",
+            "averageCpcMicros": "1800000",
+            "lowTopOfPageBidMicros": "900000",
+            "highTopOfPageBidMicros": "3200000",
+            "monthlySearchVolumes": [
+                {"year": "2026", "month": "JANUARY", "monthlySearches": "1000"},
+                {"year": "2026", "month": "AUGUST", "monthlySearches": "1600"},
+            ],
+        },
+    })
+
+    assert signal.keyword == "teacher mug"
+    assert signal.monthly_searches == 2400
+    assert signal.competition_score == 72
+    assert signal.metadata["average_cpc_usd"] == 1.8
+    assert signal.time_series[-1]["date"] == "2026-08-01"
+    assert signal.trend_direction == "rising"
+
+
+def test_bulk_persistence_records_metrics_series_and_attempt_state(database):
+    result = database.save_provider_signal_batch(
+        validation.PROVIDER,
+        [google_signal()],
+        requested_keywords=["teacher mug", "missing keyword"],
+    )
+
+    evidence = database.get_keyword_evidence("teacher mug")
+    metrics = {row["metric"] for row in evidence["observations"]}
+    assert result["returned_keywords"] == 1
+    assert {"monthly_searches", "provider_competition", "average_cpc"} <= metrics
+    assert len(evidence["trend_points"]) == 2
+    assert database.provider_keywords_due(
+        validation.PROVIDER,
+        ["teacher mug", "missing keyword"],
+        stale_days=30,
+    ) == []
+
+
+def test_validation_report_uses_exact_five_component_weights(database):
+    database.save_provider_signal_batch(validation.PROVIDER, [google_signal()])
+    database.record_keyword_observation(
+        keyword="teacher mug",
+        source="etsy_open_api",
+        metric="listing_count",
+        value=3000,
+        unit="count",
+        observed_at="2026-09-01T00:00:00+00:00",
+        geography="US",
+    )
+    database.record_keyword_listing_snapshots(
+        "teacher mug",
+        "etsy_open_api",
+        [{"listing_id": str(index), "title": f"Teacher mug {index}"} for index in range(10)],
+        observed_at="2026-09-01T00:00:00+00:00",
+    )
+    database.record_product_economics(
+        "teacher mug",
+        "mug",
+        sale_price_usd=24,
+        production_cost_usd=8,
+        shipping_cost_usd=4,
+        marketplace_fees_usd=3,
+        advertising_cost_usd=2,
+        refund_allowance_usd=1,
+        source="provider quote",
+        observed_at="2026-09-01T00:00:00+00:00",
+    )
+
+    report = validation.build_validation_report(
+        keyword_limit=200,
+        niche_limit=25,
+        finalist_limit=5,
+        candidate_limit=2000,
+    )
+    row = report["keywords"][0]
+
+    assert report["weights"] == {
+        "demand": 35,
+        "competition": 25,
+        "trend": 20,
+        "buyer_intent": 10,
+        "profit": 10,
+    }
+    assert row["evidence_coverage_pct"] == 100
+    assert row["score"] is not None
+    assert row["listing_samples"] == 10
+    assert validation.REPORT_PATH.exists()
+
+
+def test_unconfigured_pipeline_exits_without_network_or_fake_data(database, monkeypatch):
+    monkeypatch.delenv("GOOGLE_ADS_DEVELOPER_TOKEN", raising=False)
+    result = validation.KeywordValidationPipeline(log_fn=lambda _message: None).run()
+
+    assert result["status"] == "not_configured"
+    assert database.get_keywords_by_observation(validation.PROVIDER, "monthly_searches") == []

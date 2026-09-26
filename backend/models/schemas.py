@@ -114,6 +114,7 @@ class SchedulerStatus(BaseModel):
     interval_s: float
     errors: list[str]
     secondary_collector: dict = Field(default_factory=dict)
+    validation_collector: dict = Field(default_factory=dict)
 
 
 class SchedulerAction(BaseModel):

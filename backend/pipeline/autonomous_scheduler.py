@@ -85,11 +85,20 @@ class AutonomousScheduler:
 
         self._thread: Optional[threading.Thread] = None
         self._secondary_thread: Optional[threading.Thread] = None
+        self._validation_thread: Optional[threading.Thread] = None
         self._secondary_queue: queue.Queue[str] = queue.Queue()
         self._secondary_pending: set[str] = set()
         self._secondary_lock = threading.Lock()
         self._secondary_current: list[str] = []
         self._secondary_last_progress_at: Optional[str] = None
+        self._validation_status: dict = {
+            "running": False,
+            "status": "waiting",
+            "last_started_at": None,
+            "last_completed_at": None,
+            "last_result": None,
+            "error": None,
+        }
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
         self._pause_event.set()  # not paused by default
@@ -172,8 +181,14 @@ class AutonomousScheduler:
             daemon=True,
             name="secondary-evidence-collector",
         )
+        self._validation_thread = threading.Thread(
+            target=self._validation_loop,
+            daemon=True,
+            name="bulk-keyword-validation",
+        )
         self._save_state(running=True)
         self._secondary_thread.start()
+        self._validation_thread.start()
         self._thread.start()
         self._log(f"[scheduler] Started in '{self._mode}' mode — {RATES[self._mode]}s between keywords")
 
@@ -194,6 +209,8 @@ class AutonomousScheduler:
             self._thread.join(timeout=10)
         if self._secondary_thread:
             self._secondary_thread.join(timeout=10)
+        if self._validation_thread:
+            self._validation_thread.join(timeout=10)
         self._save_state(running=self.is_running())
         self._log("[scheduler] Stop requested; current operation will finish before shutdown")
 
@@ -225,6 +242,7 @@ class AutonomousScheduler:
                 "current_keywords": list(self._secondary_current),
                 "last_progress_at": self._secondary_last_progress_at,
             },
+            "validation_collector": dict(self._validation_status),
         }
 
     def set_mode(self, mode: str) -> None:
@@ -682,6 +700,7 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                     "usable_keywords": useful_keywords,
                 },
             )
+
         except Exception as exc:
             for keyword in due:
                 kdb.record_provider_keyword_attempt(
@@ -705,6 +724,43 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
                     "usable_keywords": 0,
                 },
             )
+
+    def _validation_loop(self) -> None:
+        """Run the bulk Google Ads lane independently of per-keyword Etsy scans."""
+        enabled = os.environ.get("GOOGLE_ADS_PIPELINE_ENABLED", "1").strip().lower()
+        if enabled not in {"1", "true", "yes"}:
+            self._validation_status["status"] = "disabled"
+            return
+        interval = max(900, int(os.environ.get("GOOGLE_ADS_PIPELINE_CHECK_SECONDS", "21600")))
+        while not self._stop_event.is_set():
+            self._pause_event.wait()
+            if self._stop_event.is_set():
+                break
+            started = datetime.now(timezone.utc).isoformat()
+            self._validation_status.update({
+                "running": True,
+                "status": "running",
+                "last_started_at": started,
+                "error": None,
+            })
+            try:
+                from services.keyword_validation_pipeline import KeywordValidationPipeline
+                result = KeywordValidationPipeline(log_fn=self._log).run()
+                self._validation_status.update({
+                    "running": False,
+                    "status": result.get("status", "completed"),
+                    "last_completed_at": datetime.now(timezone.utc).isoformat(),
+                    "last_result": result,
+                })
+            except Exception as exc:
+                self._validation_status.update({
+                    "running": False,
+                    "status": "failed",
+                    "last_completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": str(exc),
+                })
+                self._log(f"[google_ads] Automated validation cycle failed: {exc}")
+            self._stop_event.wait(timeout=interval)
 
     def _run_external_discovery(self) -> int:
         """Collect each source-native discovery feed on its own cache cadence."""

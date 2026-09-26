@@ -13,7 +13,7 @@ const COUNT_SPECS = {
   reddit_observations:['keyword_observations','reddit_etsy','observed_at'],
   etsy_marketplace_observations:['keyword_observations','etsy_marketplace_insights','observed_at'],
   etsy_shop_observations:['keyword_observations','etsy_shop_stats','observed_at'],
-  google_planner_observations:['keyword_observations','google_keyword_planner','observed_at'],
+  google_planner_observations:['keyword_observations',['google_ads_keyword_planner','google_keyword_planner'],'observed_at'],
   erank_observations:['keyword_observations','erank','observed_at'],
   marmalead_observations:['keyword_observations','marmalead','observed_at'],
   google_trends_csv_points:['keyword_trend_points','google_trends_csv','collected_at'],
@@ -50,7 +50,8 @@ export default async function handler(request) {
     const countEntries = await Promise.all(Object.entries(COUNT_SPECS).flatMap(([name,[table,source,timeColumn]]) => [
       [name+'_total',table,source,timeColumn,null], [name+'_24h',table,source,timeColumn,since],
     ]).map(async ([name,table,source,timeColumn,after]) => {
-      let query = service.from(table).select('*',{count:'exact',head:true}).eq('source',source);
+      let query = service.from(table).select('*',{count:'exact',head:true});
+      query = Array.isArray(source) ? query.in('source',source) : query.eq('source',source);
       if (after) query = query.gte(timeColumn,after);
       const {count,error} = await query;
       if (error) { failures.push(name); return [name,null]; }
