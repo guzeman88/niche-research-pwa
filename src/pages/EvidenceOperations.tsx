@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import Icon from '../components/Icon'
 import {
@@ -9,6 +9,7 @@ import {
   readConnection,
   saveConnection,
 } from '../lib/operatorConnection'
+import { refreshDashboardSummary } from '../lib/dashboardSummary'
 
 interface ProviderStatus {
   available: boolean
@@ -83,7 +84,7 @@ const MARKET_ADAPTERS = [
 ]
 
 const IMPORT_SOURCES: Array<{ value: ImportSource; label: string; help: string }> = [
-  { value: 'etsy_marketplace_insights', label: 'Etsy Marketplace Insights', help: 'Keyword searches and competing listings from Etsy\'s seller tool.' },
+  { value: 'etsy_marketplace_insights', label: 'Etsy Marketplace Insights', help: 'Keyword, searches, results/listings, trend %, conversion level, and related terms from Etsy\'s seller tool.' },
   { value: 'erank', label: 'eRank free export', help: 'Searches, clicks, click rate, and competition exactly as exported.' },
   { value: 'marmalead', label: 'Marmalead export', help: 'Search, engagement, and competition values exactly as supplied by Marmalead.' },
   { value: 'etsy_shop_stats', label: 'Etsy Shop Stats', help: 'Search terms tied to your own visits, views, orders, and revenue.' },
@@ -111,6 +112,7 @@ const OUTCOME_MONEY_FIELDS = [
 ] as const
 
 export default function EvidenceOperations() {
+  const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const initialKeyword = (searchParams.get('keyword') || '').trim().toLowerCase()
   const initialConnection = readConnection()
@@ -167,9 +169,13 @@ export default function EvidenceOperations() {
 
   const action = useMutation({
     mutationFn: ({ path, body }: { path: string; body: Record<string, unknown> }) => operatorRequest<Record<string, unknown>>(path, body),
-    onSuccess: async (result) => {
+    onSuccess: async (result, variables) => {
       setError('')
       setMessage(String(result.message || result.status || 'Recorded.'))
+      if (variables.path === '/api/evidence/import') {
+        await refreshDashboardSummary().catch(() => undefined)
+        await queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      }
       await Promise.all([scheduler.refetch(), evidence.refetch(), coverage.refetch(), quality.refetch()])
     },
     onError: failure => setError(failure instanceof Error ? failure.message : 'The operation failed.'),
@@ -378,7 +384,7 @@ export default function EvidenceOperations() {
               <span className="mt-0.5 text-primary-200"><Icon name="database" size={18} /></span>
               <div>
                 <h2 id="imports-heading" className="text-sm font-bold">Import free first-party and seller-tool evidence</h2>
-                <p className="mt-1 max-w-3xl text-[12px] text-surface-300">Paste CSV or tab-separated exports. The importer stores source values, dates, geography, and units exactly; missing cells remain missing.</p>
+                <p className="mt-1 max-w-3xl text-[12px] text-surface-300">Paste CSV or tab-separated exports. The importer stores source values, dates, geography, units, conversion labels, and related terms exactly; missing cells remain missing. A successful import immediately refreshes the dashboard snapshot.</p>
               </div>
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(14rem,0.7fr)_minmax(20rem,1.3fr)]">

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'node:crypto';
 import {createEmailFlow, readEmailFlow, emailFlowCookie, emailRecipientAllowed, authEmailRequest} from './lib/account-email.mjs';
 import { ValidationError, hash, seal, unseal, trustedMutation, validatePassword, validateProfile, validateWorkspace, sessionCookie, readSessionCookie } from './lib/account-security.mjs';
+import { dashboardEtag, normalizeDashboardSnapshot } from './lib/dashboard-summary.mjs';
 
 const options = {global:{fetch:(input, init = {}) => fetch(input, {...init, signal: init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000)})},auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}};
 class Failure extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -167,6 +168,32 @@ export default async function handler(request, context = {}) {
     }
     if (needsMfa) throw new Failure(403, 'Complete two-factor authentication to continue.');
     if (saved.recovery && route !== '/password') throw new Failure(403, 'Set your password to finish account recovery.');
+    async function readDashboardSnapshot(refresh = false) {
+      if (profile.role !== 'admin') throw new Failure(403,'Administrator access required.');
+      let row;
+      if (refresh) {
+        const refreshed = check(await service.rpc('refresh_research_dashboard_snapshot',{force_refresh:false}));
+        row = Array.isArray(refreshed) ? refreshed[0] : refreshed;
+      } else {
+        row = check(await service.from('research_dashboard_current').select('*').maybeSingle());
+        if (!row) {
+          const seeded = check(await service.rpc('refresh_research_dashboard_snapshot',{force_refresh:true}));
+          row = Array.isArray(seeded) ? seeded[0] : seeded;
+        }
+      }
+      if (!row) throw new Failure(503,'Live dashboard data is temporarily unavailable.');
+      headers.ETag = dashboardEtag(row);
+      headers['X-Etgen-Snapshot-Version'] = String(row.snapshot_version);
+      return normalizeDashboardSnapshot(row);
+    }
+    if (route === '/dashboard/summary' && request.method === 'GET') {
+      return response(await readDashboardSnapshot(false));
+    }
+    if (route === '/dashboard/refresh' && request.method === 'POST') {
+      const dashboard = await readDashboardSnapshot(true);
+      await audit(user.id,'dashboard_refreshed');
+      return response(dashboard);
+    }
     if (route === '/profile' && request.method === 'POST') {
       const updated = check(await auth.from('app_profiles').update(validateProfile(body)).eq('id',user.id).select().single());
       await audit(user.id,'profile_updated'); return response(updated);

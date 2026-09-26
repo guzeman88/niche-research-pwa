@@ -1,4 +1,5 @@
 import io
+import json
 import sqlite3
 import time
 from pathlib import Path
@@ -238,18 +239,23 @@ def test_marketplace_insights_import_requires_period_and_preserves_source(databa
 
     result = import_evidence(
         source="etsy_marketplace_insights",
-        text="Keyword,Searches,Listings\nteacher mug,120,4500",
+        text=("Keyword,Searches,Listings,Trend %,Conversion rate,Related terms\n"
+              "teacher mug,120,4500,-25.1%,Typical,teacher gift|teacher tumbler"),
         period_start="2026-08-20",
         period_end="2026-09-18",
         geography="US",
     )
     assert result["keywords"] == 1
-    assert result["observations"] == 2
+    assert result["observations"] == 3
     bundle = database.get_keyword_evidence("teacher mug")
     observations = {row["metric"]: row for row in bundle["observations"]}
     assert observations["searches"]["value"] == 120
     assert observations["searches"]["period_start"] == "2026-08-20"
     assert observations["listing_count"]["source"] == "etsy_marketplace_insights"
+    assert observations["search_growth_rate"]["value"] == -25.1
+    metadata = json.loads(observations["search_growth_rate"]["metadata_json"])
+    assert metadata["conversion_rate_label"] == "Typical"
+    assert metadata["related_terms"] == ["teacher gift", "teacher tumbler"]
     assert bundle["collection_runs"][0]["durable_sync_status"] == "not_configured"
 
 

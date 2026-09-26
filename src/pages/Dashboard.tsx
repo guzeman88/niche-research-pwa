@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getOpportunities, getStats, listReports } from '../lib/api'
+import { getOpportunities, listReports } from '../lib/api'
 import Icon from '../components/Icon'
 import ScoreDistribution from '../components/ScoreDistribution'
 import GapOverview from '../components/GapOverview'
@@ -8,10 +9,11 @@ import BreakoutFeed from '../components/BreakoutFeed'
 import PullToRefresh from '../components/PullToRefresh'
 import { DashboardSkeleton } from '../components/Skeleton'
 import { fmt, fmtDate, scoreColor } from '../lib/utils'
-import type { StatsResponse } from '../types/api'
+import type { DashboardSummary, StatsResponse } from '../types/api'
 import type { ReportListItem } from '../types/research'
 import { useAppMode } from '../lib/appMode'
 import { getUserOpportunities, getUserStats } from '../lib/userData'
+import { dashboardFreshness, getDashboardSummary, refreshDashboardSummary } from '../lib/dashboardSummary'
 
 interface DashboardOpportunity {
   id: string
@@ -23,10 +25,21 @@ interface DashboardOpportunity {
 export default function Dashboard() {
   const qc = useQueryClient()
   const { mode, isUserMode, userDataVersion } = useAppMode()
-  const { data: stats } = useQuery<StatsResponse>({
-    queryKey: ['stats', mode, userDataVersion],
-    queryFn: () => isUserMode ? getUserStats() : getStats(),
-    refetchInterval: isUserMode ? false : 15_000,
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const { data: userStats } = useQuery<StatsResponse>({
+    queryKey: ['stats', 'user', userDataVersion],
+    queryFn: getUserStats,
+    enabled: isUserMode,
+  })
+  const { data: dashboard } = useQuery<DashboardSummary>({
+    queryKey: ['dashboard-summary'],
+    queryFn: getDashboardSummary,
+    enabled: !isUserMode,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   })
   const { data: reports } = useQuery<ReportListItem[]>({
     queryKey: ['reports', mode],
@@ -37,7 +50,21 @@ export default function Dashboard() {
     queryKey: ['opportunities', 'dashboard', mode, userDataVersion],
     queryFn: () => isUserMode ? getUserOpportunities(12) : getOpportunities(undefined, 12),
   })
-  const refresh = () => qc.refetchQueries({ type: 'active' })
+  const stats = isUserMode ? userStats : dashboard?.stats
+  const refresh = async () => {
+    setIsRefreshing(true)
+    try {
+      if (!isUserMode) {
+        const next = await refreshDashboardSummary()
+        qc.setQueryData(['dashboard-summary'], next)
+      }
+      await qc.refetchQueries({ type: 'active' })
+    } catch {
+      await qc.refetchQueries({ queryKey: ['dashboard-summary'] })
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const opportunities = normalizeDashboardOpportunities(reports, keywordOpportunities)
   const domains = (stats?.domains || []).sort((a: any, b: any) => (b.cnt || 0) - (a.cnt || 0)).slice(0, 6)
@@ -60,6 +87,8 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {!isUserMode && dashboard && <FreshnessBar dashboard={dashboard} refreshing={isRefreshing} onRefresh={refresh} />}
+
       <div className="grid grid-cols-2 gap-2.5 sm:flex sm:overflow-x-auto sm:pb-1 sm:-mx-1 sm:px-1 sm:scrollbar-none">
         <Chip val={fmt(stats?.total_seeds)} label="Keywords" sub={stats?.total_seeds ? (isUserMode ? 'user scan rows' : `${stats.total_seeds} seeds`) : 'No data'} color="indigo" />
         <Chip val={stats?.avg_opportunity != null ? `${stats.avg_opportunity}` : 'TBD'} label="Avg Opp" sub={topOpportunity ? 'verified ranking' : 'Awaiting evidence'} color="emerald" />
@@ -69,7 +98,7 @@ export default function Dashboard() {
 
       {!isUserMode && stats?.evidence_backed != null && (
         <p className="text-sm text-surface-200" role="status">
-          {fmt(stats.evidence_backed)} keywords have market evidence. {fmt(stats.successful)} returned source signals;
+          {fmt(stats.evidence_backed)} keywords have marketplace supply or pricing evidence. {fmt(stats.successful)} returned source signals;
           {' '}{fmt(stats.no_data)} returned no data; {fmt(stats.failed)} failed; {fmt(stats.stale)} are over 30 days old.
           {stats.evidence_backed === 0 && ' Rankings remain TBD until verified inputs and a versioned model are available.'}
         </p>
@@ -77,7 +106,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-2.5">
         <MetricCard icon="database" label="Attempted coverage" value={stats?.coverage_pct == null ? 'TBD' : `${stats.coverage_pct}%`} sub={`${fmt(stats?.scanned)} of ${fmt(stats?.total_seeds)} attempted`} color="indigo" />
         <MetricCard icon="target" label="Avg Opportunity" value={stats?.avg_opportunity != null ? `${stats.avg_opportunity}` : 'TBD'} sub={topOpportunity ? `Top: ${topOpportunity.title} ${formatScore(topOpportunity.opportunityScore)}` : 'Awaiting verified score'} color="emerald" />
-        <MetricCard icon="zap" label="Total Scans" value={fmt(stats?.total_scans)} sub="lifetime DB total" color="amber" />
+        <MetricCard icon="zap" label="Historical scan records" value={fmt(stats?.total_scans)} sub="lifetime database total" color="amber" />
         <MetricCard icon="activity" label="Avg Gap Score" value={stats?.avg_gap_score != null ? `${stats.avg_gap_score}` : 'TBD'} sub={topGap?.keyword ? `Top: ${topGap.keyword} ${formatScore(topGap.gap_score)}` : 'Awaiting verified score'} color="violet" />
       </div>
 
@@ -133,6 +162,46 @@ export default function Dashboard() {
     </div>
     </PullToRefresh>
   )
+}
+
+function FreshnessBar({ dashboard, refreshing, onRefresh }: { dashboard: DashboardSummary; refreshing: boolean; onRefresh: () => Promise<void> }) {
+  const freshness = dashboardFreshness(dashboard.generated_at)
+  const fallback = dashboard.delivery.mode === 'fallback'
+  const degraded = dashboard.data_status === 'degraded' || freshness !== 'fresh' || fallback
+  const label = fallback ? 'Static fallback' : freshness === 'stale' ? 'Live data stale' : freshness === 'delayed' ? 'Live data delayed' : dashboard.data_status === 'degraded' ? 'Live · provider issue' : 'Live · current'
+  const detail = `${relativeAge(dashboard.generated_at)} · snapshot ${String(dashboard.snapshot_version).slice(0, 12)}`
+  return (
+    <div className={`flex flex-col gap-3 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${degraded ? 'border-accent-amber/30 bg-accent-amber/5' : 'border-accent-green/25 bg-accent-green/5'}`} role="status">
+      <div className="flex min-w-0 items-start gap-3">
+        <Icon name={degraded ? 'alert-triangle' : 'check-circle'} size={17} className={`mt-0.5 shrink-0 ${degraded ? 'text-accent-amber' : 'text-accent-green'}`} />
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className={`text-[12px] font-bold ${degraded ? 'text-accent-amber' : 'text-accent-green'}`}>{label}</span>
+            <span className="text-[11px] text-surface-300">{detail}</span>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-surface-300">
+            Coverage refreshes within five minutes. {dashboard.evidence.marketplace_insights_rows.toLocaleString()} Marketplace Insights observations cover {dashboard.evidence.marketplace_insights_keywords.toLocaleString()} keywords. {dashboard.evidence.versioned_scores.toLocaleString()} evidence-qualified scores are available.
+          </p>
+          {fallback && <p className="mt-1 text-[11px] text-accent-amber">The live account service could not be reached; these values are from the last published static release.</p>}
+        </div>
+      </div>
+      <button type="button" className="btn-secondary shrink-0 text-[12px]" onClick={() => void onRefresh()} disabled={refreshing} aria-label="Refresh dashboard data now">
+        <Icon name={refreshing ? 'loader' : 'refresh-cw'} size={14} className={refreshing ? 'animate-spin' : ''} />
+        {refreshing ? 'Refreshing' : 'Refresh now'}
+      </button>
+    </div>
+  )
+}
+
+function relativeAge(value: string): string {
+  const elapsed = Date.now() - Date.parse(value)
+  if (!Number.isFinite(elapsed) || elapsed < 0) return 'Updated just now'
+  const minutes = Math.floor(elapsed / 60_000)
+  if (minutes < 1) return 'Updated just now'
+  if (minutes < 60) return `Updated ${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `Updated ${hours}h ago`
+  return `Updated ${Math.floor(hours / 24)}d ago`
 }
 
 function Chip({ val, label, sub, color }: { val: string; label: string; sub: string; color: 'indigo' | 'emerald' | 'amber' | 'violet' }) {
