@@ -37,14 +37,14 @@ test('collection report projects configured collection against displayed maximum
   assert.equal(byId.google_daily_trends.rate.value,100);
   assert.equal(byId.pinterest_trends.maximum.headline,'200 trend keywords/day*');
   assert.equal(byId.reddit_etsy.maximum.headline,'5,000 keyword aggregates/day*');
-  assert.equal(byId.google_keyword_planner.maximum.headline,'2,880–15,000 operations/day*');
+  assert.equal(byId.google_ads_keyword_planner.maximum.headline,'10,000 keywords/request');
   assert.equal(byId.erank.maximum.headline,'No EtGen import cap');
   assert.equal(report.sources.some(source => source.maximum.headline.includes('≈')),false);
   assert.equal(byId.pinterest_trends.rate.value,0);
   assert.equal(byId.pinterest_trends.state.label,'Not configured');
   assert.equal(byId.reddit_etsy.rate.value,0);
   assert.equal(byId.etsy_marketplace_insights.rate.value,0);
-  assert.equal(byId.google_keyword_planner.rate.value,0);
+  assert.equal(byId.google_ads_keyword_planner.rate.value,null);
   assert.equal(byId.erank.total_stored,null);
   assert.equal(byId.erank.rate.value,null);
   assert.equal(byId.erank.rate.target_status,'not_applicable');

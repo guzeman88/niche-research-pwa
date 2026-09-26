@@ -22,7 +22,7 @@ from services.runtime_safety import safe_log, initialize_workspace
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
-from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace, evidence
+from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace, evidence, validation
 
 _PROCESS_BOOT_ID = uuid.uuid4().hex
 _PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
@@ -61,6 +61,7 @@ app.include_router(store_ideas.router)
 app.include_router(designs.router)
 app.include_router(workspace.router)
 app.include_router(evidence.router)
+app.include_router(validation.router)
 
 
 async def _scheduler_watchdog() -> None:
