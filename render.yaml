@@ -42,6 +42,40 @@ services:
         value: US
       - key: GOOGLE_DAILY_TRENDS_CACHE_SECONDS
         value: 3600
+      - key: GOOGLE_ADS_DEVELOPER_TOKEN
+        sync: false
+      - key: GOOGLE_ADS_CLIENT_ID
+        sync: false
+      - key: GOOGLE_ADS_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_ADS_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_ADS_CUSTOMER_ID
+        sync: false
+      - key: GOOGLE_ADS_LOGIN_CUSTOMER_ID
+        sync: false
+      - key: GOOGLE_ADS_API_VERSION
+        value: v25
+      - key: GOOGLE_ADS_GEO_TARGET_IDS
+        value: 2840
+      - key: GOOGLE_ADS_PIPELINE_ENABLED
+        value: 1
+      - key: GOOGLE_ADS_PIPELINE_CHECK_SECONDS
+        value: 21600
+      - key: GOOGLE_ADS_IDEA_REFRESH_DAYS
+        value: 30
+      - key: GOOGLE_ADS_METRIC_REFRESH_DAYS
+        value: 30
+      - key: GOOGLE_ADS_SEED_LIMIT
+        value: 500
+      - key: GOOGLE_ADS_MAX_NEW_KEYWORDS
+        value: 50000
+      - key: GOOGLE_ADS_IDEAS_PER_REQUEST
+        value: 2000
+      - key: GOOGLE_ADS_KEYWORD_CYCLE_LIMIT
+        value: 50000
+      - key: GOOGLE_ADS_HISTORICAL_BATCH_SIZE
+        value: 10000
       - key: GITHUB_HEARTBEAT_AUDIENCE
         value: etgen-evidence-collector
       - key: GITHUB_HEARTBEAT_REPOSITORY
