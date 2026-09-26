@@ -18,6 +18,39 @@ export interface StatsResponse {
   domains: { domain: string; cnt: number }[];
 }
 
+export interface DashboardSummary {
+  schema_version: number;
+  snapshot_version: number | string;
+  generated_at: string;
+  data_status: 'healthy' | 'degraded';
+  input_fingerprint: string;
+  source_watermarks: Record<string, string | null>;
+  duration_ms: number;
+  stats: StatsResponse;
+  evidence: {
+    versioned_scores: number;
+    versioned_gaps: number;
+    marketplace_insights_rows: number;
+    marketplace_insights_keywords: number;
+    shop_stats_rows: number;
+  };
+  providers: Array<{
+    provider: string;
+    configured: boolean;
+    status: string;
+    last_attempt_at: string | null;
+    last_success_at: string | null;
+    row_count: number | null;
+    updated_at: string;
+  }>;
+  delivery: {
+    mode: 'live' | 'fallback';
+    refresh_interval_seconds: number;
+    fallback_generated_at?: string;
+    reason?: string;
+  };
+}
+
 export interface HealthResponse {
   db_path: string;
   size_mb: number;

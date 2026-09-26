@@ -49,6 +49,9 @@ VISIT_HEADERS = {"visits", "search visits", "etsy search visits"}
 VIEW_HEADERS = {"views", "listing views"}
 ORDER_HEADERS = {"orders", "sales"}
 REVENUE_HEADERS = {"revenue", "revenue usd", "sales revenue", "sales revenue usd"}
+TREND_HEADERS = {"trend", "trend percent", "search trend", "search trend percent", "change", "change percent"}
+CONVERSION_HEADERS = {"conversion", "conversion rate", "conversion level", "conversion rate level"}
+RELATED_TERM_HEADERS = {"related terms", "related searches", "related keywords", "similar searches"}
 TIME_HEADERS = {"week", "day", "month", "date"}
 
 
@@ -178,6 +181,9 @@ def _import_keyword_table(*, text: str, source: str, observed_at: str,
         "views": _find_header(headers, VIEW_HEADERS),
         "orders": _find_header(headers, ORDER_HEADERS),
         "revenue": _find_header(headers, REVENUE_HEADERS),
+        "trend": _find_header(headers, TREND_HEADERS),
+        "conversion": _find_header(headers, CONVERSION_HEADERS),
+        "related_terms": _find_header(headers, RELATED_TERM_HEADERS),
     }
     if not any(index is not None for index in indexes.values()):
         raise ValueError("no supported evidence columns were found")
@@ -195,12 +201,23 @@ def _import_keyword_table(*, text: str, source: str, observed_at: str,
             skipped += 1
             continue
         row_observations = 0
+        row_metadata: dict[str, object] = {}
+        conversion = _cell(row, indexes.get("conversion")).strip()
+        related_terms = _cell(row, indexes.get("related_terms")).strip()
+        if conversion:
+            row_metadata["conversion_rate_label"] = conversion
+        if related_terms:
+            row_metadata["related_terms_raw"] = related_terms
+            row_metadata["related_terms"] = [
+                value.strip() for value in re.split(r"[|;\n]", related_terms)
+                if value.strip()
+            ]
         for definition in definitions:
             raw = _cell(row, definition["index"])
             value, bound = _bounded_number(raw)
             if value is None:
                 continue
-            if value < 0:
+            if value < 0 and not definition.get("signed"):
                 warnings.append(f"row {row_number}: negative {definition['metric']} skipped")
                 continue
             metric = definition["metric"]
@@ -222,6 +239,7 @@ def _import_keyword_table(*, text: str, source: str, observed_at: str,
                 metadata={
                     "import_header": headers[definition["index"]],
                     "row": row_number,
+                    **row_metadata,
                     **({"bound": bound, "raw_value": raw.strip()} if bound else {}),
                 },
             )
@@ -244,17 +262,19 @@ def _definitions_for_source(source: str, indexes: dict[str, int | None],
                             currency_code: str | None) -> list[dict]:
     definitions: list[dict] = []
 
-    def add(key: str, metric: str, unit: str, *, uses_period: bool = True) -> None:
+    def add(key: str, metric: str, unit: str, *, uses_period: bool = True,
+            signed: bool = False) -> None:
         index = indexes.get(key)
         if index is not None:
             definitions.append({
                 "index": index, "metric": metric, "unit": unit,
-                "uses_period": uses_period,
+                "uses_period": uses_period, "signed": signed,
             })
 
     if source == "etsy_marketplace_insights":
         add("searches", "searches", "searches_per_period")
         add("listings", "listing_count", "count")
+        add("trend", "search_growth_rate", "percent", signed=True)
     elif source == "erank":
         add("current_searches", "current_period_searches", "searches_per_period")
         add("searches", "monthly_searches", "searches_per_month", uses_period=False)
