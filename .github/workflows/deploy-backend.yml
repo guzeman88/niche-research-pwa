@@ -242,3 +242,9 @@ jobs:
             --output scheduler.json
           cat scheduler.json
           node -e "const s=require('./scheduler.json'); if (!s.running || s.paused || s.fatal_error) throw new Error(JSON.stringify(s))"
+          curl -fsS --max-time 30 \
+            --url "$RENDER_SERVICE_URL/api/validation/status" \
+            --header "Authorization: Bearer $GITHUB_OIDC_TOKEN" \
+            --output validation.json
+          cat validation.json
+          node -e "const s=require('./validation.json'); if (!['idle','running','completed','not_configured'].includes(s.status)) throw new Error(JSON.stringify(s))"
