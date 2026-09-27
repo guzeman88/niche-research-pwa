@@ -292,6 +292,24 @@ def test_durable_collection_state_survives_without_local_scan_rows(database) -> 
     assert database.get_next_batch(count=1) == ["durable keyword"]
 
 
+def test_collection_queue_records_but_does_not_scan_volatile_daily_trends(database) -> None:
+    database.add_seed(
+        "celebrity removal petition",
+        domain="daily_search_trends",
+        source="google_daily_trends",
+    )
+    database.add_seed(
+        "personalized rabbit owner mug",
+        domain="pet_gifts",
+        source="google_suggest",
+    )
+
+    batch = database.get_next_batch(count=10)
+
+    assert "personalized rabbit owner mug" in batch
+    assert "celebrity removal petition" not in batch
+
+
 def test_database_contexts_release_the_sqlite_file(database) -> None:
     database.get_stats()
 
