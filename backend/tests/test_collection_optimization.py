@@ -310,6 +310,25 @@ def test_collection_queue_records_but_does_not_scan_volatile_daily_trends(databa
     assert "celebrity removal petition" not in batch
 
 
+def test_no_data_scan_progress_is_included_in_durable_sync(database, monkeypatch) -> None:
+    from services import supabase_evidence_sync
+
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    database.save_scan("specific product phrase", {
+        "report_id": "no-data-report",
+        "sources_used": [],
+        "keyword_search_data": [],
+        "keyword_signals": [],
+    })
+
+    payloads = supabase_evidence_sync._payloads("no-data-report:specific product phrase")
+
+    assert [row["keyword"] for row in payloads["keyword_seeds"]] == ["specific product phrase"]
+    assert [row["keyword"] for row in payloads["keyword_collection_state"]] == ["specific product phrase"]
+    assert payloads["keyword_collection_state"][0]["evidence_status"] == "unverified"
+
+
 def test_database_contexts_release_the_sqlite_file(database) -> None:
     database.get_stats()
 
