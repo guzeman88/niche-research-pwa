@@ -245,6 +245,137 @@ class AutonomousScheduler:
             "validation_collector": dict(self._validation_status),
         }
 
+    def run_batch_once(
+        self,
+        *,
+        batch_size: int | None = None,
+        run_discovery: bool = True,
+        respect_rate_limit: bool = True,
+    ) -> dict:
+        """Run one durable collection batch without a long-lived web process.
+
+        This is the scheduled-runner counterpart to :meth:`start`. It keeps
+        provider selection, quota pacing, error handling, expansion, and
+        Supabase persistence identical to the resident scheduler, then exits.
+        """
+        if self.is_running():
+            raise RuntimeError("Cannot run a one-shot batch while the scheduler is running")
+
+        requested = self._batch_size if batch_size is None else int(batch_size)
+        requested = max(1, min(requested, 50))
+        self._stop_event.clear()
+        self._pause_event.set()
+        self._keywords_scanned = 0
+        self._new_seeds_found = 0
+        self._errors = []
+        self._fatal_error = None
+        self._consecutive_failures = 0
+        self._started_at = _utc_now().isoformat()
+        self._run_id = kdb.log_scheduler_run(mode=f"{self._mode}_batch")
+        selected_keywords: list[str] = []
+        discovery_added = 0
+        status = "completed"
+
+        try:
+            if run_discovery:
+                discovery_added = self._run_external_discovery()
+
+            selected_keywords = kdb.get_next_batch(
+                count=requested,
+                stale_days=self._stale_days,
+            )
+            for index, keyword in enumerate(selected_keywords):
+                scan_started = time.monotonic()
+                self._current_keyword = keyword
+                try:
+                    new_seeds = self._scan_and_expand(keyword)
+                    self._last_progress_at = _utc_now().isoformat()
+                    self._consecutive_failures = 0
+                    self._keywords_scanned += 1
+                    self._new_seeds_found += new_seeds
+                    if self._run_id:
+                        kdb.update_scheduler_run(
+                            self._run_id,
+                            keywords_scanned=self._keywords_scanned,
+                            new_seeds=self._new_seeds_found,
+                            status="running",
+                        )
+                except Exception as exc:
+                    error = f"'{keyword}': {exc}"
+                    self._errors.append(error)
+                    self._consecutive_failures += 1
+                    kdb.save_scan(keyword, {"scan_error": str(exc), "sources_used": []})
+                    self._log(f"[scheduler] Error on {error}")
+                    if self._consecutive_failures >= 5:
+                        raise RuntimeError(
+                            "Scanner halted after five consecutive failures: " + str(exc)
+                        ) from exc
+                finally:
+                    self._current_keyword = None
+
+                if respect_rate_limit and index < len(selected_keywords) - 1:
+                    elapsed = time.monotonic() - scan_started
+                    self._interruptible_sleep(
+                        _remaining_interval_seconds(
+                            self._scan_interval_seconds(),
+                            elapsed,
+                        )
+                    )
+
+            self._drain_secondary_queue_once()
+        except Exception as exc:
+            status = "failed"
+            self._fatal_error = str(exc)
+            self._errors.append(str(exc))
+            self._log(f"[scheduler] Scheduled batch failed: {exc}")
+        finally:
+            if self._run_id:
+                kdb.update_scheduler_run(
+                    self._run_id,
+                    keywords_scanned=self._keywords_scanned,
+                    new_seeds=self._new_seeds_found,
+                    status=status,
+                    error_msg=self._fatal_error,
+                )
+            self._save_state(running=False)
+
+        return {
+            "status": status,
+            "requested": requested,
+            "selected": len(selected_keywords),
+            "keywords_scanned": self._keywords_scanned,
+            "new_seeds_found": self._new_seeds_found,
+            "discovery_seeds_added": discovery_added,
+            "last_progress_at": self._last_progress_at,
+            "fatal_error": self._fatal_error,
+            "errors": self._errors[-5:],
+        }
+
+    def _drain_secondary_queue_once(self) -> None:
+        """Flush secondary evidence queued by a bounded scheduled batch."""
+        while not self._secondary_queue.empty():
+            batch: list[str] = []
+            while len(batch) < 5:
+                try:
+                    batch.append(self._secondary_queue.get_nowait())
+                except queue.Empty:
+                    break
+            if not batch:
+                return
+            self._secondary_current = list(batch)
+            try:
+                if "google_trends" in _scheduler_research_adapters():
+                    self._collect_secondary_provider("google_trends", batch)
+                if "reddit_etsy" in _scheduler_research_adapters():
+                    self._collect_secondary_provider("reddit_etsy", batch)
+                self._secondary_last_progress_at = _utc_now().isoformat()
+            finally:
+                with self._secondary_lock:
+                    self._secondary_pending.difference_update(batch)
+                for _keyword in batch:
+                    self._secondary_queue.task_done()
+                self._secondary_current = []
+
     def set_mode(self, mode: str) -> None:
         if mode in RATES:
             self._mode = mode

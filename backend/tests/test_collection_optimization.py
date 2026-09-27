@@ -117,6 +117,57 @@ def test_continuous_collection_enforces_target_batch_size(monkeypatch) -> None:
     assert scheduler_service.collection_batch_size("slow", 5) == 5
 
 
+def test_one_shot_batch_uses_same_quota_pacing_and_persistence(database, monkeypatch) -> None:
+    worker = AutonomousScheduler(mode="continuous", batch_size=2, skip_scraper=True)
+    updates: list[dict] = []
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(database, "log_scheduler_run", lambda mode: 42)
+    monkeypatch.setattr(database, "get_next_batch", lambda count, stale_days: ["alpha gift", "beta gift"])
+    monkeypatch.setattr(database, "update_scheduler_run", lambda run_id, **values: updates.append({"run_id": run_id, **values}))
+    monkeypatch.setattr(worker, "_run_external_discovery", lambda: 3)
+    monkeypatch.setattr(worker, "_scan_and_expand", lambda keyword: 1)
+    monkeypatch.setattr(worker, "_drain_secondary_queue_once", lambda: None)
+    monkeypatch.setattr(worker, "_scan_interval_seconds", lambda: 5.0)
+    monkeypatch.setattr(worker, "_interruptible_sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(worker, "_save_state", lambda **_kwargs: None)
+
+    result = worker.run_batch_once(batch_size=2)
+
+    assert result == {
+        "status": "completed",
+        "requested": 2,
+        "selected": 2,
+        "keywords_scanned": 2,
+        "new_seeds_found": 2,
+        "discovery_seeds_added": 3,
+        "last_progress_at": worker._last_progress_at,
+        "fatal_error": None,
+        "errors": [],
+    }
+    assert len(sleeps) == 1
+    assert 0 < sleeps[0] <= 5
+    assert updates[-1]["status"] == "completed"
+    assert updates[-1]["keywords_scanned"] == 2
+
+
+def test_one_shot_batch_caps_ephemeral_work_at_fifty(database, monkeypatch) -> None:
+    worker = AutonomousScheduler(mode="continuous", batch_size=50, skip_scraper=True)
+    requested: list[int] = []
+
+    monkeypatch.setattr(database, "log_scheduler_run", lambda mode: 7)
+    monkeypatch.setattr(database, "get_next_batch", lambda count, stale_days: requested.append(count) or [])
+    monkeypatch.setattr(database, "update_scheduler_run", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(worker, "_run_external_discovery", lambda: 0)
+    monkeypatch.setattr(worker, "_drain_secondary_queue_once", lambda: None)
+    monkeypatch.setattr(worker, "_save_state", lambda **_kwargs: None)
+
+    result = worker.run_batch_once(batch_size=500, respect_rate_limit=False)
+
+    assert requested == [50]
+    assert result["requested"] == 50
+
+
 def test_etsy_research_uses_full_page_without_duplicate_adapter_call(monkeypatch) -> None:
     listing = EtsyListingData(
         listing_id="123",
