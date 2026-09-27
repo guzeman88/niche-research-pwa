@@ -38,3 +38,30 @@ The report includes a normalized screening score when some inputs are missing. I
 - Etsy: app-specific QPS/QPD returned by provider headers; EtGen retains a 20% daily reserve by default.
 
 Marketplace Insights is not scraped. Google Ads uses the supported API, and Etsy data uses the approved Open API.
+
+## Controlled candidates before volume is connected
+
+`test-candidates.json` is generated from the same atomic keyword snapshot as the
+dashboard. The `etgen-test-portfolio-v1.0.0` model uses exact Etsy listing
+counts, observed prices, sample depth, source strength, keyword specificity,
+and explicit safety rules to decide which controlled experiment should run
+first.
+
+These are test-priority scores, not opportunity or profitability scores:
+
+- Marketplace-only candidates are capped at **65/100** and labeled
+  `provisional_marketplace`.
+- A cluster becomes `demand_screened` only after it contains at least 10 related
+  keywords, 1,500 combined monthly searches, five keywords with at least 100
+  searches/month, and no more than 10,000 median Etsy listings.
+- Obvious protected properties, retailer-navigation queries, regulated terms,
+  volatile daily-trend names, and non-product intent are excluded before
+  ranking.
+- Every candidate contains exactly six product experiments and a 30-day test
+  plan. It advances only after at least 1,000 impressions, 1.5% click-through,
+  three orders, and positive contribution profit are recorded.
+
+The Store Generator falls back to this portfolio when no fully validated store
+ideas exist. Etsy Shop Stats exports and exact listing outcomes are recorded in
+Evidence Operations. Missing search volume, economics, or outcomes remain
+visible blockers; the application never fills them with estimates.

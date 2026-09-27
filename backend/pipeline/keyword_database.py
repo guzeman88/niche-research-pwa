@@ -2440,6 +2440,42 @@ def get_keywords_by_observation(
     return [row["keyword"] for row in rows]
 
 
+def get_candidate_snapshot_rows(limit: int = 5_000) -> list[dict]:
+    """Return the strongest exact marketplace rows for controlled-test ranking.
+
+    This query intentionally returns observations, not opportunity scores. The
+    candidate portfolio applies its own versioned and capped test-priority
+    model, while the verified opportunity endpoints remain score-only.
+    """
+    row_limit = max(1, min(int(limit), 50_000))
+    with _conn() as con:
+        rows = con.execute("""
+            SELECT s.keyword, s.domain, s.source,
+                   state.evidence_status, state.listing_count,
+                   state.sampled_listing_count, state.avg_price_usd,
+                   evidence.observed_search_volume, evidence.score_version
+            FROM keyword_collection_state state
+            JOIN seeds s ON s.keyword=state.keyword
+            LEFT JOIN scans evidence ON evidence.keyword=s.keyword
+              AND evidence.id=(
+                  SELECT MAX(id) FROM scans sc2
+                  WHERE sc2.keyword=s.keyword AND sc2.evidence_status='verified'
+              )
+            WHERE state.evidence_status IN ('verified', 'partial')
+              AND state.listing_count > 0
+              AND state.sampled_listing_count >= 10
+              AND state.avg_price_usd > 0
+            ORDER BY
+              CASE WHEN evidence.observed_search_volume IS NULL THEN 1 ELSE 0 END,
+              evidence.observed_search_volume DESC,
+              state.sampled_listing_count DESC,
+              state.listing_count ASC,
+              s.keyword ASC
+            LIMIT ?
+        """, (row_limit,)).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_domains() -> list[str]:
     with _conn() as con:
         rows = con.execute("SELECT DISTINCT domain FROM seeds ORDER BY domain").fetchall()

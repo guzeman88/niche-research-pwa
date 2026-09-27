@@ -6,7 +6,7 @@ const { isDeepStrictEqual } = require('node:util');
 
 async function verifyRelease(baseUrl, directory = path.join(__dirname, '..', 'dist', 'data')) {
   const local = JSON.parse(fs.readFileSync(path.join(directory, 'release.json'), 'utf8'));
-  if (local.source !== 'supabase' || !local.commit || Object.keys(local.files || {}).length !== 7) {
+  if (local.source !== 'supabase' || !local.commit || Object.keys(local.files || {}).length !== 8) {
     throw new Error('Missing production source metadata');
   }
   async function read(name) {
@@ -22,7 +22,7 @@ async function verifyRelease(baseUrl, directory = path.join(__dirname, '..', 'di
     const actual = createHash('sha256').update(await read(name)).digest('hex');
     if (actual !== expected) throw new Error(`Live snapshot hash mismatch: ${name}`);
   }
-  console.log(`Verified seven live snapshot files at commit ${local.commit}`);
+  console.log(`Verified ${Object.keys(local.files).length} live snapshot files at commit ${local.commit}`);
 }
 
 if (require.main === module) {

@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "smoke": "node scripts/smoke-check.cjs",
     "test": "node --test scripts/tests/*.test.cjs",
-    "test:launch-ui": "node scripts/test-launch-ui.mjs"
+    "test:launch-ui": "node scripts/test-launch-ui.mjs",
+    "test:candidates-ui": "node scripts/test-store-candidates-ui.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
