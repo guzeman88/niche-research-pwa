@@ -268,6 +268,91 @@ export function getProfitableStoreIdeas(limit = 12): Promise<StoreIdea[]> {
   return request(`/api/store-ideas/profitable?limit=${limit}`);
 }
 
+export interface TestCandidateKeyword {
+  keyword: string;
+  test_priority_score: number;
+  listing_count: number;
+  sampled_listing_count: number;
+  avg_price_usd: number;
+  monthly_searches: number | null;
+  source: string;
+  safety_status: 'pass' | 'review';
+}
+
+export interface TestProductCandidate {
+  id: string;
+  title: string;
+  product_type: string;
+  primary_keyword: string;
+  supporting_keywords: string[];
+  validation_state: 'test_only';
+  evidence: {
+    etsy_listing_count: number;
+    listing_samples: number;
+    observed_average_price_usd: number;
+    monthly_searches: number | null;
+  };
+  next_step: string;
+}
+
+export interface TestStoreCandidate {
+  id: string;
+  name: string;
+  focus: string;
+  target_buyer: string;
+  validation_state: 'provisional_marketplace' | 'demand_screened';
+  test_priority_score: number;
+  score_cap: number | null;
+  evidence_confidence_pct: number;
+  safety: { status: 'pass' | 'review'; reviewed_keywords: number; note: string };
+  evidence: {
+    keyword_count: number;
+    median_etsy_listings: number;
+    listing_range: [number, number];
+    median_observed_price_usd: number;
+    average_listing_sample: number;
+    combined_monthly_searches: number | null;
+    keywords_at_or_above_100_searches: number | null;
+    source_count: number;
+  };
+  keywords: TestCandidateKeyword[];
+  product_candidates: TestProductCandidate[];
+  blockers: string[];
+  test_plan: {
+    duration_days: number;
+    listing_count: number;
+    minimum_total_impressions: number;
+    minimum_click_through_rate_pct: number;
+    minimum_orders: number;
+    requires_positive_contribution_profit: boolean;
+  };
+}
+
+export interface TestCandidatePortfolio {
+  schema_version: number;
+  model_version: string;
+  generated_at: string;
+  status: 'provisional' | 'demand_screened';
+  score_semantics: { name: string; provisional_cap: number; is_probability: false; description: string };
+  thresholds: Record<string, number>;
+  test_plan: TestStoreCandidate['test_plan'];
+  coverage: Record<string, number | Record<string, number>>;
+  blockers: string[];
+  stores: TestStoreCandidate[];
+}
+
+export async function getTestCandidatePortfolio(): Promise<TestCandidatePortfolio> {
+  try {
+    const response = await fetch(`/data/test-candidates.json?_t=${Date.now()}`, { cache: 'no-store' });
+    if (response.ok) return await response.json() as TestCandidatePortfolio;
+  } catch {
+    // Fall through to the live report when the atomic static release is unavailable.
+  }
+  const report = await request<{ test_portfolio: TestCandidatePortfolio }>('/api/validation/report');
+  if (!report.test_portfolio) throw new Error('The candidate portfolio is unavailable.');
+  return report.test_portfolio;
+}
+
 // ── Evidence-gated launch decisions ───────────────────────────────────
 
 export interface OpportunityDecision {

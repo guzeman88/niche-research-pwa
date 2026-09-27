@@ -46,6 +46,7 @@ class KeywordValidationPipeline:
             kdb.init_db()
             kdb.load_seeds_from_library()
             if not self._adapter.is_configured():
+                report = build_validation_report()
                 result = {
                     "status": "not_configured",
                     "version": PIPELINE_VERSION,
@@ -54,6 +55,13 @@ class KeywordValidationPipeline:
                         "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
                         "GOOGLE_ADS_CUSTOMER_ID",
                     ],
+                    "report": {
+                        "keywords": len(report["keywords"]),
+                        "niches": len(report["niches"]),
+                        "finalists": len(report["finalists"]),
+                        "test_candidates": len(report["test_portfolio"]["stores"]),
+                        "path": str(REPORT_PATH),
+                    },
                 }
                 _record_telemetry(started, result, configured=False)
                 return result
@@ -83,6 +91,7 @@ class KeywordValidationPipeline:
                     "keywords": len(report["keywords"]),
                     "niches": len(report["niches"]),
                     "finalists": len(report["finalists"]),
+                    "test_candidates": len(report["test_portfolio"]["stores"]),
                     "path": str(REPORT_PATH),
                 },
             }
@@ -225,6 +234,12 @@ def build_validation_report(
     finalists = [niche for niche in niches if niche["keyword_count"] >= 2][
         :max(1, min(finalist_limit, 25))
     ]
+    from services.candidate_portfolio import build_candidate_portfolio
+    test_portfolio = build_candidate_portfolio(
+        kdb.get_candidate_snapshot_rows(limit=max(candidate_limit, 5_000)),
+        store_limit=8,
+        product_limit=6,
+    )
     report = {
         "version": PIPELINE_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -238,11 +253,13 @@ def build_validation_report(
         "keywords": shortlisted,
         "niches": niches,
         "finalists": finalists,
+        "test_portfolio": test_portfolio,
         "notes": [
             "Google Ads supplies search demand and commercial-intent signals.",
             "Etsy Open API supplies marketplace listing supply and listing samples.",
             "Scores remain provisional until every weighted component is observed.",
             "A validation score is a screening aid, not a probability of sales.",
+            "Marketplace-only test priorities are capped at 65 and are never labeled validated.",
         ],
     }
     _write_json_atomic(REPORT_PATH, report)
@@ -254,7 +271,7 @@ def load_validation_report() -> dict[str, Any]:
         return build_validation_report()
     try:
         payload = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else build_validation_report()
+        return payload if isinstance(payload, dict) and isinstance(payload.get("test_portfolio"), dict) else build_validation_report()
     except (OSError, ValueError):
         return build_validation_report()
 

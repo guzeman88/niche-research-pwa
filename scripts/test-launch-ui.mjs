@@ -78,7 +78,7 @@ await context.route('**/api/keywords/search**', route => route.fulfill({ json: [
 }] }))
 
 try {
-  await page.goto(`${origin}/launch`)
+  await page.goto(`${origin}/launch`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
   await page.getByRole('heading', { name: 'Launch Lab' }).waitFor()
   for (const width of [320, 768, 1440]) {
     await page.setViewportSize({ width, height: 960 })

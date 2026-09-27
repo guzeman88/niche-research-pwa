@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createStore, getProfitableStoreIdeas } from '../lib/api'
+import { Link } from 'react-router-dom'
+import { createStore, getProfitableStoreIdeas, getTestCandidatePortfolio } from '../lib/api'
+import type { TestStoreCandidate } from '../lib/api'
 import Icon from '../components/Icon'
 import PullToRefresh from '../components/PullToRefresh'
 import { fmtPrice, scoreColor } from '../lib/utils'
@@ -27,9 +29,27 @@ export default function StoreGenerator() {
     queryFn: () => isUserMode ? getUserStoreIdeas(12) : getProfitableStoreIdeas(12),
   })
 
-  const concepts = useMemo(() => profitableIdeas || [], [profitableIdeas])
-  const isLoading = profitableLoading
-  const loadError = profitableError
+  const {
+    data: candidatePortfolio,
+    isLoading: candidatesLoading,
+    error: candidatesError,
+  } = useQuery({
+    queryKey: ['test-candidate-portfolio', mode, userDataVersion],
+    queryFn: getTestCandidatePortfolio,
+    enabled: !isUserMode,
+  })
+
+  const provisionalConcepts = useMemo(
+    () => candidatePortfolio?.stores.map(testCandidateToStoreIdea) || [],
+    [candidatePortfolio],
+  )
+  const concepts = useMemo(
+    () => profitableIdeas?.length ? profitableIdeas : provisionalConcepts,
+    [profitableIdeas, provisionalConcepts],
+  )
+  const showingTestCandidates = !isUserMode && !profitableIdeas?.length && provisionalConcepts.length > 0
+  const isLoading = profitableLoading || (!isUserMode && candidatesLoading)
+  const loadError = profitableError && (isUserMode || candidatesError)
   const bestConcept = concepts[0]
   const refresh = () => queryClient.refetchQueries({ type: 'active' })
   const toggleKeywordList = (conceptId: string) => {
@@ -60,7 +80,7 @@ export default function StoreGenerator() {
           <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Store Idea Generator</h2>
           <p className="text-[13px] text-surface-200 mt-0.5">
             {concepts.length > 0
-              ? `${concepts.length} ${isUserMode ? 'user-scan' : 'source-backed'} store concepts with keyword clusters`
+              ? `${concepts.length} ${showingTestCandidates ? 'controlled-test' : isUserMode ? 'user-scan' : 'source-backed'} store concepts with keyword clusters`
               : isUserMode ? 'Import scored keyword scans before generating user store ideas' : 'Find storeable niches that can hold multiple related keywords'}
           </p>
         </div>
@@ -75,6 +95,33 @@ export default function StoreGenerator() {
         <div className="panel-soft mb-4 border-accent-amber/30 bg-accent-amber/10 p-3 text-[12px] font-medium text-accent-amber">
           {saveError}
         </div>
+      )}
+
+      {showingTestCandidates && candidatePortfolio && (
+        <section className="panel overflow-hidden" aria-label="Candidate evidence status">
+          <div className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="chip">Controlled tests</span>
+                <span className="text-[11px] font-bold text-accent-amber">Marketplace evidence only</span>
+              </div>
+              <h3 className="mt-3 text-[15px] font-extrabold text-surface-50">Ranked experiments, not promised winners</h3>
+              <p className="mt-1 max-w-[70ch] text-[12px] leading-relaxed text-surface-200">
+                These candidates use verified Etsy supply, price, and sample depth. Scores are capped at {candidatePortfolio.score_semantics.provisional_cap}/100 until exact search volume clears the hard validation thresholds.
+              </p>
+            </div>
+            <div className="flex flex-col items-start gap-3 lg:items-end">
+              <div className="flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-surface-300 lg:justify-end">
+                <span><strong className="text-surface-100">{candidatePortfolio.stores.length}</strong> store tests</span>
+                <span><strong className="text-surface-100">{candidatePortfolio.test_plan.listing_count}</strong> listings each</span>
+                <span><strong className="text-surface-100">{candidatePortfolio.test_plan.duration_days}</strong> days</span>
+              </div>
+              <Link className="btn-secondary min-h-9 px-3 py-2 text-[12px]" to="/evidence">
+                <Icon name="database" size={14} />Connect volume and outcomes
+              </Link>
+            </div>
+          </div>
+        </section>
       )}
 
       {loadError ? (
@@ -124,6 +171,14 @@ export default function StoreGenerator() {
                         <span className="min-w-0 break-words">{concept.focus}</span>
                         <span>{rankedKeywords.length} keywords</span>
                         <span>{concept.productTypes.slice(0, 3).join(', ')}</span>
+                        {concept.validationState === 'provisional_marketplace' && (
+                          <span className="text-accent-amber">Test priority {concept.testPriorityScore?.toFixed(1)}/{concept.scoreCap || 65}</span>
+                        )}
+                        {concept.safetyStatus && (
+                          <span className={concept.safetyStatus === 'pass' ? 'text-accent-green' : 'text-accent-amber'}>
+                            Safety {concept.safetyStatus}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex min-w-0 flex-row flex-wrap items-center justify-end gap-2 sm:text-right lg:flex-col lg:items-end">
@@ -306,7 +361,7 @@ export default function StoreGenerator() {
             <div>
               <div className="text-[12px] font-bold text-surface-100">Best current direction: {bestConcept.name}</div>
               <div className="text-[12px] text-surface-300 mt-1">
-                Start with {bestConcept.keywords.slice(0, 3).map((keyword) => keyword.keyword).join(', ')} and validate price, demand, and competition before expanding.
+                Start with {bestConcept.keywords.slice(0, 3).map((keyword) => keyword.keyword).join(', ')}. Build the six-listing controlled test, then import 30-day Etsy outcomes before expanding.
               </div>
             </div>
           </div>
@@ -429,7 +484,7 @@ function rankedStoreIdeaKeywords(concept: StoreIdea): RankedKeyword[] {
       priceRange: existing?.priceRange || keyword.priceRange || null,
       strength: null,
     }
-    merged.strength = keywordStrength()
+    merged.strength = keywordStrength(merged)
     byKeyword.set(key, merged)
   }
 
@@ -457,7 +512,10 @@ function rankedStoreIdeaKeywords(concept: StoreIdea): RankedKeyword[] {
   })
 }
 
-function keywordStrength(): number | null {
+function keywordStrength(keyword: StoreIdeaKeyword): number | null {
+  for (const value of [keyword.profitabilityIndex, keyword.marketEvidenceScore, keyword.opportunity, keyword.gap]) {
+    if (Number.isFinite(value)) return Number(value)
+  }
   return null
 }
 
@@ -468,6 +526,179 @@ function bestNumber(a?: number | null, b?: number | null): number | undefined {
   if (aOk) return Number(a)
   if (bOk) return Number(b)
   return undefined
+}
+
+function testCandidateToStoreIdea(candidate: TestStoreCandidate): StoreIdea {
+  const productsByKeyword = new Map(
+    candidate.product_candidates.map((product) => [product.primary_keyword, product.product_type]),
+  )
+  const keywords: StoreIdeaKeyword[] = candidate.keywords.map((keyword) => ({
+    keyword: keyword.keyword,
+    product: productsByKeyword.get(keyword.keyword) || 'Controlled test product',
+    opportunity: null,
+    gap: null,
+    demand: keyword.monthly_searches,
+    avgPrice: keyword.avg_price_usd,
+    marketEvidenceScore: keyword.test_priority_score,
+    sourceStrength: null,
+    scoreVersion: 'etgen-test-portfolio-v1.0.0',
+    evidenceStatus: 'verified',
+    sources: [keyword.source],
+  }))
+  const productTypes = Array.from(new Set(candidate.product_candidates.map((product) => product.product_type)))
+  const clusterId = `${candidate.id}-marketplace-cluster`
+  const price = candidate.evidence.median_observed_price_usd
+  const listingBlueprints = candidate.product_candidates.map((product) => ({
+    id: product.id,
+    title: product.title,
+    primaryKeyword: product.primary_keyword,
+    supportingKeywords: product.supporting_keywords,
+    sourceClusterId: clusterId,
+    sourceClusterLabel: candidate.name,
+    productType: product.product_type,
+    buyerIntent: null,
+    priceBand: { min: product.evidence.observed_average_price_usd, max: product.evidence.observed_average_price_usd },
+    tags: [product.primary_keyword, ...product.supporting_keywords].slice(0, 13),
+    profitabilityScore: null,
+    listingQualityScore: null,
+    profitInputs: null,
+    qualityInputs: {
+      etsyListingCount: product.evidence.etsy_listing_count,
+      listingSamples: product.evidence.listing_samples,
+      monthlySearches: product.evidence.monthly_searches,
+    },
+    evidenceLevel: 'Marketplace screened; demand and economics pending',
+    profitRationale: 'Profitability remains TBD until exact costs, fees, and controlled-test outcomes are recorded.',
+  }))
+  const evidence = [
+    `${candidate.evidence.keyword_count} related marketplace-evidence keywords`,
+    `${candidate.evidence.median_etsy_listings.toLocaleString()} median Etsy listings`,
+    `$${price.toFixed(2)} median observed price`,
+    `${Math.round(candidate.evidence.average_listing_sample)} average listing samples per leading keyword`,
+  ]
+  return {
+    id: candidate.id,
+    name: candidate.name,
+    focus: candidate.focus,
+    anchorType: 'theme',
+    keywords,
+    productTypes,
+    avgOpportunity: null,
+    avgGap: null,
+    nicheScore: null,
+    storeQualityScore: null,
+    recommendationScore: null,
+    commercialPotentialScore: null,
+    qualityGrade: null,
+    specificityScore: null,
+    sourceDiversityScore: null,
+    productMixScore: null,
+    keywordDepthScore: null,
+    profitScore: null,
+    rawProfitScore: null,
+    profitGrade: null,
+    cohesion: null,
+    trendLift: null,
+    demandScore: null,
+    marginScore: null,
+    competitionEase: null,
+    buyerIntent: null,
+    confidenceScore: candidate.evidence_confidence_pct,
+    avgPrice: price,
+    priceRange: null,
+    priceBasis: 'observed',
+    estimatedGrossMargin: null,
+    estimatedMonthlyRevenue: null,
+    profitabilityEvidence: {
+      evidenceScore: candidate.evidence_confidence_pct,
+      evidenceLevel: 'Controlled-test candidate; profitability not established',
+      observedPriceBand: { median: price, avg: price },
+      priceBasis: 'observed',
+      estimatedGrossMargin: null,
+      sampledMonthlyRevenue: null,
+      revenuePerListing: null,
+      revenueDensityScore: null,
+      marketTractionScore: null,
+      sellerWeaknessScore: null,
+      avgListingCount: candidate.evidence.median_etsy_listings,
+      avgFavorites: null,
+      signalsWithDeepMarketData: candidate.keywords.filter((keyword) => keyword.sampled_listing_count >= 100).length,
+      missing: candidate.blockers,
+    },
+    scoreBreakdown: { testPriority: candidate.test_priority_score, evidenceConfidence: candidate.evidence_confidence_pct },
+    rationale: `Ranked as a ${candidate.validation_state.replace(/_/g, ' ')} experiment. The priority score is not a sales forecast.`,
+    evidence,
+    evidenceDepth: {
+      score: candidate.evidence_confidence_pct,
+      level: 'Marketplace evidence present; demand and outcomes pending',
+      keywordSignals: candidate.evidence.keyword_count,
+      scoredKeywords: 0,
+      pricedKeywords: candidate.keywords.length,
+      revenueSignals: 0,
+      competitionSignals: candidate.keywords.length,
+      trendSignals: 0,
+      productTypes: productTypes.length,
+      missing: candidate.blockers,
+    },
+    keywordClusters: [{
+      id: clusterId,
+      label: candidate.name,
+      clusterType: 'theme',
+      keywords,
+      primaryProducts: productTypes,
+      avgOpportunity: null,
+      avgGap: null,
+      avgDemand: candidate.evidence.combined_monthly_searches,
+      competitionEase: null,
+      buyerIntent: null,
+      clusterQualityScore: candidate.test_priority_score,
+      sourceDiversityScore: null,
+      productMixScore: null,
+      keywordDepthScore: null,
+      marketEvidenceScore: candidate.evidence_confidence_pct,
+      profitabilityScore: null,
+    }],
+    listingBlueprints,
+    storeRecommendation: {
+      positioning: `Test ${candidate.focus} for ${candidate.target_buyer}. Keep every listing inside one visual system so the experiment measures the niche rather than unrelated design styles.`,
+      targetCustomer: candidate.target_buyer,
+      recommendedCollections: [candidate.name],
+      launchListingIdeas: candidate.product_candidates.map((product) => product.title),
+      listingGenerationInputs: candidate.product_candidates.map((product) => ({
+        primaryKeyword: product.primary_keyword,
+        productType: product.product_type,
+        evidence: product.evidence,
+      })),
+      keywordStrategy: {
+        primaryKeywords: candidate.product_candidates.map((product) => product.primary_keyword),
+        expansionKeywords: candidate.keywords.slice(6).map((keyword) => keyword.keyword),
+        clusterCount: 1,
+        listingBlueprintCount: listingBlueprints.length,
+      },
+      storeQualityScore: null,
+      qualityGrade: null,
+      qualityPriority: 'Keep the six listings visually consistent and vary one product or keyword angle at a time.',
+      qualityOptimizationPlan: [
+        `Publish exactly ${candidate.test_plan.listing_count} controlled listings.`,
+        `Run the experiment for ${candidate.test_plan.duration_days} days.`,
+        `Require ${candidate.test_plan.minimum_total_impressions.toLocaleString()} total impressions before judging the concept.`,
+      ],
+      profitPriority: 'Record exact contribution profit before approving production.',
+      profitOptimizationPlan: ['Record production, shipping, Etsy fee, ad, and refund allowances for every format.'],
+      validationPriorities: candidate.blockers.map((blocker) => ({ evidenceGap: blocker, action: blocker, keywords: candidate.keywords.slice(0, 6).map((keyword) => keyword.keyword) })),
+      nextValidationStep: `Build the six-listing test, run it for ${candidate.test_plan.duration_days} days, then import Etsy Shop Stats.`,
+    },
+    feeModel: null,
+    listingIdeas: candidate.product_candidates.map((product) => product.title),
+    risks: [candidate.safety.note, ...candidate.blockers],
+    profitDrivers: evidence,
+    validationChecklist: candidate.blockers,
+    validationState: candidate.validation_state,
+    testPriorityScore: candidate.test_priority_score,
+    scoreCap: candidate.score_cap,
+    safetyStatus: candidate.safety.status,
+    testPlan: candidate.test_plan,
+  }
 }
 
 function toStorePayload(concept: StoreIdea, mode: AppMode) {
@@ -519,6 +750,11 @@ function toStorePayload(concept: StoreIdea, mode: AppMode) {
       evidence: concept.evidence,
       risks: concept.risks,
       validation_checklist: concept.validationChecklist || [],
+      validation_state: concept.validationState || null,
+      test_priority_score: concept.testPriorityScore ?? null,
+      score_cap: concept.scoreCap ?? null,
+      safety_status: concept.safetyStatus || null,
+      test_plan: concept.testPlan || null,
     },
   }
 }

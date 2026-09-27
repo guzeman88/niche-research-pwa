@@ -123,6 +123,27 @@ if (Array.isArray(storeIdeas)) {
   fail('public/data/store-ideas.json must be an array');
 }
 
+const testCandidates = readJson('public/data/test-candidates.json');
+if (testCandidates) {
+  if (testCandidates.model_version !== 'etgen-test-portfolio-v1.0.0') {
+    fail('public/data/test-candidates.json has an unexpected model version');
+  }
+  if (!Array.isArray(testCandidates.stores)) {
+    fail('public/data/test-candidates.json must include a stores array');
+  }
+  for (const store of testCandidates.stores || []) {
+    if (store.validation_state === 'provisional_marketplace' && Number(store.test_priority_score) > 65) {
+      fail(`provisional candidate ${store.id || 'unknown'} exceeds the 65-point score cap`);
+    }
+    if (!Array.isArray(store.product_candidates) || store.product_candidates.length !== 6) {
+      fail(`candidate ${store.id || 'unknown'} must contain the six-listing test set`);
+    }
+    if (!store.safety || !['pass', 'review'].includes(store.safety.status)) {
+      fail(`candidate ${store.id || 'unknown'} is missing an explicit safety state`);
+    }
+  }
+}
+
 const sourceFiles = walkFiles(path.join(ROOT, 'src'))
   .concat(walkFiles(path.join(ROOT, 'scripts')))
   .concat([path.join(ROOT, '.github', 'workflows', 'deploy-pwa.yml')]);
@@ -146,4 +167,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Smoke check passed: ${keywords?.length || 0} static keywords, ${storeIdeas?.length || 0} store ideas`);
+console.log(`Smoke check passed: ${keywords?.length || 0} static keywords, ${storeIdeas?.length || 0} validated store ideas, ${testCandidates?.stores?.length || 0} controlled test candidates`);

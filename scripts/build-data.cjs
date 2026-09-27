@@ -323,6 +323,22 @@ function generateStoreIdeas(rows, limit = 12) {
   throw new Error('Python is required for the shared recommendation generator. Set PIPELINE_PYTHON.');
 }
 
+function generateTestCandidates(rows) {
+  const candidates = [process.env.PIPELINE_PYTHON,
+    path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe'),
+    process.platform === 'win32' ? 'python' : 'python3'].filter(Boolean);
+  for (const command of candidates) {
+    const result = spawnSync(command, [path.join(__dirname, 'generate-test-candidates.py')], {
+      input: JSON.stringify(rows), encoding: 'utf8', maxBuffer: 30 * 1024 * 1024,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    });
+    if (result.error?.code === 'ENOENT') continue;
+    if (result.status !== 0) throw new Error(`Test candidate generator failed: ${result.stderr}`);
+    return JSON.parse(result.stdout);
+  }
+  throw new Error('Python is required for the shared test candidate generator. Set PIPELINE_PYTHON.');
+}
+
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const endpoints = [
@@ -350,6 +366,7 @@ function generateStoreIdeas(rows, limit = 12) {
   if (snapshots['keywords.json'].length !== Number(snapshots['stats.json'].total_seeds)) {
     throw new Error('Keyword rows do not match the snapshot statistics.');
   }
+  snapshots['test-candidates.json'] = generateTestCandidates(snapshots['keywords.json']);
   const { validateStoreIdeas } = require('./snapshot-contract.cjs');
   validateStoreIdeas(snapshots['store-ideas.json']);
   for (const [filename, data] of Object.entries(snapshots)) {

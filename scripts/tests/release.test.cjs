@@ -10,7 +10,7 @@ test('release verification rejects stale metadata and corrupted live data', asyn
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'etgen-release-test-'));
   const content = Buffer.from('[]');
   const digest = createHash('sha256').update(content).digest('hex');
-  const files = Object.fromEntries(['stats', 'keywords', 'opportunities', 'store-ideas', 'gaps', 'breakouts', 'reports']
+  const files = Object.fromEntries(['stats', 'keywords', 'opportunities', 'store-ideas', 'gaps', 'breakouts', 'reports', 'test-candidates']
     .map(name => [`${name}.json`, digest]));
   const manifest = { source: 'supabase', commit: 'verified-source', files };
   fs.writeFileSync(path.join(directory, 'release.json'), JSON.stringify(manifest));

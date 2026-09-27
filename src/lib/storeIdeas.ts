@@ -169,6 +169,11 @@ export interface StoreIdea {
   risks: string[]
   profitDrivers?: string[]
   validationChecklist?: string[]
+  validationState?: 'provisional_marketplace' | 'demand_screened' | 'validated' | string
+  testPriorityScore?: number | null
+  scoreCap?: number | null
+  safetyStatus?: 'pass' | 'review' | 'blocked' | string
+  testPlan?: Record<string, number | boolean>
 }
 
 const PRODUCT_TERMS: Array<[string, string[]]> = [
