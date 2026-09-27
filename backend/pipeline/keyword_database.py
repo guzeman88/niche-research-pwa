@@ -1155,9 +1155,12 @@ def is_scanworthy_seed(
     source: str | None = None,
 ) -> bool:
     """Apply only explicit safety/noise exclusions; do not guess market quality."""
-    del domain, source
     kw = " ".join(keyword.lower().split())
     if not kw:
+        return False
+    if (domain or "").strip().lower() == "daily_search_trends":
+        return False
+    if (source or "").strip().lower() == "google_daily_trends":
         return False
     if _contains_any_phrase(kw, _IP_RISK_TERMS):
         return False
@@ -2041,28 +2044,48 @@ def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
     seen: set[str] = set()
 
     def _add(items):
-        for kw in items:
+        candidates = list(dict.fromkeys(items))
+        if not candidates:
+            return
+        rows = []
+        with _conn() as con:
+            for start in range(0, len(candidates), 500):
+                chunk = candidates[start:start + 500]
+                placeholders = ",".join("?" for _ in chunk)
+                rows.extend(con.execute(
+                    f"SELECT keyword, domain, source FROM seeds WHERE keyword IN ({placeholders})",
+                    chunk,
+                ).fetchall())
+        context = {row["keyword"]: row for row in rows}
+        for kw in candidates:
+            row = context.get(kw)
+            if not is_scanworthy_seed(
+                kw,
+                domain=row["domain"] if row else None,
+                source=row["source"] if row else None,
+            ):
+                continue
             if kw not in seen and len(result) < count:
                 result.append(kw)
                 seen.add(kw)
 
     evidence_budget = max(1, min(count, count // 4 or 1))
-    _add(get_profit_evidence_gaps(limit=evidence_budget))
+    _add(get_profit_evidence_gaps(limit=max(25, evidence_budget * 10)))
 
     remaining = count - len(result)
     if remaining > 0:
-        _add(get_unscanned_portfolio(limit=remaining))
+        _add(get_unscanned_portfolio(limit=max(100, remaining * 10)))
 
     remaining = count - len(result)
     if remaining > 0:
-        _add(get_unscanned(limit=remaining))
+        _add(get_unscanned(limit=max(100, remaining * 10)))
 
     remaining = count - len(result)
     if remaining > 0:
-        _add(get_stale(days=stale_days, limit=remaining))
+        _add(get_stale(days=stale_days, limit=max(100, remaining * 10)))
     remaining = count - len(result)
     if remaining > 0:
-        _add(get_oldest_collected(limit=remaining))
+        _add(get_oldest_collected(limit=max(100, remaining * 10)))
     return result[:count]
 
 

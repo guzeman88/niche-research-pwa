@@ -1,9 +1,14 @@
-name: Evidence Collector Heartbeat
+name: Evidence Collector
 
 on:
   workflow_dispatch:
+    inputs:
+      batch_size:
+        description: Maximum keywords to collect in the fallback worker
+        required: false
+        default: '50'
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '17 */4 * * *'
 
 permissions:
   contents: read
@@ -12,28 +17,37 @@ permissions:
 jobs:
   ensure-collector:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 210
     concurrency:
       group: etgen-evidence-collector
       cancel-in-progress: false
     env:
       BACKEND_URL: https://niche-research-api-kqlt.onrender.com
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SCHEDULED_BATCH_SIZE: ${{ inputs.batch_size || '50' }}
+      GOOGLE_ADS_PIPELINE_ENABLED: '0'
+      ETSY_HTML_SCRAPER_ENABLED: '0'
+      ALLOW_LLM_KEYWORD_EXPANSION: '0'
+      ALLOW_LLM_SEED_DISCOVERY: '0'
     steps:
-      - name: Wake backend
+      - uses: actions/checkout@v7
+
+      - name: Check backend availability
+        id: backend
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 18); do
-            if curl -fsS --max-time 20 "$BACKEND_URL/api/health" > health.json; then
-              cat health.json
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Backend did not become healthy within three minutes."
-          exit 1
+          if curl -fsS --max-time 20 "$BACKEND_URL/api/health" > health.json; then
+            cat health.json
+            echo "online=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Backend is unavailable; using the scheduled worker fallback."
+            echo "online=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Request short-lived GitHub identity
         id: oidc
+        if: ${{ steps.backend.outputs.online == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -45,6 +59,7 @@ jobs:
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
       - name: Validate issued identity scope
+        if: ${{ steps.backend.outputs.online == 'true' }}
         env:
           GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
@@ -63,17 +78,10 @@ jobs:
           if (!['schedule', 'workflow_dispatch'].includes(claims.event_name)) {
             throw new Error(`Unexpected event_name: ${claims.event_name ?? 'missing'}`)
           }
-          console.log(JSON.stringify({
-            issuer: claims.iss,
-            audience: claims.aud,
-            repository: claims.repository,
-            workflow_ref: claims.workflow_ref,
-            ref: claims.ref,
-            event_name: claims.event_name,
-          }))
           NODE
 
       - name: Ensure continuous collector is running
+        if: ${{ steps.backend.outputs.online == 'true' }}
         env:
           GITHUB_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
@@ -86,3 +94,18 @@ jobs:
             > scheduler.json
           cat scheduler.json
           node -e "const s=require('./scheduler.json'); if (!s.running || s.paused || s.fatal_error) throw new Error(JSON.stringify(s))"
+
+      - uses: actions/setup-python@v6
+        if: ${{ steps.backend.outputs.online != 'true' }}
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install scheduled worker dependencies
+        if: ${{ steps.backend.outputs.online != 'true' }}
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Run quota-aware evidence batch
+        if: ${{ steps.backend.outputs.online != 'true' }}
+        run: python backend/scripts/run_evidence_batch.py --batch-size "$SCHEDULED_BATCH_SIZE"

@@ -65,3 +65,13 @@ The Store Generator falls back to this portfolio when no fully validated store
 ideas exist. Etsy Shop Stats exports and exact listing outcomes are recorded in
 Evidence Operations. Missing search volume, economics, or outcomes remain
 visible blockers; the application never fills them with estimates.
+
+## Scheduled collection fallback
+
+When the hosted API is unavailable, `.github/workflows/keepalive.yml` runs an
+ephemeral GitHub Actions worker instead. It restores the durable queue from
+Supabase, processes up to 50 quota-paced keywords every four hours, flushes
+secondary evidence in five-keyword batches, and writes each completed run back
+to Supabase. This provides a hard ceiling of 300 primary keyword scans per day
+without requiring a continuously running paid web process. The static PWA
+imports the new evidence on its existing six-hour release schedule.
