@@ -73,6 +73,11 @@ def _payloads(run_id: str) -> dict[str, list[dict[str, Any]]]:
             *(row["keyword"] for row in trends),
             *(row["keyword"] for row in listings),
         }
+        if run:
+            request = _json(run["request_json"])
+            requested_keyword = str((request or {}).get("keyword") or "").strip().lower()
+            if requested_keyword:
+                keywords.add(requested_keyword)
         if keywords:
             placeholders = ",".join("?" for _ in keywords)
             values = sorted(keywords)
