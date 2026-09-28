@@ -329,6 +329,33 @@ def test_no_data_scan_progress_is_included_in_durable_sync(database, monkeypatch
     assert payloads["keyword_collection_state"][0]["evidence_status"] == "unverified"
 
 
+def test_configured_durable_sync_failure_stops_collection(database, monkeypatch) -> None:
+    from services import supabase_evidence_sync
+
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-key")
+    monkeypatch.setattr(
+        supabase_evidence_sync,
+        "sync_collection_run",
+        lambda _run_id: {
+            "configured": True,
+            "status": "failed",
+            "error": "schema mismatch",
+        },
+    )
+
+    with pytest.raises(
+        supabase_evidence_sync.DurableEvidenceSyncError,
+        match="schema mismatch",
+    ):
+        database.save_scan("durability probe", {
+            "report_id": "durability-report",
+            "sources_used": [],
+            "keyword_search_data": [],
+            "keyword_signals": [],
+        })
+
+
 def test_database_contexts_release_the_sqlite_file(database) -> None:
     database.get_stats()
 

@@ -1602,8 +1602,8 @@ def save_scan(keyword: str, report) -> None:
                 "completed" if total else "no_data",
                 total,
             )
-            from services.supabase_evidence_sync import sync_collection_run
-            sync_collection_run(collection_run_id)
+            from services.supabase_evidence_sync import require_collection_sync
+            require_collection_sync(collection_run_id)
         except Exception as exc:
             finish_evidence_collection(collection_run_id, "partial", 0, str(exc))
             raise

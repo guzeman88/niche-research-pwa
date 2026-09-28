@@ -301,6 +301,8 @@ class AutonomousScheduler:
                             status="running",
                         )
                 except Exception as exc:
+                    if _is_durable_sync_error(exc):
+                        raise
                     error = f"'{keyword}': {exc}"
                     self._errors.append(error)
                     self._consecutive_failures += 1
@@ -452,6 +454,8 @@ class AutonomousScheduler:
                         except Exception:
                             pass
                 except Exception as e:
+                    if _is_durable_sync_error(e):
+                        raise
                     err = f"'{kw}': {e}"
                     self._errors.append(err)
                     self._consecutive_failures += 1
@@ -1153,3 +1157,9 @@ def _signal_fingerprint(provider: str, signal) -> str:
         default=str,
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _is_durable_sync_error(error: Exception) -> bool:
+    from services.supabase_evidence_sync import DurableEvidenceSyncError
+
+    return isinstance(error, DurableEvidenceSyncError)
