@@ -9,6 +9,10 @@ from typing import Any
 import httpx
 
 
+class DurableEvidenceSyncError(RuntimeError):
+    """Raised when configured durable evidence storage rejects a run."""
+
+
 def is_configured() -> bool:
     return bool(
         os.getenv("SUPABASE_URL", "").strip()
@@ -47,6 +51,17 @@ def sync_collection_run(run_id: str) -> dict:
     except Exception as exc:
         kdb.mark_evidence_collection_sync(run_id, "failed", str(exc))
         return {"configured": True, "status": "failed", "error": str(exc)}
+
+
+def require_collection_sync(run_id: str) -> dict:
+    """Sync one run and make configured durability failures observable."""
+    result = sync_collection_run(run_id)
+    if result.get("configured") and result.get("status") != "synced":
+        raise DurableEvidenceSyncError(
+            f"Durable evidence sync failed for {run_id}: "
+            f"{result.get('error') or result.get('status') or 'unknown error'}"
+        )
+    return result
 
 
 def _payloads(run_id: str) -> dict[str, list[dict[str, Any]]]:
