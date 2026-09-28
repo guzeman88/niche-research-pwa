@@ -19,6 +19,27 @@ python backend/scripts/run_keyword_validation.py
 
 Use `--force` only for testing because Google enforces a 1-request-per-second planning-service limit and account-level daily quotas.
 
+## Authentication and scheduled operation
+
+New Google Ads integrations are authorized by the Google Cloud project that
+owns the service account. Add that service-account email to the Google Ads
+account with **Read only** access, which includes planning tools. EtGen accepts
+one of these server-side credential forms, in priority order:
+
+1. `GOOGLE_ADS_SERVICE_ACCOUNT_JSON` for a hosted secret store.
+2. `GOOGLE_ADS_JSON_KEY_FILE_PATH` for a protected local key file.
+3. Application Default Credentials from `GOOGLE_APPLICATION_CREDENTIALS`,
+   including a Workload Identity Federation credential file.
+4. The older client ID, client secret, and refresh-token flow.
+
+Developer tokens were sunset on September 9, 2026. An existing token remains
+an optional compatibility header but is no longer required. The GitHub Actions
+collector runs the full Google validation cycle on the first day of each month
+and can also be started manually. GitHub exchanges its short-lived OIDC token
+through `GCP_WORKLOAD_IDENTITY_PROVIDER` and impersonates the dedicated EtGen
+service account; no long-lived Google key is created or committed. Only the
+provider resource name and customer ID are stored as GitHub Actions secrets.
+
 ## Score
 
 - Demand: 35%

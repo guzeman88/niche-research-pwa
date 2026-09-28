@@ -7,10 +7,12 @@ per request; idea generation accepts at most 20 seed phrases per request.
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -33,14 +35,32 @@ def _env(name: str) -> str:
 
 
 def is_google_ads_configured() -> bool:
-    required = (
-        "GOOGLE_ADS_DEVELOPER_TOKEN",
+    if not _env("GOOGLE_ADS_CUSTOMER_ID"):
+        return False
+    user_oauth = (
         "GOOGLE_ADS_CLIENT_ID",
         "GOOGLE_ADS_CLIENT_SECRET",
         "GOOGLE_ADS_REFRESH_TOKEN",
-        "GOOGLE_ADS_CUSTOMER_ID",
     )
-    return all(_env(name) and not _env(name).lower().startswith("your_") for name in required)
+    return _service_account_credentials_configured() or all(
+        _usable_env(name) for name in user_oauth
+    )
+
+
+def _usable_env(name: str) -> bool:
+    value = _env(name)
+    return bool(value and not value.lower().startswith("your_"))
+
+
+def _service_account_credentials_configured() -> bool:
+    inline_json = _env("GOOGLE_ADS_SERVICE_ACCOUNT_JSON")
+    if inline_json and not inline_json.lower().startswith("your_"):
+        return True
+    for name in ("GOOGLE_ADS_JSON_KEY_FILE_PATH", "GOOGLE_APPLICATION_CREDENTIALS"):
+        value = _env(name)
+        if value and not value.lower().startswith("your_"):
+            return True
+    return False
 
 
 def _clean_customer_id(value: str) -> str:
@@ -148,9 +168,13 @@ class GoogleAdsKeywordPlannerAdapter(BaseResearchAdapter):
         )
         headers = {
             "authorization": f"Bearer {_access_token(self._timeout)}",
-            "developer-token": _env("GOOGLE_ADS_DEVELOPER_TOKEN"),
             "content-type": "application/json",
         }
+        # Developer tokens were sunset on 2026-09-09. Google still accepts and
+        # ignores an existing token, so keep it as an optional compatibility
+        # header for older projects while allowing new Cloud-project access.
+        if _env("GOOGLE_ADS_DEVELOPER_TOKEN"):
+            headers["developer-token"] = _env("GOOGLE_ADS_DEVELOPER_TOKEN")
         if self._login_customer_id:
             headers["login-customer-id"] = self._login_customer_id
 
@@ -259,6 +283,10 @@ def _access_token(timeout: float) -> str:
     with _TOKEN_LOCK:
         if _cached_token and _cached_token[1] > time.monotonic() + 60:
             return _cached_token[0]
+        if _service_account_credentials_configured():
+            token, lifetime = _service_account_access_token(timeout)
+            _cached_token = (token, time.monotonic() + lifetime)
+            return token
         response = httpx.post(
             "https://oauth2.googleapis.com/token",
             data={
@@ -280,6 +308,53 @@ def _access_token(timeout: float) -> str:
         lifetime = max(120, _integer(payload.get("expires_in")) or 3600)
         _cached_token = (token, time.monotonic() + lifetime)
         return token
+
+
+def _service_account_access_token(timeout: float) -> tuple[str, int]:
+    try:
+        import google.auth
+        from google.auth.transport.requests import Request
+        from google.oauth2 import service_account
+    except ImportError as exc:  # pragma: no cover - guarded by requirements
+        raise GoogleAdsKeywordPlannerError(
+            "google-auth is required for Google Ads service-account authentication"
+        ) from exc
+
+    scopes = ["https://www.googleapis.com/auth/adwords"]
+    inline_json = _env("GOOGLE_ADS_SERVICE_ACCOUNT_JSON")
+    key_path = _env("GOOGLE_ADS_JSON_KEY_FILE_PATH")
+    try:
+        if inline_json:
+            info = json.loads(inline_json)
+            if not isinstance(info, dict):
+                raise ValueError("credential JSON must be an object")
+            credentials = service_account.Credentials.from_service_account_info(
+                info,
+                scopes=scopes,
+            )
+        elif key_path:
+            credentials = service_account.Credentials.from_service_account_file(
+                str(Path(key_path).expanduser()),
+                scopes=scopes,
+            )
+        else:
+            credentials, _project_id = google.auth.default(scopes=scopes)
+        credentials.refresh(Request())
+    except Exception as exc:
+        raise GoogleAdsKeywordPlannerError(
+            f"Google service-account authorization failed: {exc}"
+        ) from exc
+
+    token = str(credentials.token or "").strip()
+    if not token:
+        raise GoogleAdsKeywordPlannerError("Google service-account credentials returned no access token")
+    expiry = getattr(credentials, "expiry", None)
+    if expiry is not None:
+        now = datetime.now(expiry.tzinfo or timezone.utc)
+        lifetime = max(120, int((expiry - now).total_seconds()))
+    else:
+        lifetime = 3600
+    return token, lifetime
 
 
 def _wait_for_request_slot() -> None:

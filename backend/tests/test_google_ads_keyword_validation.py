@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from adapters.base.research import NicheSignal
+from adapters.research import google_ads_keyword_planner as planner
 from adapters.research.google_ads_keyword_planner import GoogleAdsKeywordPlannerAdapter
 from pipeline import keyword_database as db
 from services import keyword_validation_pipeline as validation
@@ -143,8 +144,48 @@ def test_validation_report_uses_exact_five_component_weights(database):
 
 
 def test_unconfigured_pipeline_exits_without_network_or_fake_data(database, monkeypatch):
-    monkeypatch.delenv("GOOGLE_ADS_DEVELOPER_TOKEN", raising=False)
+    for name in (
+        "GOOGLE_ADS_CUSTOMER_ID", "GOOGLE_ADS_SERVICE_ACCOUNT_JSON",
+        "GOOGLE_ADS_JSON_KEY_FILE_PATH", "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_ADS_CLIENT_ID", "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
+    ):
+        monkeypatch.delenv(name, raising=False)
     result = validation.KeywordValidationPipeline(log_fn=lambda _message: None).run()
 
     assert result["status"] == "not_configured"
     assert database.get_keywords_by_observation(validation.PROVIDER, "monthly_searches") == []
+
+
+def test_service_account_json_is_a_complete_configuration(monkeypatch):
+    monkeypatch.setenv("GOOGLE_ADS_CUSTOMER_ID", "936-559-0258")
+    monkeypatch.setenv("GOOGLE_ADS_SERVICE_ACCOUNT_JSON", '{"type":"service_account"}')
+    for name in ("GOOGLE_ADS_CLIENT_ID", "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+    assert planner.is_google_ads_configured() is True
+
+
+def test_developer_token_header_is_optional_after_sunset(monkeypatch):
+    monkeypatch.setenv("GOOGLE_ADS_CUSTOMER_ID", "936-559-0258")
+    monkeypatch.setenv("GOOGLE_ADS_SERVICE_ACCOUNT_JSON", '{"type":"service_account"}')
+    monkeypatch.delenv("GOOGLE_ADS_DEVELOPER_TOKEN", raising=False)
+    monkeypatch.setattr(planner, "_access_token", lambda _timeout: "access-token")
+    captured = {}
+
+    class Response:
+        status_code = 200
+        headers = {}
+
+        @staticmethod
+        def json():
+            return {"results": []}
+
+    def fake_post(url, *, headers, json, timeout):
+        captured.update({"url": url, "headers": headers, "body": json, "timeout": timeout})
+        return Response()
+
+    monkeypatch.setattr(planner.httpx, "post", fake_post)
+    GoogleAdsKeywordPlannerAdapter().bulk_search(["teacher mug"])
+
+    assert captured["headers"]["authorization"] == "Bearer access-token"
+    assert "developer-token" not in captured["headers"]
