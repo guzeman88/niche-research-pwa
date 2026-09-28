@@ -9,6 +9,7 @@ on:
         default: '50'
   schedule:
     - cron: '17 */4 * * *'
+    - cron: '41 3 1 * *'
 
 permissions:
   contents: read
@@ -109,3 +110,47 @@ jobs:
       - name: Run quota-aware evidence batch
         if: ${{ steps.backend.outputs.online != 'true' }}
         run: python backend/scripts/run_evidence_batch.py --batch-size "$SCHEDULED_BATCH_SIZE"
+
+  google-keyword-validation:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 1 * *' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 210
+    concurrency:
+      group: etgen-google-keyword-validation
+      cancel-in-progress: false
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GOOGLE_ADS_CUSTOMER_ID: ${{ secrets.GOOGLE_ADS_CUSTOMER_ID }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GOOGLE_ADS_API_VERSION: v25
+      GOOGLE_ADS_GEO_TARGET_IDS: '2840'
+      GOOGLE_ADS_PIPELINE_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify required Google Ads configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GCP_WORKLOAD_IDENTITY_PROVIDER"
+          test -n "$GOOGLE_ADS_CUSTOMER_ID"
+
+      - name: Authenticate to Google Cloud without a stored key
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: etgen-keyword-data
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: etgen-keyword-collector@etgen-keyword-data.iam.gserviceaccount.com
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install keyword validation dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Collect and publish monthly keyword evidence
+        run: python backend/scripts/run_keyword_validation.py --force

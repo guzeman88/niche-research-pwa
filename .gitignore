@@ -21,3 +21,4 @@ public/data/*.json
 !.env.example
 !.env.production.example
 .pytest_cache/
+gha-creds-*.json

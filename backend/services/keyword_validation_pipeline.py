@@ -50,11 +50,18 @@ class KeywordValidationPipeline:
                 result = {
                     "status": "not_configured",
                     "version": PIPELINE_VERSION,
-                    "required": [
-                        "GOOGLE_ADS_DEVELOPER_TOKEN", "GOOGLE_ADS_CLIENT_ID",
-                        "GOOGLE_ADS_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN",
-                        "GOOGLE_ADS_CUSTOMER_ID",
-                    ],
+                    "required": {
+                        "always": ["GOOGLE_ADS_CUSTOMER_ID"],
+                        "preferred_auth": [
+                            "GOOGLE_ADS_SERVICE_ACCOUNT_JSON",
+                            "GOOGLE_ADS_JSON_KEY_FILE_PATH",
+                            "GOOGLE_APPLICATION_CREDENTIALS",
+                        ],
+                        "legacy_user_oauth": [
+                            "GOOGLE_ADS_CLIENT_ID", "GOOGLE_ADS_CLIENT_SECRET",
+                            "GOOGLE_ADS_REFRESH_TOKEN",
+                        ],
+                    },
                     "report": {
                         "keywords": len(report["keywords"]),
                         "niches": len(report["niches"]),
