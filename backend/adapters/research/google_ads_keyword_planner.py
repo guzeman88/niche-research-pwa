@@ -348,13 +348,14 @@ def _service_account_access_token(timeout: float) -> tuple[str, int]:
     token = str(credentials.token or "").strip()
     if not token:
         raise GoogleAdsKeywordPlannerError("Google service-account credentials returned no access token")
-    expiry = getattr(credentials, "expiry", None)
-    if expiry is not None:
-        now = datetime.now(expiry.tzinfo or timezone.utc)
-        lifetime = max(120, int((expiry - now).total_seconds()))
-    else:
-        lifetime = 3600
-    return token, lifetime
+    return token, _credential_lifetime_seconds(getattr(credentials, "expiry", None))
+
+
+def _credential_lifetime_seconds(expiry: datetime | None) -> int:
+    if expiry is None:
+        return 3600
+    expiry_utc = expiry.replace(tzinfo=timezone.utc) if expiry.tzinfo is None else expiry.astimezone(timezone.utc)
+    return max(120, int((expiry_utc - datetime.now(timezone.utc)).total_seconds()))
 
 
 def _wait_for_request_slot() -> None:
