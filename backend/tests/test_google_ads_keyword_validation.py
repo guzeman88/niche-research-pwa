@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -189,3 +189,12 @@ def test_developer_token_header_is_optional_after_sunset(monkeypatch):
 
     assert captured["headers"]["authorization"] == "Bearer access-token"
     assert "developer-token" not in captured["headers"]
+
+
+def test_service_account_expiry_accepts_google_naive_utc_datetime():
+    naive_expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5)
+    aware_expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+    assert 250 <= planner._credential_lifetime_seconds(naive_expiry) <= 300
+    assert 250 <= planner._credential_lifetime_seconds(aware_expiry) <= 300
+    assert planner._credential_lifetime_seconds(None) == 3600
