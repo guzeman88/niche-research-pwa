@@ -163,7 +163,11 @@ export default function ApiApplicationLanding() {
           </div>
           <footer className="flex flex-col gap-3 py-6 text-[12px] text-surface-400 sm:flex-row sm:items-center sm:justify-between">
             <span>EtGen - private seller workflow software</span>
-            <Link className="font-bold text-primary-100 hover:text-primary-200" to="/auth/etsy">OAuth callback page</Link>
+            <nav className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Application links">
+              <Link className="font-bold text-primary-100 hover:text-primary-200" to="/privacy">Privacy</Link>
+              <Link className="font-bold text-primary-100 hover:text-primary-200" to="/terms">Terms</Link>
+              <Link className="font-bold text-primary-100 hover:text-primary-200" to="/auth/etsy">OAuth callback</Link>
+            </nav>
           </footer>
         </div>
       </section>

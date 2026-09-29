@@ -19,6 +19,8 @@ const ConfirmAccount = lazy(() => import('./pages/ConfirmAccount'))
 const Stores = lazy(() => import('./pages/Stores'))
 const EtsyAuth = lazy(() => import('./pages/EtsyAuth'))
 const ApiApplicationLanding = lazy(() => import('./pages/ApiApplicationLanding'))
+const Privacy = lazy(() => import('./pages/Privacy'))
+const Terms = lazy(() => import('./pages/Terms'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 function PageFallback() {
@@ -55,6 +57,8 @@ function AppRoutes() {
       <Route path="/signin" element={page(<SignIn />)} />
       <Route path="/auth/confirm" element={page(<ConfirmAccount />)} />
       <Route path="/api-application" element={page(<ApiApplicationLanding />)} />
+      <Route path="/privacy" element={page(<Privacy />)} />
+      <Route path="/terms" element={page(<Terms />)} />
       <Route path="/auth/etsy" element={page(<EtsyAuth />)} />
       <Route element={<RequireAccount><Layout /></RequireAccount>}>
         <Route index element={page(<Dashboard />)} />
