@@ -47,9 +47,16 @@ Google Ads API still rejects the service account. Check these separate access
 layers before rerunning the full cycle:
 
 1. In the `etgen-keyword-data` Google Cloud project, confirm that the Google Ads
-   API is enabled and the Google Ads API Overview shows production access
-   (Explorer or higher for a production Ads account). For Standard access,
-   confirm that the project's permissible use includes keyword research.
+   API is enabled and the Google Ads API Overview shows **Basic or Standard**
+   access. Explorer access does not permit `KeywordPlanIdeaService`, even for
+   a production Ads account. If Basic access was denied, check the project's
+   OAuth brand verification status: Google requires an External app in
+   production with its branding verified and published before approving Basic
+   access. Verify ownership of the application's authorized domain in Google
+   Search Console, then use **Verify Branding** and **Publish branding** in
+   Google Auth Platform. Reapply for Basic access after branding is published.
+   For Standard access, confirm that the project's permissible use includes
+   keyword research.
 2. In Google Ads **Admin > Access and security**, confirm that
    `etgen-keyword-collector@etgen-keyword-data.iam.gserviceaccount.com` has
    access to the target account. If access is through a manager account, set
@@ -62,6 +69,7 @@ layers before rerunning the full cycle:
    collection with stored monthly-search observations closes the volume gap.
 
 Google's [Cloud project access guide](https://developers.google.com/google-ads/api/docs/api-policy/access-levels),
+[brand-verification guide](https://developers.google.com/google-ads/api/docs/api-policy/brand-verification),
 [service-account setup](https://developers.google.com/google-ads/api/docs/oauth/service-accounts),
 and [account-access guide](https://developers.google.com/google-ads/api/docs/account-management/listing-accounts)
 describe these permissions.
