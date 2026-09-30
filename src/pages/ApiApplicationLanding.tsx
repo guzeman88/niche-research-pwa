@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
 import BrandLogo from '../components/BrandLogo'
 
-const WEBSITE_URL = 'https://etgen.netlify.app/api-application'
 const CALLBACK_URL = 'https://etgen.netlify.app/auth/etsy'
 
 const SCREENSHOTS = [
@@ -37,11 +36,14 @@ const FEATURES = [
 const API_USES = [
   'Connect an Etsy shop through OAuth so the seller controls authorization.',
   'Read the connected shop data needed to plan products, listings, traffic review, and listing management workflows.',
+  'Use an operator-authorized, read-only Google Ads account to retrieve Keyword Planner ideas and historical search metrics for niche research.',
   'Keep imported keyword research and generated planning work scoped to the user workspace.',
   'Support future listing draft and shop-management actions only for the authenticated seller account.',
 ]
 
 export default function ApiApplicationLanding() {
+  const websiteUrl = `${window.location.origin}/api-application`
+
   useEffect(() => {
     document.title = 'EtGen - API Application'
   }, [])
@@ -91,9 +93,9 @@ export default function ApiApplicationLanding() {
 
       <section className="border-y border-surface-600/55 bg-surface-900/45 px-5 py-5 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-6xl gap-3 md:grid-cols-3">
-          <InfoTile label="Website URL" value={WEBSITE_URL} />
+          <InfoTile label="Website URL" value={websiteUrl} />
           <InfoTile label="OAuth Callback" value={CALLBACK_URL} />
-          <InfoTile label="Access Model" value="OAuth, seller-authorized" />
+          <InfoTile label="Access Model" value="Seller OAuth and read-only Google Ads" />
         </div>
       </section>
 
@@ -135,10 +137,10 @@ export default function ApiApplicationLanding() {
 
       <section className="mx-auto grid max-w-6xl gap-8 px-5 py-14 sm:px-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:px-8" id="api-use">
         <div>
-          <p className="section-label">Etsy API Application</p>
-          <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-surface-50">How the API is used</h2>
+          <p className="section-label">Connected APIs</p>
+          <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-surface-50">How EtGen uses API data</h2>
           <p className="mt-4 text-[14px] leading-6 text-surface-300">
-            EtGen uses Etsy OAuth so each seller explicitly authorizes access to their own shop data. The app is designed for seller research, listing planning, and shop-management workflows controlled by the connected account.
+            EtGen uses Etsy OAuth so each seller explicitly authorizes access to their own shop data. Separately, a read-only Google Ads integration retrieves Keyword Planner ideas, monthly search history, competition, and bid estimates from an account authorized by the EtGen operator. These metrics help compare product niches; EtGen does not use this integration to create or change ad campaigns.
           </p>
         </div>
         <div className="rounded-lg border border-surface-600/65 bg-surface-800/85 p-4">
