@@ -24,6 +24,7 @@ const sections = [
     body: (
       <>
         <p>Etsy data is accessed only after the seller authorizes the connection and is used for seller-controlled research, planning, reporting, and shop-management workflows.</p>
+        <p>EtGen's read-only Google Ads integration uses an account authorized by the EtGen operator to collect Keyword Planner ideas, monthly search history, competition, and bid estimates. These research metrics are stored as keyword evidence for niche analysis. This integration does not connect to visitors' Google accounts or create or change ad campaigns.</p>
         <p>Google user data, if requested by a future user-authorized feature, will be used only to provide that feature. EtGen's use and transfer of information received from Google APIs will comply with the Google API Services User Data Policy, including its Limited Use requirements.</p>
       </>
     ),
@@ -51,7 +52,7 @@ export default function Privacy() {
     <LegalDocument
       title="Privacy Policy"
       summary="This policy explains what information EtGen handles, why it is used, and the controls available to people who use the service."
-      updated="September 29, 2026"
+      updated="September 30, 2026"
       sections={sections}
     />
   )
