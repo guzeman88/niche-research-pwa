@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "smoke": "node scripts/smoke-check.cjs",
     "test": "node --test scripts/tests/*.test.cjs",
+    "test:ui": "node scripts/run-ui-checks.mjs",
     "test:launch-ui": "node scripts/test-launch-ui.mjs",
     "test:candidates-ui": "node scripts/test-store-candidates-ui.mjs"
   },
