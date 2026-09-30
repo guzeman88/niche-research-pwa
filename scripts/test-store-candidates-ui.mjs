@@ -1,11 +1,14 @@
 // Browser regression for provisional candidate rendering. Account boundaries
 // are mocked; the candidate payload is the real generated static snapshot.
 import assert from 'node:assert/strict'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
 
 const origin = process.env.CANDIDATE_UI_ORIGIN || 'http://127.0.0.1:5173'
 const now = '2026-09-27T12:00:00+00:00'
+const snapshot = JSON.parse(await readFile('public/data/test-candidates.json', 'utf8'))
+const firstCandidate = snapshot.stores?.[0]
+assert.ok(firstCandidate?.name, 'A generated candidate is required for the browser regression')
 
 await mkdir('work/candidate-qa', { recursive: true })
 const browser = await chromium.launch({ headless: true })
@@ -31,7 +34,7 @@ try {
   await page.goto(`${origin}/store-generator`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
   await page.getByRole('heading', { name: 'Store Idea Generator' }).waitFor()
   await page.getByRole('heading', { name: 'Ranked experiments, not promised winners' }).waitFor()
-  await page.getByText('Thanksgiving & November Decor', { exact: true }).first().waitFor()
+  await page.getByText(firstCandidate.name, { exact: true }).first().waitFor()
   for (const width of [320, 768, 1440]) {
     await page.setViewportSize({ width, height: 960 })
     await page.screenshot({ path: `work/candidate-qa/store-candidates-${width}.png`, fullPage: true })
