@@ -51,4 +51,15 @@ jobs:
         run: npx --yes netlify-cli deploy --prod --dir=dist --no-build --site="$NETLIFY_SITE_ID"
 
       - name: Verify live snapshot
-        run: node scripts/verify-release.cjs https://etgen.xyz
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if node scripts/verify-release.cjs https://etgen.xyz; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 6 ]; then
+              echo "Production still differs after six checks" >&2
+              exit 1
+            fi
+            echo "Waiting for the production domain to serve the new deploy (attempt $attempt/6)"
+            sleep 5
+          done
