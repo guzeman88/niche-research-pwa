@@ -149,6 +149,15 @@ jobs:
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_SERVICE_ROLE_KEY"
 
+      - name: Verify durable evidence database is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 20 --retry 5 --retry-delay 10 --retry-all-errors \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            "$SUPABASE_URL/rest/v1/keyword_seeds?select=keyword&limit=1" > /dev/null
+
       - name: Authenticate to Google Cloud without a stored key
         uses: google-github-actions/auth@v3
         with:
@@ -173,3 +182,30 @@ jobs:
           else
             python backend/scripts/run_keyword_validation.py --force
           fi
+
+      - name: Preserve local evidence database
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sqlite3
+
+          source = Path('backend/workspace/_keyword_db/keywords.sqlite')
+          if source.exists():
+              destination = source.with_name('keywords-recovery.sqlite')
+              with sqlite3.connect(source) as current, sqlite3.connect(destination) as snapshot:
+                  current.backup(snapshot)
+              print(f'Preserved {destination} ({destination.stat().st_size:,} bytes)')
+          else:
+              print('No collector database was created')
+          PY
+
+      - name: Upload recoverable evidence database
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-evidence-sqlite-${{ github.run_id }}
+          path: backend/workspace/_keyword_db/keywords-recovery.sqlite
+          retention-days: 7
+          if-no-files-found: warn
