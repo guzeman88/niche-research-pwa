@@ -7,6 +7,13 @@ on:
         description: Maximum keywords to collect in the fallback worker
         required: false
         default: '50'
+      google_mode:
+        description: Run full Google collection or recover historical metrics only
+        type: choice
+        options:
+          - full
+          - metrics-only
+        default: full
   schedule:
     - cron: '17 */4 * * *'
     - cron: '41 3 1 * *'
@@ -128,6 +135,8 @@ jobs:
       GOOGLE_ADS_GEO_TARGET_IDS: '2840'
       GOOGLE_ADS_PIPELINE_ENABLED: '1'
       REQUIRE_SUPABASE: '1'
+      GOOGLE_ADS_HISTORICAL_BATCH_SIZE: '2000'
+      GOOGLE_VALIDATION_MODE: ${{ inputs.google_mode || 'full' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -157,4 +166,10 @@ jobs:
         run: python -m pip install -r backend/requirements.txt
 
       - name: Collect and publish monthly keyword evidence
-        run: python backend/scripts/run_keyword_validation.py --force
+        shell: bash
+        run: |
+          if [ "$GOOGLE_VALIDATION_MODE" = "metrics-only" ]; then
+            python backend/scripts/run_keyword_validation.py --force --no-expand
+          else
+            python backend/scripts/run_keyword_validation.py --force
+          fi

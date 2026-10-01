@@ -222,7 +222,7 @@ def _upsert(table: str, conflict: str, rows: list[dict[str, Any]]) -> None:
     # observations in one run. Keep each idempotent PostgREST request bounded.
     for start in range(0, len(rows), 500):
         batch = rows[start:start + 500]
-        for attempt in range(3):
+        for attempt in range(8):
             try:
                 response = httpx.post(
                     f"{url}/rest/v1/{table}",
@@ -235,9 +235,9 @@ def _upsert(table: str, conflict: str, rows: list[dict[str, Any]]) -> None:
                 break
             except (httpx.TransportError, httpx.HTTPStatusError) as exc:
                 status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
-                if attempt == 2 or (status is not None and status not in {429, 500, 502, 503, 504}):
+                if attempt == 7 or (status is not None and status not in {429, 500, 502, 503, 504}):
                     raise
-                time.sleep(2 ** attempt)
+                time.sleep(min(2 ** (attempt + 1), 30))
 
 
 def _json(value: Any) -> Any:

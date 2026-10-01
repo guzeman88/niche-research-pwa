@@ -114,15 +114,15 @@ def test_supabase_upsert_chunks_large_batches_and_retries_transient_errors(monke
     def fake_post(url, **kwargs):
         calls.append(json.loads(kwargs["content"]))
         request = httpx.Request("POST", url)
-        return httpx.Response(503 if len(calls) == 1 else 204, request=request)
+        return httpx.Response(503 if len(calls) <= 4 else 204, request=request)
 
     monkeypatch.setattr(durable_sync.httpx, "post", fake_post)
     durable_sync._upsert("keyword_observations", "keyword,source,observed_at,metric", [
         {"keyword": str(index)} for index in range(1001)
     ])
 
-    assert [len(batch) for batch in calls] == [500, 500, 500, 1]
-    assert calls[0] == calls[1]
+    assert [len(batch) for batch in calls] == [500] * 6 + [1]
+    assert all(batch == calls[0] for batch in calls[:5])
 
 
 def test_validation_report_uses_exact_five_component_weights(database):
