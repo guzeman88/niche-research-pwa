@@ -320,7 +320,9 @@ function evidenceOrder(keyword: KeywordItem): number {
 
 function EvidenceStatus({ keyword }: { keyword: KeywordItem }) {
   const observations = [
-    keyword.observed_search_volume != null ? `${keyword.observed_search_volume.toLocaleString()} searches/mo` : null,
+    keyword.observed_search_volume != null
+      ? `${keyword.observed_search_volume.toLocaleString()} ${keyword.observed_search_volume_source === 'google_ads_keyword_planner' ? 'Google searches/mo' : 'searches/mo'}`
+      : null,
     keyword.listing_count != null ? `${keyword.listing_count.toLocaleString()} listings` : null,
     keyword.avg_price_usd != null ? `$${keyword.avg_price_usd.toFixed(2)} avg` : null,
   ].filter(Boolean).join(' · ')
@@ -334,7 +336,7 @@ function EvidenceStatus({ keyword }: { keyword: KeywordItem }) {
   if (keyword.evidence_status === 'partial' || keyword.evidence_status === 'imported') {
     return <span className="inline-flex flex-col"><span className="text-[11px] font-semibold text-accent-amber">Evidence incomplete</span>{detail}</span>
   }
-  return <span className="text-[11px] font-semibold text-surface-300">Awaiting data</span>
+  return <span className="inline-flex flex-col"><span className="text-[11px] font-semibold text-surface-300">{observations ? 'Awaiting Etsy evidence' : 'Awaiting data'}</span>{detail}</span>
 }
 
 function MobileScore({ label, value, tone }: { label: string; value: number | null; tone: 'primary' | 'green' }) {

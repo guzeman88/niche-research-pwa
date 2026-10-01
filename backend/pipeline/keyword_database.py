@@ -1808,11 +1808,8 @@ def save_provider_signal_batch(
 
         evidence_rows = len(observation_rows) + len(trend_rows)
         finish_evidence_collection(run_id, "completed" if rows else "no_data", evidence_rows)
-        try:
-            from services.supabase_evidence_sync import sync_collection_run
-            sync_collection_run(run_id)
-        except Exception:
-            pass
+        from services.supabase_evidence_sync import require_collection_sync
+        require_collection_sync(run_id)
         return {
             "run_id": run_id,
             "requested_keywords": len(requested),

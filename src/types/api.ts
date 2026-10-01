@@ -80,6 +80,7 @@ export interface KeywordItem {
   score_version?: string | null;
   evidence_details_json?: string | null;
   observed_search_volume?: number | null;
+  observed_search_volume_source?: 'google_ads_keyword_planner' | 'scan_evidence' | null;
   listing_count?: number | null;
   sampled_listing_count?: number | null;
   avg_price_usd?: number | null;
