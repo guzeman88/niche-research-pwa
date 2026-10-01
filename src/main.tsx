@@ -9,27 +9,33 @@ import { installChunkRecovery } from './chunkRecovery'
 import { registerPwaUpdates } from './pwa'
 import './index.css'
 
-installChunkRecovery()
-registerPwaUpdates()
+if (window.location.hostname === 'etgen.netlify.app') {
+  const officialUrl = new URL(window.location.href)
+  officialUrl.hostname = 'etgen.xyz'
+  window.location.replace(officialUrl.href)
+} else {
+  installChunkRecovery()
+  registerPwaUpdates()
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      retry: 1,
-      retryDelay: 2000,
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 30_000,
+        retry: 1,
+        retryDelay: 2000,
+      },
     },
-  },
-})
+  })
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <AuthProvider><App /></AuthProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </ErrorBoundary>
-  </React.StrictMode>,
-)
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <AuthProvider><App /></AuthProvider>
+          </BrowserRouter>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </React.StrictMode>,
+  )
+}
