@@ -26,7 +26,7 @@ async function verifyRelease(baseUrl, directory = path.join(__dirname, '..', 'di
 }
 
 if (require.main === module) {
-  verifyRelease(process.argv[2] || 'https://etgen.netlify.app').catch(error => {
+  verifyRelease(process.argv[2] || 'https://etgen.xyz').catch(error => {
     console.error(error.message);
     process.exitCode = 1;
   });

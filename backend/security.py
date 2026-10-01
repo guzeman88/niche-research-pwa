@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def allowed_origins() -> list[str]:
     return [value.strip().rstrip("/") for value in os.getenv(
-        "PIPELINE_ALLOWED_ORIGINS", "https://etgen.netlify.app"
+        "PIPELINE_ALLOWED_ORIGINS", "https://etgen.xyz,https://etgen.netlify.app"
     ).split(",") if value.strip()]
 
 
