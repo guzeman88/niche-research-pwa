@@ -12,7 +12,7 @@ const verifiedFactors = user => (user.factors || []).filter(f => f.status === 'v
 const assurance = token => { try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).aal; } catch { return ''; } };
 
 export default async function handler(request, context = {}) {
-  const origin = process.env.APP_ORIGIN || 'https://etgen.netlify.app';
+  const origin = process.env.APP_ORIGIN || 'https://etgen.xyz';
   const headers = {'Content-Type':'application/json', 'Cache-Control':'private, no-store', 'Pragma':'no-cache', 'Vary':'Cookie', 'X-Content-Type-Options':'nosniff'};
   const extraCookies = [];
   const response = (data, status = 200) => {

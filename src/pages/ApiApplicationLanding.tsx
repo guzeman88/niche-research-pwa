@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
 import BrandLogo from '../components/BrandLogo'
 
-const CALLBACK_URL = 'https://etgen.netlify.app/auth/etsy'
+const CALLBACK_URL = 'https://etgen.xyz/auth/etsy'
 
 const SCREENSHOTS = [
   {
