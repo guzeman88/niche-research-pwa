@@ -127,6 +127,7 @@ jobs:
       GOOGLE_ADS_API_VERSION: v25
       GOOGLE_ADS_GEO_TARGET_IDS: '2840'
       GOOGLE_ADS_PIPELINE_ENABLED: '1'
+      REQUIRE_SUPABASE: '1'
     steps:
       - uses: actions/checkout@v7
 
@@ -136,6 +137,8 @@ jobs:
           set -euo pipefail
           test -n "$GCP_WORKLOAD_IDENTITY_PROVIDER"
           test -n "$GOOGLE_ADS_CUSTOMER_ID"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
 
       - name: Authenticate to Google Cloud without a stored key
         uses: google-github-actions/auth@v3

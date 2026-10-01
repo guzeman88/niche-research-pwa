@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { collectionScanStatus, summarizeCollectionStates } = require('./collection-state.cjs');
+const { latestGoogleVolumes } = require('./google-volume.cjs');
 
 let API = process.env.VITE_API_URL || '';
 const OUT = process.env.SNAPSHOT_OUTPUT_DIR || path.join(__dirname, '..', 'public', 'data');
@@ -163,7 +164,7 @@ async function supabaseStats() {
 }
 
 async function supabaseKeywords() {
-  const [seeds, collectionStates, attempts, evidence] = await Promise.all([
+  const [seeds, collectionStates, attempts, evidence, googleObservations] = await Promise.all([
     supabaseRows('keyword_seeds', {
       select: 'keyword,domain,source,added_at',
       order: 'keyword.asc',
@@ -178,15 +179,22 @@ async function supabaseKeywords() {
     supabaseRows('keyword_latest_evidence', {
       select: 'keyword,scanned_at,opportunity_score,gap_score,trajectory,profitability_index,evidence_status,score_version,evidence_details,observed_search_volume,listing_count,sampled_listing_count,avg_price_usd', order: 'keyword.asc',
     }, Infinity, 1000),
+    supabaseRows('keyword_observations', {
+      select: 'keyword,value,observed_at', source: 'eq.google_ads_keyword_planner',
+      metric: 'eq.monthly_searches', order: 'keyword.asc,observed_at.desc',
+    }, Infinity, 1000),
   ]);
   const collectionByKeyword = byKeyword(collectionStates);
   const attemptByKeyword = byKeyword(attempts);
   const evidenceByKeyword = byKeyword(evidence);
+  const googleVolumes = latestGoogleVolumes(googleObservations);
   return seeds.map((seed) => {
     const key = String(seed.keyword || '').toLowerCase();
     const state = collectionByKeyword.get(key) || {};
     const attempt = attemptByKeyword.get(key) || {};
     const scan = evidenceByKeyword.get(key) || {};
+    const scanVolume = numeric(scan.observed_search_volume);
+    const googleVolume = googleVolumes.get(key);
     const primaryScore = scan.score_version ? numeric(scan.profitability_index ?? scan.opportunity_score ?? scan.gap_score) : null;
     const lastScannedAt = state.last_collected_at || attempt.scanned_at || null;
     return {
@@ -201,7 +209,9 @@ async function supabaseKeywords() {
       evidence_status: state.evidence_status || attempt.evidence_status || 'unverified',
       evidence_details_json: attempt.evidence_details ? JSON.stringify(attempt.evidence_details) : null,
       score_version: scan.score_version || null,
-      observed_search_volume: numeric(scan.observed_search_volume),
+      observed_search_volume: googleVolume?.value ?? scanVolume,
+      observed_search_volume_source: googleVolume ? 'google_ads_keyword_planner'
+        : scanVolume != null ? 'scan_evidence' : null,
       listing_count: numeric(state.listing_count ?? scan.listing_count),
       sampled_listing_count: numeric(state.sampled_listing_count ?? scan.sampled_listing_count),
       avg_price_usd: numeric(state.avg_price_usd ?? scan.avg_price_usd),
@@ -365,6 +375,13 @@ function generateTestCandidates(rows) {
   }
   if (snapshots['keywords.json'].length !== Number(snapshots['stats.json'].total_seeds)) {
     throw new Error('Keyword rows do not match the snapshot statistics.');
+  }
+  const minimumGoogleVolumes = Number(process.env.MIN_GOOGLE_VOLUME_COUNT || 0);
+  const googleVolumeCount = snapshots['keywords.json'].filter((row) =>
+    row.observed_search_volume_source === 'google_ads_keyword_planner'
+    && numeric(row.observed_search_volume) != null).length;
+  if (source === 'supabase' && googleVolumeCount < minimumGoogleVolumes) {
+    throw new Error(`Google monthly volumes missing from snapshot: ${googleVolumeCount} < ${minimumGoogleVolumes}`);
   }
   snapshots['test-candidates.json'] = generateTestCandidates(snapshots['keywords.json']);
   const { validateStoreIdeas } = require('./snapshot-contract.cjs');

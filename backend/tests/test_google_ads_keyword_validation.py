@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 
+import httpx
 import pytest
 
 from adapters.base.research import NicheSignal
@@ -9,6 +11,7 @@ from adapters.research import google_ads_keyword_planner as planner
 from adapters.research.google_ads_keyword_planner import GoogleAdsKeywordPlannerAdapter
 from pipeline import keyword_database as db
 from services import keyword_validation_pipeline as validation
+from services import supabase_evidence_sync as durable_sync
 
 
 @pytest.fixture
@@ -90,6 +93,36 @@ def test_bulk_persistence_records_metrics_series_and_attempt_state(database):
         ["teacher mug", "missing keyword"],
         stale_days=30,
     ) == []
+
+
+def test_google_batch_fails_when_durable_sync_fails(database, monkeypatch):
+    monkeypatch.setattr(
+        durable_sync, "sync_collection_run",
+        lambda _run_id: {"configured": True, "status": "failed", "error": "upload failed"},
+    )
+
+    with pytest.raises(durable_sync.DurableEvidenceSyncError, match="upload failed"):
+        database.save_provider_signal_batch(validation.PROVIDER, [google_signal()])
+
+
+def test_supabase_upsert_chunks_large_batches_and_retries_transient_errors(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
+    monkeypatch.setattr(durable_sync.time, "sleep", lambda _seconds: None)
+    calls = []
+
+    def fake_post(url, **kwargs):
+        calls.append(json.loads(kwargs["content"]))
+        request = httpx.Request("POST", url)
+        return httpx.Response(503 if len(calls) == 1 else 204, request=request)
+
+    monkeypatch.setattr(durable_sync.httpx, "post", fake_post)
+    durable_sync._upsert("keyword_observations", "keyword,source,observed_at,metric", [
+        {"keyword": str(index)} for index in range(1001)
+    ])
+
+    assert [len(batch) for batch in calls] == [500, 500, 500, 1]
+    assert calls[0] == calls[1]
 
 
 def test_validation_report_uses_exact_five_component_weights(database):

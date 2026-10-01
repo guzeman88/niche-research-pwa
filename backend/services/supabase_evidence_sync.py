@@ -1,9 +1,10 @@
-"""Best-effort durable sync for one completed keyword-evidence collection run."""
+"""Durable sync for one completed keyword-evidence collection run."""
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import time
 from typing import Any
 
 import httpx
@@ -55,6 +56,8 @@ def sync_collection_run(run_id: str) -> dict:
 
 def require_collection_sync(run_id: str) -> dict:
     """Sync one run and make configured durability failures observable."""
+    if os.getenv("REQUIRE_SUPABASE") == "1" and not is_configured():
+        raise DurableEvidenceSyncError("Durable evidence storage is required but not configured")
     result = sync_collection_run(run_id)
     if result.get("configured") and result.get("status") != "synced":
         raise DurableEvidenceSyncError(
@@ -210,18 +213,31 @@ def _upsert(table: str, conflict: str, rows: list[dict[str, Any]]) -> None:
         return
     url = os.environ["SUPABASE_URL"].rstrip("/")
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    response = httpx.post(
-        f"{url}/rest/v1/{table}",
-        params={"on_conflict": conflict},
-        headers={
-            "apikey": key, "authorization": f"Bearer {key}",
-            "content-type": "application/json",
-            "prefer": "resolution=merge-duplicates,return=minimal",
-        },
-        content=json.dumps(rows),
-        timeout=30,
-    )
-    response.raise_for_status()
+    headers = {
+        "apikey": key, "authorization": f"Bearer {key}",
+        "content-type": "application/json",
+        "prefer": "resolution=merge-duplicates,return=minimal",
+    }
+    # Google Ads can return 10,000 keywords and hundreds of thousands of
+    # observations in one run. Keep each idempotent PostgREST request bounded.
+    for start in range(0, len(rows), 500):
+        batch = rows[start:start + 500]
+        for attempt in range(3):
+            try:
+                response = httpx.post(
+                    f"{url}/rest/v1/{table}",
+                    params={"on_conflict": conflict},
+                    headers=headers,
+                    content=json.dumps(batch),
+                    timeout=60,
+                )
+                response.raise_for_status()
+                break
+            except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+                status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+                if attempt == 2 or (status is not None and status not in {429, 500, 502, 503, 504}):
+                    raise
+                time.sleep(2 ** attempt)
 
 
 def _json(value: Any) -> Any:
