@@ -1,12 +1,21 @@
 // Browser regression for provisional candidate rendering. Account boundaries
-// are mocked; the candidate payload is the real generated static snapshot.
+// are mocked; candidate data is generated from explicit test-only inputs.
 import assert from 'node:assert/strict'
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
 import { chromium } from 'playwright'
 
 const origin = process.env.CANDIDATE_UI_ORIGIN || 'http://127.0.0.1:5173'
 const now = '2026-09-27T12:00:00+00:00'
-const snapshot = JSON.parse(await readFile('public/data/test-candidates.json', 'utf8'))
+const keywords = ['chinchilla owner', 'hedgehog owner', 'budgie owner', 'cockatiel owner',
+  'ferret owner', 'hamster owner', 'snake owner', 'guinea pig owner', 'fish tank lover', 'bunny owner', 'parrot owner']
+const fixture = keywords.map(keyword => ({keyword, domain:'pets', source:'test_fixture', evidence_status:'verified',
+  listing_count:1200, sampled_listing_count:100, avg_price_usd:28, observed_search_volume:null}))
+const generated = spawnSync(process.env.PIPELINE_PYTHON || 'python', ['scripts/generate-test-candidates.py'], {
+  input:JSON.stringify(fixture), encoding:'utf8', env:{...process.env, PYTHONIOENCODING:'utf-8'},
+})
+assert.equal(generated.status, 0, generated.stderr)
+const snapshot = JSON.parse(generated.stdout)
 const firstCandidate = snapshot.stores?.[0]
 assert.ok(firstCandidate?.name, 'A generated candidate is required for the browser regression')
 
@@ -14,6 +23,8 @@ await mkdir('work/candidate-qa', { recursive: true })
 const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({ serviceWorkers: 'block' })
 const page = await context.newPage()
+await context.route('**/data/test-candidates.json*', route => route.fulfill({json:snapshot}))
+await context.route('**/data/store-ideas.json*', route => route.fulfill({json:[]}))
 const errors = []
 page.on('pageerror', error => errors.push(error.message))
 
