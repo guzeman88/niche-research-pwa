@@ -329,7 +329,7 @@ export default function EvidenceOperations() {
             </div>
             {quality.isError ? <InlineError text={errorText(quality.error)} /> : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[48rem] text-left text-[12px]">
+                <table className="w-full min-w-3xl text-left text-[12px]">
                   <thead className="bg-surface-900/45 text-[10px] uppercase tracking-wide text-surface-300">
                     <tr><th className="px-4 py-2">Source</th><th className="px-4 py-2">Rate</th><th className="px-4 py-2">Measured</th><th className="px-4 py-2">Useful yield</th><th className="px-4 py-2">Used for</th></tr>
                   </thead>
@@ -455,7 +455,7 @@ function CoverageValue({ label, value }: { label: string; value: number | undefi
 }
 
 function EvidenceRow({ label, value }: { label: string; value: string }) {
-  return <div className="grid gap-1 py-2.5 sm:grid-cols-[10rem_1fr]"><span className="font-bold text-surface-200">{label}</span><span className="break-words text-surface-50">{value}</span></div>
+  return <div className="grid gap-1 py-2.5 sm:grid-cols-[10rem_1fr]"><span className="font-bold text-surface-200">{label}</span><span className="wrap-break-word text-surface-50">{value}</span></div>
 }
 
 function ExactDataForm({ title, fields, extraFields, submitLabel, onSubmit }: {

@@ -113,7 +113,7 @@ export default function ApiApplicationLanding() {
         <div className="grid gap-4 lg:grid-cols-3">
           {SCREENSHOTS.map((shot) => (
             <article key={shot.title} className="overflow-hidden rounded-lg border border-surface-600/65 bg-surface-800/80 shadow-[0_14px_34px_rgba(7,10,14,0.2)]">
-              <img src={shot.src} alt={shot.alt} className="aspect-[16/10] w-full object-cover object-left-top" loading="lazy" />
+              <img src={shot.src} alt={shot.alt} className="aspect-16/10 w-full object-cover object-top-left" loading="lazy" />
               <div className="p-4">
                 <h3 className="text-[14px] font-extrabold text-surface-50">{shot.title}</h3>
                 <p className="mt-2 text-[12px] leading-5 text-surface-300">{shot.text}</p>
@@ -147,7 +147,7 @@ export default function ApiApplicationLanding() {
           <div className="space-y-3">
             {API_USES.map((item) => (
               <div key={item} className="flex gap-3 rounded-md border border-surface-600/40 bg-surface-950/20 p-3">
-                <Icon name="check-circle" size={15} className="mt-0.5 flex-shrink-0 text-accent-green" />
+                <Icon name="check-circle" size={15} className="mt-0.5 shrink-0 text-accent-green" />
                 <p className="text-[12px] leading-5 text-surface-200">{item}</p>
               </div>
             ))}

@@ -245,13 +245,13 @@ export default function Keywords() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="inline-flex items-center gap-1.5">
-                          <span className="progress-track w-10 hidden sm:inline-block">{oppScore != null && <span className="block h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, oppScore)}%` }} />}</span>
+                          <span className="progress-track w-10 hidden sm:inline-block">{oppScore != null && <span className="block h-full rounded-full bg-linear-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, oppScore)}%` }} />}</span>
                           <span className={`font-bold tabular-nums ${oppColor}`}>{oppScore != null ? oppScore.toFixed(0) : 'TBD'}</span>
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="inline-flex items-center gap-1.5">
-                          <span className="progress-track w-10 hidden sm:inline-block">{gapScore != null && <span className="block h-full rounded-full bg-gradient-to-r from-accent-green to-accent-green/80" style={{ width: `${Math.min(100, gapScore)}%` }} />}</span>
+                          <span className="progress-track w-10 hidden sm:inline-block">{gapScore != null && <span className="block h-full rounded-full bg-linear-to-r from-accent-green to-accent-green/80" style={{ width: `${Math.min(100, gapScore)}%` }} />}</span>
                           <span className={`font-bold tabular-nums ${gapColor}`}>{gapScore != null ? gapScore.toFixed(0) : 'TBD'}</span>
                         </span>
                       </td>
@@ -355,7 +355,7 @@ function MobileScore({ label, value, tone }: { label: string; value: number | nu
         <span className={`text-[13px] font-extrabold tabular-nums ${color}`}>{value != null ? value.toFixed(0) : 'TBD'}</span>
       </div>
       <div className="progress-track mt-2">
-        {value != null && <span className={`block h-full rounded-full bg-gradient-to-r ${bar}`} style={{ width: `${Math.min(100, value)}%` }} />}
+        {value != null && <span className={`block h-full rounded-full bg-linear-to-r ${bar}`} style={{ width: `${Math.min(100, value)}%` }} />}
       </div>
     </div>
   )

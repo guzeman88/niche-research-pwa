@@ -129,7 +129,7 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="progress-track w-12 hidden sm:block">
-                  {r.opportunityScore != null && <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, r.opportunityScore)}%` }} />}
+                  {r.opportunityScore != null && <div className="h-full rounded-full bg-linear-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, r.opportunityScore)}%` }} />}
                 </div>
                 <span className={`text-[13px] font-bold tabular-nums ${r.opportunityScore == null ? 'text-surface-400' : scoreColor(r.opportunityScore)}`}>{formatScore(r.opportunityScore)}</span>
               </div>
@@ -145,9 +145,9 @@ export default function Dashboard() {
           <div className="panel p-4 space-y-2.5">
             {domains.length > 0 ? domains.map((d: any) => (
               <div key={d.domain} className="flex items-center gap-3">
-                <span className="text-[11px] text-surface-200 w-20 text-right truncate flex-shrink-0">{d.domain}</span>
+                <span className="text-[11px] text-surface-200 w-20 text-right truncate shrink-0">{d.domain}</span>
                 <div className="progress-track flex-1">
-                  <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, (d.cnt / (Math.max(...(domains.map((x: any) => x.cnt) || [1])) || 1)) * 100)}%` }} />
+                  <div className="h-full rounded-full bg-linear-to-r from-primary-400 to-primary-200" style={{ width: `${Math.min(100, (d.cnt / (Math.max(...(domains.map((x: any) => x.cnt) || [1])) || 1)) * 100)}%` }} />
                 </div>
                 <span className="text-[11px] font-bold text-surface-100 w-8 text-right tabular-nums">{d.cnt}</span>
               </div>
@@ -208,7 +208,7 @@ function Chip({ val, label, sub, color }: { val: string; label: string; sub: str
   const colors = { indigo: 'from-surface-800 to-surface-700/50 border-accent-blue/20', emerald: 'from-accent-green/20 to-accent-green/10 border-accent-green/20', amber: 'from-accent-amber/20 to-accent-amber/10 border-accent-amber/20', violet: 'from-accent-violet/20 to-accent-violet/10 border-accent-violet/20' }
   const textColors = { indigo: 'text-accent-blue', emerald: 'text-accent-green', amber: 'text-accent-amber', violet: 'text-accent-violet' }
   return (
-    <div className={`min-w-0 bg-gradient-to-b ${colors[color]} border rounded-lg px-4 py-2.5 shadow-[0_10px_24px_rgba(7,10,14,0.14)] sm:min-w-[98px] sm:flex-shrink-0`}>
+    <div className={`min-w-0 bg-linear-to-b ${colors[color]} border rounded-lg px-4 py-2.5 shadow-[0_10px_24px_rgba(7,10,14,0.14)] sm:min-w-[98px] sm:shrink-0`}>
       <div className={`text-lg font-extrabold tracking-tight ${textColors[color]}`}>{val}</div>
       <div className="text-[10px] text-surface-200 font-medium">{label}</div>
       <div className="text-[9px] text-surface-400 mt-0.5">{sub}</div>
@@ -230,10 +230,10 @@ function MetricCard({ icon, label, value, sub, color }: { icon: import('../compo
 }
 
 function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) return <span className="w-6 h-6 rounded-lg bg-accent-amber/15 text-accent-amber flex items-center justify-center text-[11px] font-extrabold border border-accent-amber/20 flex-shrink-0">1</span>
-  if (rank === 2) return <span className="w-6 h-6 rounded-lg bg-surface-200/10 text-surface-200 flex items-center justify-center text-[11px] font-extrabold border border-surface-200/15 flex-shrink-0">2</span>
-  if (rank === 3) return <span className="w-6 h-6 rounded-lg bg-amber-700/10 text-accent-amber-600 flex items-center justify-center text-[11px] font-extrabold border border-amber-700/15 flex-shrink-0">3</span>
-  return <span className="w-6 h-6 rounded-lg bg-transparent text-surface-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0">{rank}</span>
+  if (rank === 1) return <span className="w-6 h-6 rounded-lg bg-accent-amber/15 text-accent-amber flex items-center justify-center text-[11px] font-extrabold border border-accent-amber/20 shrink-0">1</span>
+  if (rank === 2) return <span className="w-6 h-6 rounded-lg bg-surface-200/10 text-surface-200 flex items-center justify-center text-[11px] font-extrabold border border-surface-200/15 shrink-0">2</span>
+  if (rank === 3) return <span className="w-6 h-6 rounded-lg bg-amber-700/10 text-accent-amber-600 flex items-center justify-center text-[11px] font-extrabold border border-amber-700/15 shrink-0">3</span>
+  return <span className="w-6 h-6 rounded-lg bg-transparent text-surface-400 flex items-center justify-center text-[11px] font-bold shrink-0">{rank}</span>
 }
 
 function Section({ title, subtitle, link, linkLabel, icon, children }: { title: string; subtitle?: string; link?: string; linkLabel?: string; icon?: import('../components/Icon').IconName; children: React.ReactNode }) {

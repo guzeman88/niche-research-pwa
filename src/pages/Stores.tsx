@@ -157,7 +157,7 @@ export default function Stores() {
               style={{ backgroundColor: selected === store.slug ? color + '12' : '#303948', border: `1px solid ${selected === store.slug ? color + '38' : '#465365'}` }}
             >
               <span
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-[15px] font-extrabold"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[15px] font-extrabold"
                 style={{ backgroundColor: color + '15', color, border: `1px solid ${color}30` }}
               >
                 {store.name[0]}
@@ -166,7 +166,7 @@ export default function Stores() {
                 <span className="block truncate text-[14px] font-semibold text-surface-50">{store.name}</span>
                 <span className="mt-0.5 block truncate text-[11px] text-surface-300">{store.niche}</span>
               </span>
-              <Icon name="chevron-right" size={16} className="flex-shrink-0 text-surface-400" />
+              <Icon name="chevron-right" size={16} className="shrink-0 text-surface-400" />
             </button>
           )
         })}
@@ -203,7 +203,7 @@ export default function Stores() {
     <PullToRefresh onRefresh={refresh}>
       <>
         <div className="hidden h-full lg:flex">
-          <div className="w-80 flex-shrink-0 border-r border-surface-600/60 bg-surface-900/45">
+          <div className="w-80 shrink-0 border-r border-surface-600/60 bg-surface-900/45">
             {masterList}
           </div>
           <div className="flex-1">
@@ -269,7 +269,7 @@ function StoreWorkspaceView({
             <h2 className="truncate text-xl font-extrabold tracking-tight text-surface-50">{store.name}</h2>
             <p className="mt-0.5 line-clamp-2 text-[12px] text-surface-200">{store.niche}</p>
           </div>
-          <div className="hidden flex-shrink-0 text-right text-[11px] font-semibold text-surface-300 sm:block">
+          <div className="hidden shrink-0 text-right text-[11px] font-semibold text-surface-300 sm:block">
             {workspace.products.length} products / {workspace.listings.length} listings
           </div>
         </div>
@@ -358,8 +358,8 @@ function StoreDashboard({ store, workspace, onTabChange }: { store: StoreItem; w
               {workspace.products.slice(0, 6).map((product) => (
                 <div key={product.id} className="grid min-w-0 gap-2 rounded-md border border-surface-600/45 bg-surface-900/30 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_7rem]">
                   <div className="min-w-0">
-                    <div className="break-words text-[12px] font-extrabold text-surface-50">{product.title}</div>
-                    <div className="mt-0.5 break-words text-[11px] text-surface-300">{product.keyword} / {formatProductType(product.productType)}</div>
+                    <div className="wrap-break-word text-[12px] font-extrabold text-surface-50">{product.title}</div>
+                    <div className="mt-0.5 wrap-break-word text-[11px] text-surface-300">{product.keyword} / {formatProductType(product.productType)}</div>
                   </div>
                   <StatusPill status={product.status} />
                 </div>
@@ -388,10 +388,10 @@ function StoreDashboard({ store, workspace, onTabChange }: { store: StoreItem; w
           <div className="space-y-2">
             {validation.map((item) => (
               <div key={item.label} className="flex min-w-0 gap-2 rounded-md border border-surface-600/35 bg-surface-900/20 p-3">
-                <Icon name={item.complete ? 'check-circle' : 'clock'} size={15} className={item.complete ? 'mt-0.5 flex-shrink-0 text-accent-green' : 'mt-0.5 flex-shrink-0 text-accent-amber'} />
+                <Icon name={item.complete ? 'check-circle' : 'clock'} size={15} className={item.complete ? 'mt-0.5 shrink-0 text-accent-green' : 'mt-0.5 shrink-0 text-accent-amber'} />
                 <div className="min-w-0">
-                  <div className="break-words text-[12px] font-bold text-surface-100">{item.label}</div>
-                  <div className="mt-0.5 break-words text-[11px] text-surface-300">{item.detail}</div>
+                  <div className="wrap-break-word text-[12px] font-bold text-surface-100">{item.label}</div>
+                  <div className="mt-0.5 wrap-break-word text-[11px] text-surface-300">{item.detail}</div>
                 </div>
               </div>
             ))}
@@ -657,7 +657,7 @@ function KeywordProductCreationPage({
             <Icon name="arrow-left" size={14} /> Keywords
           </button>
           <div className="section-label">Product Creator</div>
-          <h3 className="mt-1 break-words text-2xl font-extrabold tracking-tight text-surface-50">{keyword.keyword}</h3>
+          <h3 className="mt-1 wrap-break-word text-2xl font-extrabold tracking-tight text-surface-50">{keyword.keyword}</h3>
         </div>
         <div className="pt-12 text-[11px] font-extrabold text-surface-500">real</div>
       </div>
@@ -684,7 +684,7 @@ function KeywordProductCreationPage({
               ))}
             </div>
             {activeType && (
-              <div className="mt-2 line-clamp-2 break-words text-[11px] font-semibold text-surface-400">
+              <div className="mt-2 line-clamp-2 wrap-break-word text-[11px] font-semibold text-surface-400">
                 {activeType.fit.reasons.slice(0, 3).join(' / ')}
               </div>
             )}
@@ -710,7 +710,7 @@ function KeywordProductCreationPage({
                       onClick={() => startDesign(idea)}
                       className="min-w-0 text-left"
                     >
-                      <span className="block break-words text-[13px] font-extrabold leading-snug">{idea.title}</span>
+                      <span className="block wrap-break-word text-[13px] font-extrabold leading-snug">{idea.title}</span>
                       {idea.creativeBrief?.exactPhrase && (
                         <span className="mt-0.5 block truncate text-[11px] font-semibold text-surface-400">"{idea.creativeBrief.exactPhrase}"</span>
                       )}
@@ -722,7 +722,7 @@ function KeywordProductCreationPage({
                     <button
                       type="button"
                       onClick={() => startDesign(idea)}
-                      className={`inline-flex min-h-8 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11px] font-extrabold transition-colors duration-150 ${
+                      className={`inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11px] font-extrabold transition-colors duration-150 ${
                         isSaved
                           ? 'border-accent-green/30 bg-accent-green/10 text-accent-green'
                           : 'border-primary-300/35 bg-primary-400/15 text-primary-100 hover:bg-primary-400/25'
@@ -750,7 +750,7 @@ function KeywordProductCreationPage({
                   type="button"
                   disabled={listingExists || !mockupReady}
                   onClick={() => onSendProductToListings(savedProduct)}
-                  className="btn-secondary min-h-9 flex-shrink-0 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="btn-secondary min-h-9 shrink-0 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Icon name={listingExists ? 'check-circle' : 'arrow-right'} size={14} />
                   {listingExists ? 'Listed' : 'Listing'}
@@ -943,7 +943,7 @@ function GeneratedDesignPanel({
 
         <div className="rounded-md border border-surface-600/35 bg-surface-900/25 p-2.5">
           <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-surface-400">Prompt</div>
-          <div className="line-clamp-3 break-words text-[11px] leading-relaxed text-surface-200">{prompt}</div>
+          <div className="line-clamp-3 wrap-break-word text-[11px] leading-relaxed text-surface-200">{prompt}</div>
         </div>
 
         <div className="rounded-md border border-surface-600/35 bg-surface-900/25 p-2.5">
@@ -958,7 +958,7 @@ function GeneratedDesignPanel({
               <label key={item.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md border border-surface-600/35 bg-surface-950/25 px-2 py-1.5 text-[11px] font-bold text-surface-200">
                 <input
                   type="checkbox"
-                  className="h-3.5 w-3.5 flex-shrink-0 accent-sky-400"
+                  className="h-3.5 w-3.5 shrink-0 accent-sky-400"
                   checked={!!qualityChecks[item.id]}
                   onChange={(event) => onQualityCheckChange(item.id, event.target.checked)}
                 />
@@ -967,7 +967,7 @@ function GeneratedDesignPanel({
             ))}
           </div>
           {qualityReview?.failureReason && (
-            <div className="mt-2 break-words text-[11px] font-semibold text-accent-amber">{qualityReview.failureReason}</div>
+            <div className="mt-2 wrap-break-word text-[11px] font-semibold text-accent-amber">{qualityReview.failureReason}</div>
           )}
         </div>
 
@@ -976,7 +976,7 @@ function GeneratedDesignPanel({
             <div className="text-[10px] font-bold uppercase tracking-wider text-surface-400">Free web</div>
             <span className="truncate text-[10px] font-extrabold text-surface-300">{manualDesign ? 'Attached' : launcher.label}</span>
           </div>
-          <div className="line-clamp-3 break-words text-[11px] leading-relaxed text-surface-200">{launcherPrompt}</div>
+          <div className="line-clamp-3 wrap-break-word text-[11px] leading-relaxed text-surface-200">{launcherPrompt}</div>
           <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-2">
             {PROMPT_LAUNCHERS.map((option) => {
               const selected = option.id === manualSource
@@ -1085,7 +1085,7 @@ function CreativeBriefPanel({ product }: { product: StoreProductIdea }) {
         {rows.map(([label, value]) => (
           <div key={label} className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-2 text-[11px] leading-relaxed">
             <span className="font-bold text-surface-500">{label}</span>
-            <span className="break-words font-semibold text-surface-200">{value}</span>
+            <span className="wrap-break-word font-semibold text-surface-200">{value}</span>
           </div>
         ))}
       </div>
@@ -1121,7 +1121,7 @@ function MockupGate({
           </div>
           <div className="min-w-0">
             <div className="truncate text-[12px] font-extrabold text-surface-50">{product.title}</div>
-            <div className="mt-1 line-clamp-3 break-words text-[11px] leading-relaxed text-surface-300">{product.mockupPrompt}</div>
+            <div className="mt-1 line-clamp-3 wrap-break-word text-[11px] leading-relaxed text-surface-300">{product.mockupPrompt}</div>
           </div>
         </div>
         <button
@@ -1495,7 +1495,7 @@ function ListingManager({
             <div className="section-label">Listing drafts</div>
             <p className="mt-0.5 text-[12px] text-surface-300">Create and manage listing details before anything goes to Etsy.</p>
           </div>
-          <div className="flex flex-shrink-0 gap-2">
+          <div className="flex shrink-0 gap-2">
             <button type="button" className="btn-secondary min-h-9 px-3 py-2 text-[12px]" onClick={() => downloadWorkspaceExport(store, workspace, 'json')}>
               <Icon name="download" size={14} /> JSON
             </button>
@@ -1531,8 +1531,8 @@ function ListingManager({
           <div className="grid gap-2 md:grid-cols-2">
             {productsWithoutListings.map((product) => (
               <div key={product.id} className="rounded-md border border-surface-600/45 bg-surface-900/20 p-3">
-                <div className="break-words text-[12px] font-bold text-surface-100">{product.title}</div>
-                <div className="mt-0.5 break-words text-[11px] text-surface-300">{product.keyword}</div>
+                <div className="wrap-break-word text-[12px] font-bold text-surface-100">{product.title}</div>
+                <div className="mt-0.5 wrap-break-word text-[11px] text-surface-300">{product.keyword}</div>
                 <button type="button" className="btn-secondary mt-3 min-h-9 px-3 py-2 text-[12px]" onClick={() => onSaveListing(createListingFromProduct(store, product))}>
                   <Icon name="plus-circle" size={14} /> Create draft
                 </button>
@@ -1566,10 +1566,10 @@ function ListingDraftEditor({
     <div className="rounded-md border border-surface-600/50 bg-surface-900/25 p-3">
       <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="break-words text-[13px] font-extrabold text-surface-50">{listing.title}</div>
-          <div className="mt-0.5 break-words text-[11px] text-surface-300">{listing.primaryKeyword} / {formatProductType(listing.productType)}</div>
+          <div className="wrap-break-word text-[13px] font-extrabold text-surface-50">{listing.title}</div>
+          <div className="mt-0.5 wrap-break-word text-[11px] text-surface-300">{listing.primaryKeyword} / {formatProductType(listing.productType)}</div>
         </div>
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <span className={`rounded-md border px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider ${quality.score !== null && quality.score >= 80 ? 'border-accent-green/25 bg-accent-green/10 text-accent-green' : 'border-accent-amber/25 bg-accent-amber/10 text-accent-amber'}`}>
             {quality.grade} {quality.score !== null ? quality.score : 'n/a'}
           </span>
@@ -1601,7 +1601,7 @@ function ListingDraftEditor({
         {quality.checks.map((check) => (
           <div key={check.label} className="rounded-md border border-surface-600/35 bg-surface-950/20 p-2">
             <div className={`text-[10px] font-extrabold uppercase tracking-wider ${check.complete ? 'text-accent-green' : 'text-accent-amber'}`}>{check.label}</div>
-            <div className="mt-1 break-words text-[11px] text-surface-300">{check.detail}</div>
+            <div className="mt-1 wrap-break-word text-[11px] text-surface-300">{check.detail}</div>
           </div>
         ))}
       </div>
@@ -1623,7 +1623,7 @@ function ListingDraftEditor({
         <div className="rounded-md border border-surface-600/40 bg-surface-950/20 p-3">
           <div className="text-[10px] font-bold uppercase tracking-wider text-surface-300">Keyword plan</div>
           <div className="mt-2 text-[12px] text-surface-100">Primary: <span className="font-bold">{listing.primaryKeyword}</span></div>
-          <div className="mt-2 break-words text-[11px] text-surface-300">
+          <div className="mt-2 wrap-break-word text-[11px] text-surface-300">
             Supporting: {listing.supportingKeywords.length ? listing.supportingKeywords.join(', ') : 'No supporting keywords saved'}
           </div>
         </div>
@@ -1816,7 +1816,7 @@ function MetricBlock({ icon, label, value, detail }: { icon: Parameters<typeof I
           <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-surface-400">{label}</div>
         </div>
       </div>
-      <div className="mt-2 break-words text-[11px] text-surface-300">{detail}</div>
+      <div className="mt-2 wrap-break-word text-[11px] text-surface-300">{detail}</div>
     </div>
   )
 }
@@ -1826,7 +1826,7 @@ function KeywordRow({ keyword, rank }: { keyword: StoreKeywordCandidate; rank: n
     <div className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_3.25rem_3.25rem] items-center gap-2 rounded-md border border-surface-600/35 bg-surface-900/20 px-2.5 py-2">
       <div className="text-right text-[10px] font-extrabold tabular-nums text-surface-400">{rank}</div>
       <div className="min-w-0">
-        <div className="break-words text-[12px] font-bold text-surface-100">{keyword.keyword}</div>
+        <div className="wrap-break-word text-[12px] font-bold text-surface-100">{keyword.keyword}</div>
         <div className="mt-0.5 truncate text-[10px] text-surface-400">{keyword.product}</div>
       </div>
       <EvidenceNumber value={keyword.strength} label="strength" />
@@ -1861,7 +1861,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-surface-600/35 bg-surface-900/20 p-3">
       <div className="text-[10px] font-bold uppercase tracking-wider text-surface-400">{label}</div>
-      <div className="mt-1 break-words text-[12px] font-semibold text-surface-100">{value}</div>
+      <div className="mt-1 wrap-break-word text-[12px] font-semibold text-surface-100">{value}</div>
     </div>
   )
 }
@@ -1880,10 +1880,10 @@ function NoDataPanel({ icon, title, text }: { icon: Parameters<typeof Icon>[0]['
   return (
     <div className="panel-soft p-4">
       <div className="flex items-start gap-3">
-        <Icon name={icon} size={18} className="mt-0.5 flex-shrink-0 text-surface-300" />
+        <Icon name={icon} size={18} className="mt-0.5 shrink-0 text-surface-300" />
         <div className="min-w-0">
           <div className="text-[12px] font-extrabold text-surface-100">{title}</div>
-          <div className="mt-1 break-words text-[12px] leading-relaxed text-surface-300">{text}</div>
+          <div className="mt-1 wrap-break-word text-[12px] leading-relaxed text-surface-300">{text}</div>
         </div>
       </div>
     </div>

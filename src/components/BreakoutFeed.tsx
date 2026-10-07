@@ -38,10 +38,10 @@ export default function BreakoutFeed() {
       <div className="space-y-1 max-h-[300px] overflow-y-auto">
         {breakouts.map((b, i) => (
           <div key={b.keyword} className="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-700/35 transition-colors border-b border-surface-600/25 last:border-0">
-            <span className="text-[10px] text-surface-400 w-5 flex-shrink-0 font-bold tabular-nums">{i + 1}</span>
-            <Icon name="trending-up" size={12} className="text-accent-green flex-shrink-0" />
+            <span className="text-[10px] text-surface-400 w-5 shrink-0 font-bold tabular-nums">{i + 1}</span>
+            <Icon name="trending-up" size={12} className="text-accent-green shrink-0" />
             <span className="text-[12px] text-surface-100 font-medium truncate flex-1">{b.keyword}</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-green/10 text-accent-green font-bold border border-accent-green/20 flex-shrink-0">BREAKOUT</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-green/10 text-accent-green font-bold border border-accent-green/20 shrink-0">BREAKOUT</span>
           </div>
         ))}
       </div>

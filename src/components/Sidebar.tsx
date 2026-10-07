@@ -32,7 +32,7 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `group relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-[10px] font-semibold leading-none transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-400/45 ${
+                `group relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-[10px] font-semibold leading-none transition-all duration-200 focus:outline-hidden focus:ring-2 focus:ring-primary-400/45 ${
                   isActive
                     ? 'bg-surface-700/80 text-surface-50 shadow-[0_10px_22px_rgba(7,10,14,0.24),inset_0_1px_0_rgba(255,255,255,0.06)]'
                     : 'text-surface-300 hover:bg-surface-800/70 hover:text-surface-100'
@@ -131,7 +131,7 @@ function ModeSwitch({
             type="button"
             aria-pressed={active}
             onClick={() => onModeChange(option.value)}
-            className={`inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 text-[11px] font-extrabold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-primary-400/40 ${
+            className={`inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 text-[11px] font-extrabold transition-all duration-150 focus:outline-hidden focus:ring-2 focus:ring-primary-400/40 ${
               active
                 ? 'bg-primary-400/18 text-primary-100 ring-1 ring-primary-300/25'
                 : 'text-surface-300 hover:bg-surface-800/70 hover:text-surface-100'
