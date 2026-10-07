@@ -22,3 +22,7 @@ public/data/*.json
 !.env.production.example
 .pytest_cache/
 gha-creds-*.json
+
+# SQLite process sidecars contain live local transactions, never source files.
+*.sqlite-wal
+*.sqlite-shm
