@@ -58,7 +58,7 @@ export default function TopListings({ data }: Props) {
         <div className="space-y-1">
           {data.top_listing_titles.slice(0, 5).map((title: string, i: number) => (
             <div key={i} className="flex items-center gap-2 text-[11px] text-surface-200 py-1 border-b border-surface-600/30 last:border-0">
-              <span className="text-surface-400 text-[10px] w-4 flex-shrink-0">{i + 1}.</span>
+              <span className="text-surface-400 text-[10px] w-4 shrink-0">{i + 1}.</span>
               <span className="truncate">{title}</span>
             </div>
           ))}

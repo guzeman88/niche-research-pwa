@@ -153,7 +153,7 @@ export default function LaunchLab() {
   }
 
   return (
-    <div className="page max-w-[92rem]">
+    <div className="page max-w-368">
       <header className="page-header flex-col items-stretch sm:flex-row sm:items-center">
         <div className="min-w-0">
           <h1 className="text-xl font-extrabold tracking-tight text-surface-50">Launch Lab</h1>
@@ -215,7 +215,7 @@ export default function LaunchLab() {
           </div>
           <ol className="flex min-w-max divide-x divide-surface-600/35 xl:block xl:min-w-0 xl:divide-x-0 xl:divide-y">
             {(active ? stages : emptyStages()).map((stage, index) => (
-              <li key={stage.id} className="min-w-[8.5rem] xl:min-w-0">
+              <li key={stage.id} className="min-w-34 xl:min-w-0">
                 <button
                   type="button"
                   onClick={() => setActiveStage(stage.id)}
@@ -241,7 +241,7 @@ export default function LaunchLab() {
         </aside>
 
         <main className="min-w-0">
-          <section className="panel min-h-[32rem] overflow-hidden">
+          <section className="panel min-h-128 overflow-hidden">
             <StageHeader stage={activeStage} />
             <div className="p-4 sm:p-5">
               {activeStage === 'keyword' && (
@@ -645,7 +645,7 @@ function DecisionBadge({ status }: { status: OpportunityDecision['status'] }) {
 }
 
 function RecordRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return <div className="grid gap-1 px-4 py-3"><span className="font-semibold text-surface-400">{label}</span><span className={`break-words font-bold text-surface-100 ${mono ? 'font-mono' : ''}`}>{value}</span></div>
+  return <div className="grid gap-1 px-4 py-3"><span className="font-semibold text-surface-400">{label}</span><span className={`wrap-break-word font-bold text-surface-100 ${mono ? 'font-mono' : ''}`}>{value}</span></div>
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

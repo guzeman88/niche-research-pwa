@@ -28,8 +28,8 @@ function PageFallback() {
     <div className="page">
       <div className="panel p-4">
         <BrandLogo className="mb-4" markClassName="h-7 w-7" wordmarkClassName="text-[14px] font-extrabold leading-none tracking-tight" />
-        <div className="h-4 w-28 rounded bg-surface-700/80" />
-        <div className="mt-4 h-20 rounded bg-surface-800/80" />
+        <div className="h-4 w-28 rounded-sm bg-surface-700/80" />
+        <div className="mt-4 h-20 rounded-sm bg-surface-800/80" />
       </div>
     </div>
   )

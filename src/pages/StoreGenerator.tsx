@@ -136,12 +136,12 @@ export default function StoreGenerator() {
         <div className="space-y-4" aria-busy="true" aria-label="Loading store ideas">
           {Array.from({ length: 4 }).map((_, index) => (
             <div key={index} className="panel p-5">
-              <div className="h-4 w-36 rounded bg-surface-500/40 animate-pulse" />
-              <div className="mt-4 h-3 w-full max-w-xl rounded bg-surface-500/30 animate-pulse" />
+              <div className="h-4 w-36 rounded-sm bg-surface-500/40 animate-pulse" />
+              <div className="mt-4 h-3 w-full max-w-xl rounded-sm bg-surface-500/30 animate-pulse" />
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="h-16 rounded bg-surface-500/20 animate-pulse" />
-                <div className="h-16 rounded bg-surface-500/20 animate-pulse" />
-                <div className="h-16 rounded bg-surface-500/20 animate-pulse" />
+                <div className="h-16 rounded-sm bg-surface-500/20 animate-pulse" />
+                <div className="h-16 rounded-sm bg-surface-500/20 animate-pulse" />
+                <div className="h-16 rounded-sm bg-surface-500/20 animate-pulse" />
               </div>
             </div>
           ))}
@@ -166,9 +166,9 @@ export default function StoreGenerator() {
                 <div className="min-w-0 p-4 space-y-3 sm:p-5">
                   <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                     <div className="min-w-0">
-                      <h3 className="min-w-0 max-w-full break-words text-[15px] font-extrabold leading-snug text-surface-50 sm:text-[16px]">{concept.name}</h3>
+                      <h3 className="min-w-0 max-w-full wrap-break-word text-[15px] font-extrabold leading-snug text-surface-50 sm:text-[16px]">{concept.name}</h3>
                       <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-surface-300">
-                        <span className="min-w-0 break-words">{concept.focus}</span>
+                        <span className="min-w-0 wrap-break-word">{concept.focus}</span>
                         <span>{rankedKeywords.length} keywords</span>
                         <span>{concept.productTypes.slice(0, 3).join(', ')}</span>
                         {concept.validationState === 'provisional_marketplace' && (
@@ -225,13 +225,13 @@ export default function StoreGenerator() {
                           <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                             <div className="min-w-0">
                               <div className="section-label">Store recommendation</div>
-                              <div className="mt-2 break-words text-[13px] font-semibold leading-relaxed text-surface-100">{recommendation.positioning}</div>
+                              <div className="mt-2 wrap-break-word text-[13px] font-semibold leading-relaxed text-surface-100">{recommendation.positioning}</div>
                               {(recommendation.qualityOptimizationPlan || recommendation.profitOptimizationPlan)?.length ? (
                                 <div className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-surface-300">
                                   {(recommendation.qualityOptimizationPlan || recommendation.profitOptimizationPlan || []).slice(0, 3).map((item) => (
                                     <div key={item} className="flex min-w-0 gap-2">
-                                      <Icon name="target" size={12} className="mt-0.5 flex-shrink-0 text-primary-100" />
-                                      <span className="min-w-0 break-words">{item}</span>
+                                      <Icon name="target" size={12} className="mt-0.5 shrink-0 text-primary-100" />
+                                      <span className="min-w-0 wrap-break-word">{item}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -242,8 +242,8 @@ export default function StoreGenerator() {
                               <div className="space-y-1.5 text-[12px] text-surface-200">
                                 {recommendation.launchListingIdeas.slice(0, 4).map((idea, ideaIndex) => (
                                   <div key={idea} className="flex min-w-0 items-start gap-2">
-                                    <span className="w-5 flex-shrink-0 text-right text-[10px] font-extrabold tabular-nums text-primary-100">{ideaIndex + 1}</span>
-                                    <span className="min-w-0 break-words">{idea}</span>
+                                    <span className="w-5 shrink-0 text-right text-[10px] font-extrabold tabular-nums text-primary-100">{ideaIndex + 1}</span>
+                                    <span className="min-w-0 wrap-break-word">{idea}</span>
                                   </div>
                                 ))}
                               </div>
@@ -259,13 +259,13 @@ export default function StoreGenerator() {
                             <div key={cluster.id} className="min-w-0 rounded-md border border-surface-500/40 bg-surface-900/15 px-3 py-2">
                               <div className="flex min-w-0 items-start justify-between gap-2">
                                 <div className="min-w-0">
-                                  <div className="break-words text-[12px] font-extrabold text-surface-100">{cluster.label}</div>
+                                  <div className="wrap-break-word text-[12px] font-extrabold text-surface-100">{cluster.label}</div>
                                   <div className="mt-0.5 text-[10px] uppercase font-bold tracking-wider text-surface-400">
                                     {cluster.keywords.length} keywords
                                   </div>
                                 </div>
                               </div>
-                              <div className="mt-2 break-words text-[11px] text-surface-300">
+                              <div className="mt-2 wrap-break-word text-[11px] text-surface-300">
                                 {cluster.keywords.slice(0, 3).map((keyword) => keyword.keyword).join(' / ')}
                               </div>
                             </div>
@@ -283,14 +283,14 @@ export default function StoreGenerator() {
                                   <div key={blueprint.id} className="min-w-0 rounded-md border border-surface-500/40 bg-surface-900/15 px-3 py-2">
                                     <div className="flex min-w-0 items-start justify-between gap-3">
                                       <div className="min-w-0">
-                                        <div className="break-words text-[12px] font-extrabold text-surface-100">{blueprint.title}</div>
-                                        <div className="mt-0.5 break-words text-[11px] text-surface-300">
+                                        <div className="wrap-break-word text-[12px] font-extrabold text-surface-100">{blueprint.title}</div>
+                                        <div className="mt-0.5 wrap-break-word text-[11px] text-surface-300">
                                           primary: <span className="font-bold text-surface-100">{blueprint.primaryKeyword}</span>
                                         </div>
                                       </div>
                                     </div>
                                     {blueprint.supportingKeywords.length > 0 && (
-                                      <div className="mt-2 break-words text-[11px] text-surface-400">
+                                      <div className="mt-2 wrap-break-word text-[11px] text-surface-400">
                                         supporting: {blueprint.supportingKeywords.slice(0, 4).join(', ')}
                                       </div>
                                     )}
@@ -306,8 +306,8 @@ export default function StoreGenerator() {
                           <ul className="space-y-2 text-[12px] leading-relaxed text-surface-200">
                             {(concept.profitDrivers || concept.evidence).map((item) => (
                               <li key={item} className="flex min-w-0 gap-2">
-                                <Icon name="check-circle" size={14} className="mt-0.5 flex-shrink-0 text-accent-green" />
-                                <span className="min-w-0 break-words">{item}</span>
+                                <Icon name="check-circle" size={14} className="mt-0.5 shrink-0 text-accent-green" />
+                                <span className="min-w-0 wrap-break-word">{item}</span>
                               </li>
                             ))}
                           </ul>
@@ -319,21 +319,21 @@ export default function StoreGenerator() {
                           <div className="section-label">First listing angles</div>
                           <div className="space-y-1.5 text-[12px] text-surface-300">
                             {concept.listingIdeas.map((idea) => (
-                              <div key={idea} className="break-words">{idea}</div>
+                              <div key={idea} className="wrap-break-word">{idea}</div>
                             ))}
                           </div>
                         </div>
                         <div className="min-w-0 space-y-2">
                           <div className="section-label">Validation plan</div>
                           <div className="space-y-1.5 text-[12px] text-surface-300">
-                            {recommendation?.nextValidationStep && <div className="break-words font-semibold text-surface-100">{recommendation.nextValidationStep}</div>}
-                            {(concept.validationChecklist || concept.evidence).slice(0, 4).map((item) => <div key={item} className="break-words">{item}</div>)}
+                            {recommendation?.nextValidationStep && <div className="wrap-break-word font-semibold text-surface-100">{recommendation.nextValidationStep}</div>}
+                            {(concept.validationChecklist || concept.evidence).slice(0, 4).map((item) => <div key={item} className="wrap-break-word">{item}</div>)}
                           </div>
                         </div>
                         <div className="min-w-0 space-y-2">
                           <div className="section-label">Risk notes</div>
                           <div className="space-y-1.5 text-[12px] text-surface-300">
-                            {concept.risks.map((risk) => <div key={risk} className="break-words">{risk}</div>)}
+                            {concept.risks.map((risk) => <div key={risk} className="wrap-break-word">{risk}</div>)}
                           </div>
                         </div>
                       </div>
@@ -411,7 +411,7 @@ function RankedKeywordList({
           aria-label={`${isExpanded ? 'Collapse' : 'Show'} keywords for ${conceptName}`}
           onClick={onToggle}
           disabled={!canToggle}
-          className="inline-flex min-h-8 flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-surface-500/50 bg-surface-900/30 px-2.5 text-[11px] font-bold text-surface-100 transition-all duration-150 hover:bg-surface-700/45 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-surface-500/50 bg-surface-900/30 px-2.5 text-[11px] font-bold text-surface-100 transition-all duration-150 hover:bg-surface-700/45 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Icon name={isExpanded ? 'arrow-up' : 'arrow-down'} size={13} />
           {isExpanded ? 'Hide keywords' : 'Show keywords'}
@@ -426,9 +426,9 @@ function RankedKeywordList({
             >
               <div className="text-right text-[11px] font-extrabold tabular-nums text-surface-400">{index + 1}</div>
               <div className="min-w-0">
-                <div className="break-words text-[12px] font-extrabold text-surface-100">{keyword.keyword}</div>
+                <div className="wrap-break-word text-[12px] font-extrabold text-surface-100">{keyword.keyword}</div>
                 <div className="mt-0.5 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-surface-400">
-                  <span className="break-words">{keyword.product}</span>
+                  <span className="wrap-break-word">{keyword.product}</span>
                   {keyword.estimatedRevenue != null ? <span>{fmtPrice(keyword.estimatedRevenue)}/mo</span> : null}
                 </div>
               </div>

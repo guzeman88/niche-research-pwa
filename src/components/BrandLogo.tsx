@@ -39,7 +39,7 @@ export default function BrandLogo({
 }: BrandLogoProps) {
   return (
     <div className={`flex min-w-0 items-center gap-2.5 ${className}`} aria-label="EtGen">
-      <span className="flex flex-shrink-0 items-center justify-center rounded-lg border border-primary-400/30 bg-primary-400/10">
+      <span className="flex shrink-0 items-center justify-center rounded-lg border border-primary-400/30 bg-primary-400/10">
         <BrandMark className={markClassName} />
       </span>
       <span className="min-w-0">
