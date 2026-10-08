@@ -7,6 +7,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { collectionScanStatus, summarizeCollectionStates } = require('./collection-state.cjs');
 const { latestGoogleVolumes } = require('./google-volume.cjs');
+const { supabaseTransport } = require('./supabase-transport.cjs');
 
 let API = process.env.VITE_API_URL || '';
 const OUT = process.env.SNAPSHOT_OUTPUT_DIR || path.join(__dirname, '..', 'public', 'data');
@@ -75,7 +76,7 @@ function supabaseFetch(resource, params = {}) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
     }
-    https.get(url, {
+    supabaseTransport(url).get(url, {
       timeout: 60000,
       headers: {
         apikey: SUPABASE_SERVICE_ROLE_KEY,
