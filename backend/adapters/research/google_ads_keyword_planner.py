@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -192,9 +193,20 @@ class GoogleAdsKeywordPlannerAdapter(BaseResearchAdapter):
                 continue
             if response.status_code >= 400:
                 detail = _safe_error(response)
-                raise GoogleAdsKeywordPlannerError(
+                error = GoogleAdsKeywordPlannerError(
                     f"Google Ads {method} returned HTTP {response.status_code}: {detail}"
                 )
+                error.http_status = response.status_code
+                error.provider_codes = []
+                try:
+                    for item in response.json().get("error", {}).get("details", []):
+                        for failure in item.get("errors", []):
+                            for code in failure.get("errorCode", {}).values():
+                                if isinstance(code, str) and re.fullmatch(r"[A-Z_]+", code):
+                                    error.provider_codes.append(code)
+                except (ValueError, AttributeError, TypeError):
+                    pass
+                raise error
             try:
                 payload = response.json()
             except ValueError as exc:

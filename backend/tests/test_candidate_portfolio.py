@@ -86,7 +86,7 @@ def test_candidate_test_requires_complete_observed_outcomes():
 
     assert result["status"] == "collecting"
     assert result["ready_to_advance"] is False
-    assert result["metrics"]["impressions"] == 0
+    assert result["metrics"]["impressions"] is None
     assert result["blockers"]
 
 
@@ -121,3 +121,14 @@ def test_candidate_test_advances_only_after_hard_thresholds_clear():
     assert result["metrics"]["click_through_rate_pct"] == 2.0
     assert result["metrics"]["orders"] == 3
     assert result["metrics"]["contribution_profit_usd"] == 30
+    # A second source or keyword attribution must not duplicate the same listing.
+    duplicate = {**outcomes[0], "keyword": outcomes[1]["keyword"], "source": "second export"}
+    repeated = evaluate_candidate_test(candidate, [*outcomes, duplicate])
+    assert repeated["metrics"]["orders"] == 3
+    conflict = evaluate_candidate_test(candidate, [*outcomes, {**duplicate, "orders": 3}])
+    assert not conflict["ready_to_advance"]
+    incomplete = evaluate_candidate_test(candidate, [{**item, "clicks": None} for item in outcomes])
+    assert incomplete["metrics"]["clicks"] is None
+    assert not incomplete["ready_to_advance"]
+    partial_listing = [{**item, "period_end": "2026-09-10"} if index == 0 else item for index, item in enumerate(outcomes)]
+    assert evaluate_candidate_test(candidate, partial_listing)["metrics"]["duration_days"] == 10

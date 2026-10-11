@@ -6,6 +6,7 @@ import BrandLogo from './BrandLogo'
 import {useAuth} from '../lib/auth'
 
 const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconName; adminOnly?: boolean }[] = [
+  { to: '/validation', label: 'Product validation', shortLabel: 'Validate', icon: 'search', adminOnly: true },
   { to: '/', label: 'Dashboard', icon: 'home' },
   { to: '/keywords', label: 'Keywords', icon: 'search' },
   { to: '/store-generator', label: 'Store Generator', shortLabel: 'Generator', icon: 'layers' },

@@ -234,35 +234,60 @@ def evaluate_candidate_test(candidate: dict[str, Any], outcomes: list[dict[str, 
         row for row in outcomes
         if str(row.get("keyword") or "").strip().lower() in allowed
     ]
-    impressions = sum(int(_number(row.get("impressions")) or 0) for row in usable)
-    clicks = sum(int(_number(row.get("clicks")) or 0) for row in usable)
-    orders = sum(int(_number(row.get("orders")) or 0) for row in usable)
-    revenue = round(sum(_number(row.get("revenue_usd")) or 0 for row in usable), 2)
-    contribution = round(sum(_number(row.get("contribution_profit_usd")) or 0 for row in usable), 2)
+    # A listing period is one observation, even when tagged with several keywords
+    # or imported from several sources. Conflicting/overlapping data blocks advance.
+    fields = ("impressions", "clicks", "orders", "revenue_usd", "contribution_profit_usd")
+    unique, periods, data_blockers = {}, defaultdict(list), []
+    for row in usable:
+        listing = str(row.get("listing_id") or "")
+        start, end = _parse_day(row.get("period_start")), _parse_day(row.get("period_end"))
+        if not listing or not start or not end or start > end:
+            data_blockers.append("Correct missing listing identities or invalid reporting periods.")
+            continue
+        identity = (listing, start, end)
+        if identity in unique:
+            if any(_number(row.get(field)) != _number(unique[identity].get(field)) for field in fields):
+                data_blockers.append("Resolve conflicting duplicate listing periods.")
+            continue
+        if any(start <= old_end and end >= old_start for old_start, old_end in periods[listing]):
+            data_blockers.append("Resolve overlapping listing reporting periods.")
+            continue
+        unique[identity] = row
+        periods[listing].append((start, end))
+    usable = list(unique.values())
+    def total(field):
+        values = [_number(row.get(field)) for row in usable]
+        return round(sum(values), 2) if values and all(value is not None for value in values) else None
+    impressions, clicks, orders, revenue, contribution = (total(field) for field in fields)
     listing_count = len({str(row.get("listing_id") or "") for row in usable if row.get("listing_id")})
-    starts = [_parse_day(row.get("period_start")) for row in usable]
-    ends = [_parse_day(row.get("period_end")) for row in usable]
-    starts = [value for value in starts if value is not None]
-    ends = [value for value in ends if value is not None]
-    duration_days = (max(ends) - min(starts)).days + 1 if starts and ends else 0
-    click_through_rate = round(clicks / impressions * 100, 2) if impressions else None
-    blockers = []
+    durations = []
+    for intervals in periods.values():
+        ordered = sorted(intervals)
+        if any((start - prior[1]).days != 1 for prior, (start, _end) in zip(ordered, ordered[1:])):
+            data_blockers.append("Fill gaps in each listing's reporting coverage.")
+        durations.append(sum((end - start).days + 1 for start, end in ordered))
+    duration_days = min(durations, default=0)
+    click_through_rate = round(clicks / impressions * 100, 2) if impressions and clicks is not None else None
+    blockers = list(dict.fromkeys(data_blockers))
+    if any(value is None for value in (impressions, clicks, orders, revenue, contribution)):
+        blockers.append("Complete missing observed traffic, revenue and contribution metrics; missing values remain unknown.")
     if listing_count < TEST_PLAN["listing_count"]:
         blockers.append(f"Record outcomes for {TEST_PLAN['listing_count']} listings; {listing_count} are present.")
     if duration_days < TEST_PLAN["duration_days"]:
         blockers.append(f"Run the test for {TEST_PLAN['duration_days']} days; {duration_days} are recorded.")
-    if impressions < TEST_PLAN["minimum_total_impressions"]:
-        blockers.append(f"Reach {TEST_PLAN['minimum_total_impressions']:,} impressions; {impressions:,} are recorded.")
+    if impressions is None or impressions < TEST_PLAN["minimum_total_impressions"]:
+        blockers.append(f"Reach {TEST_PLAN['minimum_total_impressions']:,} impressions; {impressions if impressions is not None else 'unknown'} are recorded.")
     if click_through_rate is None or click_through_rate < TEST_PLAN["minimum_click_through_rate_pct"]:
         blockers.append(f"Reach {TEST_PLAN['minimum_click_through_rate_pct']}% click-through rate.")
-    if orders < TEST_PLAN["minimum_orders"]:
+    if orders is None or orders < TEST_PLAN["minimum_orders"]:
         blockers.append(f"Reach {TEST_PLAN['minimum_orders']} orders; {orders} are recorded.")
-    if contribution <= 0:
+    if contribution is None or contribution <= 0:
         blockers.append("Record positive contribution profit after fees, advertising, production, shipping, and refunds.")
     collection_incomplete = (
         listing_count < TEST_PLAN["listing_count"]
         or duration_days < TEST_PLAN["duration_days"]
-        or impressions < TEST_PLAN["minimum_total_impressions"]
+        or impressions is None or impressions < TEST_PLAN["minimum_total_impressions"]
+        or bool(data_blockers) or any(value is None for value in (clicks, orders, revenue, contribution))
     )
     status = "advance" if not blockers else "collecting" if collection_incomplete else "hold"
     return {

@@ -30,11 +30,13 @@ try {
     DASHBOARD_UI_ORIGIN: origin,
     CANDIDATE_UI_ORIGIN: origin,
     LAUNCH_UI_ORIGIN: origin,
+    VALIDATION_UI_ORIGIN: origin,
   }
   for (const script of [
     'scripts/test-dashboard-ui.mjs',
     'scripts/test-store-candidates-ui.mjs',
     'scripts/test-launch-ui.mjs',
+    'scripts/run-validation-ui-check.mjs',
   ]) {
     const result = spawnSync(process.execPath, [script], { env, stdio: 'inherit' })
     if (result.error) throw result.error
