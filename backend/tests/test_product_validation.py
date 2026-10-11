@@ -146,6 +146,18 @@ def test_private_read_requires_operator_authorization(monkeypatch):
     assert asyncio.run(security.protect_operator_api(request, downstream)).status_code == 401
 
 
+def test_named_etsy_operation_is_not_shadowed_by_evidence_kind_route(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.product_validation import router
+    app = FastAPI()
+    app.include_router(router)
+    monkeypatch.setattr(v, "collect_etsy", lambda project_id, keyword: {"sampled": 50, "keyword": keyword})
+    response = TestClient(app).post('/api/product-validation/projects/test/collect-etsy', json={"keyword": "teacher tote"})
+    assert response.status_code == 200
+    assert response.json() == {"sampled": 50, "keyword": "teacher tote"}
+
+
 @pytest.mark.parametrize("change", [{"revenue": float("nan")}, {"orders": 1.5}, {"period_start": "2026-10-31"}, {"period_end": "2026-08-01"}])
 def test_invalid_observations_rejected(project, change):
     with pytest.raises(ValueError):
