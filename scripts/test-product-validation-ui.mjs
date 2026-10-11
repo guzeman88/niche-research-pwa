@@ -22,6 +22,8 @@ try {
   await page.getByLabel('Buyer keywords').fill('teacher tote')
   await page.getByRole('button', {name: 'Create validation queue'}).click()
   await page.getByRole('heading', {name: 'QA teacher tote', exact: true}).waitFor()
+  await page.reload()
+  await page.getByRole('heading', {name: 'QA teacher tote', exact: true}).waitFor()
   await page.getByLabel('Period start', {exact: true}).fill(today)
   await page.getByLabel('Period end', {exact: true}).fill(today)
   await page.getByLabel('Etsy searches', {exact: true}).fill('500')
