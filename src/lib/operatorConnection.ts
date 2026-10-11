@@ -33,7 +33,10 @@ export async function operatorRequest<T>(path: string, body?: unknown): Promise<
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(20000),
   })
-  if (!response.ok) throw new Error(response.status === 401
-    ? 'The backend rejected the connection. Check your operator token.' : `Backend request failed (${response.status}).`)
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({})) as {detail?: unknown}
+    throw new Error(response.status === 401 ? 'The backend rejected the connection. Check your operator token.'
+      : typeof detail.detail === 'string' ? detail.detail : `Backend request failed (${response.status}).`)
+  }
   return response.json() as Promise<T>
 }

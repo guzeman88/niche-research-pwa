@@ -164,7 +164,7 @@ async def authenticated_administrator(request: Request) -> bool:
 
 
 async def protect_operator_api(request: Request, call_next):
-    private_read = request.url.path.startswith(("/api/settings", "/api/scheduler", "/api/stream", "/api/stores", "/api/workspace", "/api/evidence"))
+    private_read = request.url.path.startswith(("/api/settings", "/api/scheduler", "/api/stream", "/api/stores", "/api/workspace", "/api/evidence", "/api/product-validation"))
     protected = request.url.path.startswith("/api/") and (
         request.method not in {"GET", "HEAD", "OPTIONS"} or private_read
     )
