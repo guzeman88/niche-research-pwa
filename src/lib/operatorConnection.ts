@@ -1,8 +1,25 @@
 const KEY = 'etgen:operator-connection'
+const LOCAL_KEY = 'etgen:local-validation-address'
 export interface OperatorConnection { url: string; token: string }
 
+function localValidationPage() {
+  return ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) && location.pathname === '/validation'
+}
+
+function loopbackOrigin(value: string) {
+  try {const url = new URL(value); return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) && url.origin === value}
+  catch {return false}
+}
+
 export function readConnection(): OperatorConnection {
-  try { return JSON.parse(sessionStorage.getItem(KEY) || 'null') || {url: '', token: ''} }
+  try {
+    const connection = JSON.parse(sessionStorage.getItem(KEY) || 'null')
+    if (connection) return connection
+    // Account refresh still clears every operator token. Retain only an explicit
+    // loopback address for the standalone local validation page, never credentials.
+    const local = sessionStorage.getItem(LOCAL_KEY) || ''
+    return {url: localValidationPage() && loopbackOrigin(local) ? local : '', token: ''}
+  }
   catch { return {url: '', token: ''} }
 }
 
@@ -15,9 +32,14 @@ export function saveConnection(connection: OperatorConnection) {
     throw new Error('Use HTTPS for a remote backend.')
   }
   sessionStorage.setItem(KEY, JSON.stringify({url: url.origin, token: connection.token.trim()}))
+  if (localValidationPage() && loopbackOrigin(url.origin)) sessionStorage.setItem(LOCAL_KEY, url.origin)
+  else sessionStorage.removeItem(LOCAL_KEY)
 }
 
-export function clearConnection() { sessionStorage.removeItem(KEY) }
+export function clearConnection(removeLocalAddress = false) {
+  sessionStorage.removeItem(KEY)
+  if (removeLocalAddress) sessionStorage.removeItem(LOCAL_KEY)
+}
 
 export function operatorHeaders(url: string): Record<string, string> {
   const connection = readConnection()

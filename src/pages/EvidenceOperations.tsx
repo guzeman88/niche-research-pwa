@@ -199,7 +199,7 @@ export default function EvidenceOperations() {
   }
 
   const disconnect = () => {
-    clearConnection()
+    clearConnection(true)
     setConnectionVersion(value => value + 1)
     setMessage('Backend disconnected. No credentials were persisted.')
   }
