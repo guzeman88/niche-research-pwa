@@ -13,8 +13,8 @@ from services.product_validation import digest
 
 def collect(keywords, output):
     normalized = list(dict.fromkeys(" ".join(value.lower().split()) for value in keywords if value.strip()))
-    if not 1 <= len(normalized) <= 500:
-        raise ValueError("Provide 1–500 buyer keywords")
+    if not 1 <= len(normalized) <= 2000:
+        raise ValueError("Provide 1–2000 buyer keywords")
     if output.exists():
         raise FileExistsError("Preserve previous evidence; choose a new output file")
     adapter = GoogleAdsKeywordPlannerAdapter()
