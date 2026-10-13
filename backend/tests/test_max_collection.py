@@ -141,3 +141,11 @@ def test_explicit_verification_can_bypass_queue_with_maximum_policy(research, mo
     monkeypatch.setattr(api.EtsyOpenAPIClient, 'search_listings', search)
     assert stage._run_etsy_open_api_search(['teacher mug'], lambda _msg: None) == []
     assert calls == ['teacher mug']
+
+
+def test_maximum_scheduler_does_not_wait_90_seconds_before_first_etsy_reply(research, monkeypatch):
+    from pipeline.autonomous_scheduler import AutonomousScheduler
+    monkeypatch.setenv('FEED_MAX_COLLECTION', '1')
+    monkeypatch.setenv('SCHEDULER_RESEARCH_ADAPTERS', 'etsy_open_api,google_suggest')
+    worker = AutonomousScheduler(mode='continuous', skip_scraper=False)
+    assert worker._scan_interval_seconds() == 1.0
