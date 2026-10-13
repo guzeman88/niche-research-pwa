@@ -139,6 +139,7 @@ def test_one_shot_batch_uses_same_quota_pacing_and_persistence(database, monkeyp
         "requested": 2,
         "selected": 2,
         "keywords_scanned": 2,
+        "deferred_reason": None,
         "new_seeds_found": 2,
         "discovery_seeds_added": 3,
         "last_progress_at": worker._last_progress_at,

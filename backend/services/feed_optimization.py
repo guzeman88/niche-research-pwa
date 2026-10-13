@@ -5,6 +5,7 @@ All seeds/history survive; only the active work allocation changes.
 """
 from datetime import datetime, timedelta, timezone
 import json
+import os
 import re
 
 PROVIDERS = {"etsy_open_api": 7, "google_suggest": 14, "google_ads_keyword_planner": 28}
@@ -117,9 +118,17 @@ def rebuild_candidates(con, focused=(), limit=500):
         candidates.append((keyword, priority, reasons, cluster))
     candidates.sort(key=lambda r: (-r[1], r[0]))
     # Keep a bounded active shortlist and a separate small exploration lane.
-    active_count = max(len(focus), max(1, min(int(limit), 2000)))
+    maximum = os.environ.get('FEED_MAX_COLLECTION') == '1'
+    active_count = max(len(focus), 10000 if maximum else max(1, min(int(limit), 2000)))
+    exploration_count = 1000 if maximum else 100
+    if maximum:
+        attempts = {r[0]: r[1] for r in con.execute("SELECT keyword,last_attempt_at FROM provider_keyword_state WHERE provider='etsy_open_api'")}
+        # Keep priority leaders; rotate the remaining slots through unseen/oldest phrases.
+        leaders = candidates[:max(len(focus), active_count // 4)]
+        remaining = sorted(candidates[len(leaders):], key=lambda r: (attempts.get(r[0], ''), -r[1], r[0]))
+        candidates = leaders + remaining
     con.execute('UPDATE feed_candidates SET tier="retained"')
-    for index, (keyword, priority, reasons, cluster) in enumerate(candidates[:active_count + 100]):
+    for index, (keyword, priority, reasons, cluster) in enumerate(candidates[:active_count + exploration_count]):
         con.execute('INSERT OR REPLACE INTO feed_candidates VALUES(?,?,?,?,?,?)',
                     (keyword, priority, 'active' if index < active_count else 'exploration', json.dumps(reasons), cluster, now.isoformat()))
     return min(len(candidates), active_count)
@@ -144,7 +153,15 @@ def next_batch(con, count, at=None):
             eligible = row['tier'] == 'exploration' if lane == 'exploration' else row['tier'] == 'active' and ((row['etsy_attempt'] is not None) == (lane == 'refresh'))
             if eligible and chosen < max(0, budget):
                 result.append(kw); chosen += 1
-    return result[:count]  # Unfilled lanes stay unfilled instead of defeating budgets.
+    if os.environ.get('FEED_MAX_COLLECTION') == '1':
+        # Preserve each lane's initial share, then lend idle capacity to eligible work.
+        for row in rows:
+            kw = row['keyword']
+            if kw not in result and any(provider_due(con, p, kw, at) for p in ('etsy_open_api', 'google_suggest')):
+                result.append(kw)
+            if len(result) >= count:
+                break
+    return result[:count]
 
 
 def coverage(con, at=None):

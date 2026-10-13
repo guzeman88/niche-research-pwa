@@ -15,7 +15,7 @@ def import_package(con, package, audit_attempts=True):
     if captured.tzinfo is None or captured > datetime.now(timezone.utc):
         raise ValueError('InvalidGoogleCaptureTime')
     sha = package['sha256']; provider = payload['source']; requested = payload['requested_keywords']
-    if not 1 <= len(requested) <= 50 or any(not isinstance(k, str) or len(k) > 100 for k in requested):
+    if not 1 <= len(requested) <= 500 or any(not isinstance(k, str) or len(k) > 100 for k in requested):
         raise ValueError('InvalidGoogleResearchKeywords')
     if con.execute('SELECT 1 FROM feed_google_packages WHERE sha256=?', (sha,)).fetchone():
         return {'duplicate': True, 'requested': len(requested)}

@@ -37,7 +37,7 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = Path(_os.environ.get("KEYWORD_DB_PATH", _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"))
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -343,6 +343,10 @@ def init_db() -> None:
             from services.feed_optimization import schema
             schema(con)
             _set_version(con, 18)
+        if version < 19:
+            from services.feed_request_budget import schema
+            schema(con)
+            _set_version(con, 19)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
 

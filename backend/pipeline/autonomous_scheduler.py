@@ -275,6 +275,7 @@ class AutonomousScheduler:
         selected_keywords: list[str] = []
         discovery_added = 0
         status = "completed"
+        deferred_reason = None
 
         try:
             if run_discovery:
@@ -301,6 +302,11 @@ class AutonomousScheduler:
                             status="running",
                         )
                 except Exception as exc:
+                    from services.feed_request_budget import CollectionDeferred
+                    if isinstance(exc, CollectionDeferred):
+                        self._log('Collection deferred at provider budget/backoff boundary')
+                        deferred_reason = 'provider_budget_or_backoff'
+                        break
                     if _is_durable_sync_error(exc):
                         raise
                     error = f"'{keyword}': {exc}"
@@ -346,6 +352,7 @@ class AutonomousScheduler:
             "requested": requested,
             "selected": len(selected_keywords),
             "keywords_scanned": self._keywords_scanned,
+            "deferred_reason": deferred_reason,
             "new_seeds_found": self._new_seeds_found,
             "discovery_seeds_added": discovery_added,
             "last_progress_at": self._last_progress_at,
