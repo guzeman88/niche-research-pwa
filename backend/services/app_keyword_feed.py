@@ -42,6 +42,8 @@ def supervisor_lock(path):
 
 def installation(root):
     value = json.loads((root / 'installation.json').read_text(encoding='utf-8'))
+    if value.get('scheduler_owner') != 'etgen_backend':
+        raise ValueError('FeedSchedulerOwnershipMismatch')
     code = Path(value['code_root']).resolve()
     python = Path(value['python']).resolve()
     if not code.is_relative_to((root / 'versions').resolve()) or python != (root / 'venv/Scripts/python.exe').resolve():

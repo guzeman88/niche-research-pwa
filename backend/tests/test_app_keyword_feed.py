@@ -11,7 +11,8 @@ def installed(tmp_path):
     python = tmp_path / 'venv/Scripts/python.exe'
     python.parent.mkdir(parents=True); python.write_text('')
     (tmp_path / 'installation.json').write_text(json.dumps({
-        'code_root': str(code), 'python': str(python), 'schedule_minutes': 15}))
+        'code_root': str(code), 'python': str(python), 'schedule_minutes': 15,
+        'scheduler_owner': 'etgen_backend'}))
 
 
 def test_app_tick_uses_start_to_start_cadence_and_keeps_pause_visible(tmp_path):
@@ -79,6 +80,16 @@ def test_default_off_and_mutually_exclusive_with_legacy_scanner(monkeypatch):
     monkeypatch.setenv('AUTO_START_SCHEDULER', '1')
     with pytest.raises(ValueError, match='ChooseOneCollectionScheduler'):
         feed.configured_worker()
+
+
+def test_old_external_scheduler_installation_cannot_be_claimed_by_app(tmp_path):
+    import pytest
+    installed(tmp_path)
+    value = json.loads((tmp_path / 'installation.json').read_text())
+    value.pop('scheduler_owner')
+    (tmp_path / 'installation.json').write_text(json.dumps(value))
+    with pytest.raises(ValueError, match='FeedSchedulerOwnershipMismatch'):
+        feed.installation(tmp_path)
 
 
 def test_shutdown_leaves_already_committing_cycle_intact(tmp_path):
