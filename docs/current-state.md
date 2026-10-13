@@ -1,4 +1,18 @@
-# October 13 maximum collection successor
+# October 13 app-owned collection successor
+
+Collection cadence now belongs to the EtGen backend lifecycle. The local installer
+explicitly enables `APP_KEYWORD_FEED_ENABLED`; hosted/unrelated API instances
+default off, and the legacy autonomous scanner stays disabled. The backend
+supervises the packaged EtGen project collector every 15 minutes, using exclusive
+ownership and its existing durable worker lock, daily budgets, pause and cooldowns.
+App health reports scheduler ownership and classified outcomes without paths or
+secrets. Shutdown leaves an already committing cycle intact. No Codex automation
+owns collection or demand checks; the Windows collection timer is disabled. The
+remaining Windows logon launcher only starts the app. Direct Etsy buyer demand
+requires seller reports/imports, not an assumed API. Read the root handoff for
+actual installed versions and live verification.
+
+# October 13 maximum collection predecessor
 
 The successor implements additive schema 19 with actual Etsy request accounting,
 compressed raw reply retention, bounded pagination, rotating broader candidates
