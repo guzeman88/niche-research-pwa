@@ -526,7 +526,7 @@ class AutonomousScheduler:
             self._queue_secondary_collection(keyword)
 
         # Gap analysis — runs after every scan to score the 6 gap types
-        if not self._skip_scraper and has_market_data:
+        if not self._skip_scraper and has_market_data and os.getenv("SCHEDULER_ANALYZE_GAPS", "1") != "0":
             try:
                 self._analyze_gaps(keyword, report)
             except Exception as e:
