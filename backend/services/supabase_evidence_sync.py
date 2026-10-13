@@ -7,6 +7,7 @@ import os
 import time
 from pathlib import Path
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -61,6 +62,10 @@ def require_collection_sync(run_id: str) -> dict:
     """Sync one run and make configured durability failures observable."""
     if os.getenv("REQUIRE_SUPABASE") == "1" and not is_configured():
         raise DurableEvidenceSyncError("Durable evidence storage is required but not configured")
+    if os.getenv('FEED_BATCHED_MIRROR') == '1' and os.getenv('EVIDENCE_DURABILITY_MODE') == 'local-outbox':
+        from pipeline import keyword_database as kdb
+        kdb.mark_evidence_collection_sync(run_id, 'pending')
+        return {'configured': is_configured(), 'status': 'pending', 'locally_preserved': True}
     result = sync_collection_run(run_id)
     if result.get("configured") and result.get("status") != "synced":
         # Explicit persistent-host mode: the transaction has already committed
@@ -79,22 +84,63 @@ def retry_collection_outbox(limit: int = 10) -> dict:
     """Replay committed runs; acknowledgements survive worker restarts."""
     from pipeline import keyword_database as kdb
     since = os.getenv("EVIDENCE_OUTBOX_SINCE", "")
+    batched = os.getenv('FEED_BATCHED_MIRROR') == '1' and os.getenv('EVIDENCE_DURABILITY_MODE') == 'local-outbox'
+    cap = 500 if batched else 100
+    terminal = "AND status != 'running' " if batched else ''
     with kdb._conn() as con:
         rows = con.execute(
             "SELECT id FROM evidence_collection_runs WHERE durable_sync_status != 'synced' AND id NOT LIKE 'bridge:%' AND started_at >= ? "
-            "ORDER BY started_at LIMIT ?", (since, max(1, min(limit, 100)))
+            + terminal + "ORDER BY started_at LIMIT ?", (since, max(1, min(limit, cap)))
         ).fetchall()
     synced, failed = 0, 0
-    for row in rows:
-        result = sync_collection_run(row["id"])
-        if result.get("status") == "synced":
-            synced += 1
+    for group in ([rows[i:i + 20] for i in range(0, len(rows), 20)] if batched else [[r] for r in rows]):
+        if batched:
+            result = sync_collection_runs([r['id'] for r in group])
         else:
-            failed += 1
+            result = sync_collection_run(group[0]['id'])
+        if result.get("status") == "synced":
+            synced += len(group)
+        else:
+            failed += len(group)
             break  # A host outage must not cause a long retry storm.
     with kdb._conn() as con:
         pending = con.execute("SELECT count(*) FROM evidence_collection_runs WHERE durable_sync_status != 'synced' AND id NOT LIKE 'bridge:%' AND started_at >= ?", (since,)).fetchone()[0]
     return {"synced": synced, "failed": failed, "pending": pending}
+
+
+def sync_collection_runs(run_ids):
+    """Idempotently mirror bounded committed groups; acknowledge only after all writes."""
+    from pipeline import keyword_database as kdb
+    tables = [('keyword_seeds', 'keyword'), ('evidence_collection_runs', 'id'),
+              ('keyword_sources', 'keyword,source'), ('keyword_observations', 'keyword,source,observed_at,metric'),
+              ('keyword_suggestions', 'source_suggestion_id'), ('keyword_trend_points', 'source_trend_point_id'),
+              ('keyword_listing_snapshots', 'source_listing_snapshot_id'), ('keyword_scans', 'source_scan_id'),
+              ('keyword_collection_state', 'keyword')]
+    if not is_configured():
+        return {'configured': False, 'status': 'not_configured'}
+    try:
+        payloads = {table: {} for table, _ in tables}
+        for identity in run_ids:
+            value = _payloads(identity)
+            for table, conflict in tables:
+                keys = conflict.split(',')
+                for row in value[table]:
+                    payloads[table][tuple(row.get(key) for key in keys)] = row
+        for table, conflict in tables:
+            _upsert(table, conflict, list(payloads[table].values()))
+        # Remote acknowledgement is also durable before the local ack. A lost
+        # response or interrupted partial group is safely replayed with stable IDs.
+        timestamp = datetime.now(timezone.utc).isoformat()
+        acknowledged = [{**row, 'durable_sync_status': 'synced', 'durable_synced_at': timestamp,
+                         'durable_sync_error': None} for row in payloads['evidence_collection_runs'].values()]
+        _upsert('evidence_collection_runs', 'id', acknowledged)
+        for identity in run_ids:
+            kdb.mark_evidence_collection_sync(identity, 'synced')
+        return {'configured': True, 'status': 'synced'}
+    except Exception as exc:
+        for identity in run_ids:
+            kdb.mark_evidence_collection_sync(identity, 'failed', type(exc).__name__)
+        return {'configured': True, 'status': 'failed', 'error': type(exc).__name__}
 
 
 def _payloads(run_id: str) -> dict[str, list[dict[str, Any]]]:
@@ -287,6 +333,9 @@ def _upsert(table: str, conflict: str, rows: list[dict[str, Any]]) -> None:
         return
     url = os.environ["SUPABASE_URL"].rstrip("/")
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    from services.collection_transport import transport
+    client = transport('mirror')
+    post = client.post if client is not None else httpx.post
     headers = {
         "apikey": key, "authorization": f"Bearer {key}",
         "content-type": "application/json",
@@ -299,7 +348,7 @@ def _upsert(table: str, conflict: str, rows: list[dict[str, Any]]) -> None:
         attempts = 1 if os.getenv("EVIDENCE_DURABILITY_MODE") == "local-outbox" else 8
         for attempt in range(attempts):
             try:
-                response = httpx.post(
+                response = post(
                     f"{url}/rest/v1/{table}",
                     params={"on_conflict": conflict},
                     headers=headers,

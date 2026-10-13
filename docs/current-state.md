@@ -1,4 +1,19 @@
-# October 13 app-owned collection successor
+# October 13 complete collection optimization successor
+
+The collector now pools provider/mirror connections, separates competition and
+discovery, prioritizes paired evidence, batches the persistent native outbox and
+reports phase timings and direct/shared coverage. Native one-shot runs can truly
+exceed the former hard 50-keyword cap; ephemeral runs retain it. Batched remote
+acknowledgement precedes local ack, and interrupted groups replay idempotently.
+Suggest incomplete/limited responses retain unknown/partial semantics and bounded
+source-specific backoff. The root orchestrator supports at most two 2,000-phrase
+Google jobs daily, with gated daily capacity up to 4,000, and allocates all useful
+free seller-report priority slots without redundant shared groups. Scheduling
+stays inside the app. See the canonical root handoff for exact installation,
+live timing, preserved data and free-limit verification; source changes alone
+do not change any installed service or public deployment.
+
+# October 13 app-owned collection predecessor
 
 Collection cadence now belongs to the EtGen backend lifecycle. The local installer
 explicitly enables `APP_KEYWORD_FEED_ENABLED`; hosted/unrelated API instances

@@ -16,6 +16,8 @@ def status():
             "last_completed": payload.get("completed_at"), "errors": payload.get("errors", []),
             "last_success": payload.get("last_success"),
             "bulk": {key: payload.get("bulk", {}).get(key) for key in ("status", "keywords_scanned", "mirror")},
+            'optimization': {key: payload.get('bulk', {}).get(key) for key in ('effective_batch_size', 'etsy_requests_in_batch', 'failed_etsy_requests', 'failed_discovery_attempts')},
+            'timings_seconds': {key: payload.get('bulk', {}).get('timings_seconds', {}).get(key) for key in ('setup', 'competition', 'discovery', 'mirror', 'total')},
             "coverage": _coverage(payload.get('bulk', {}).get('coverage', {})),
             "bridge": {key: payload.get('bulk', {}).get('bridge', {}).get(key) for key in ('status', 'imported_rows', 'pending_rows')},
             "marketplace_plan": {**{key: payload.get('marketplace_plan', {}).get(key) for key in ('status', 'weekly_free_limit')},
@@ -27,7 +29,7 @@ def status():
 
 
 def _coverage(value):
-    return {**{key: value.get(key) for key in ('window', 'as_of', 'library_keywords', 'active_keywords', 'exploration_keywords')},
+    return {**{key: value.get(key) for key in ('window', 'as_of', 'library_keywords', 'active_keywords', 'exploration_keywords', 'active_current_competition', 'active_google_monthly_direct', 'active_google_monthly_supported', 'active_paired_keywords')},
         'providers': [{key: row.get(key) for key in ('provider', 'attempts', 'unique_keywords', 'useful_attempts', 'empty_attempts', 'failed_attempts', 'repeated_attempts', 'entries')} for row in value.get('providers', [])],
         'candidate_preview': [{key: row.get(key) for key in ('keyword', 'competition_sample_current', 'google_demand_measured')} for row in value.get('candidate_preview', [])]}
 
