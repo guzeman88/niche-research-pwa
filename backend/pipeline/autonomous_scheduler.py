@@ -1017,6 +1017,10 @@ Make them specific, 2-5 words, realistic search phrases. No markdown, no explana
         configured = RATES.get(self._mode, 90)
         if self._mode != "continuous" or "etsy_open_api" not in _scheduler_research_adapters():
             return float(configured)
+        if os.environ.get('FEED_MAX_COLLECTION') == '1':
+            # Every actual Etsy page is paced and budgeted in the client. Cached
+            # or supporting-only keywords must not inherit a 90-second fallback.
+            return 1.0
         try:
             from adapters.research.etsy_open_api import recommended_request_interval_seconds
             provider_interval = recommended_request_interval_seconds()
