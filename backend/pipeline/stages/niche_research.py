@@ -112,6 +112,7 @@ class NicheReport:
     # ── Meta ──────────────────────────────────────────────────────────────────
     sources_used: list[str] = field(default_factory=list)
     report_id: str = ""
+    timings_seconds: dict = field(default_factory=dict)
 
     def save(self) -> Path:
         out_dir = WORKSPACE / self.store_slug / "_niche_research"
@@ -142,12 +143,15 @@ def run(
     _log = log_fn or (lambda msg: log.info(msg))
     _log(f"[niche_research] Starting research for: {seed_keywords}")
     t0 = time.time()
+    measured_at = time.monotonic()
+    timings = {}
 
     # ── Step 1: Etsy search scraper (real listing data) ───────────────────────
     keyword_search_data: list[KeywordSearchData] = []
     marketplace_source: str | None = None
     if not skip_scraper:
         keyword_search_data, marketplace_source = _run_scraper(seed_keywords, _log)
+    timings['marketplace'] = time.monotonic() - measured_at
 
     # ── Step 2: Signal adapters (autocomplete, trends, Reddit, eRank…) ────────
     adapters = _build_adapters(store_config, adapter_names, _log)
@@ -177,6 +181,7 @@ def run(
             )
             continue
         _log(f"[niche_research] {adapter.name}...")
+        adapter_started = time.monotonic()
         try:
             sigs = adapter.bulk_search(requested)
             all_signals.extend(sigs)
@@ -207,12 +212,14 @@ def run(
                 normalized = " ".join(requested_keyword.lower().split())
                 # Suggest returns child phrases, so any returned rows make the
                 # parent request useful even though their keywords differ.
-                useful = bool(sigs) if adapter.name == "google_suggest" else normalized in signal_keywords
+                parent_signals = [s for s in sigs if (s.metadata or {}).get('parent_keyword', requested_keyword) == requested_keyword]
+                useful = bool(parent_signals) if adapter.name == "google_suggest" else normalized in signal_keywords
+                outcome = getattr(adapter, 'keyword_outcomes', {}).get(requested_keyword, 'completed')
                 kdb.record_provider_keyword_attempt(
                     adapter.name,
                     normalized,
-                    status="completed" if useful else "no_data",
-                    row_count=(len(sigs) if adapter.name == "google_suggest" else int(useful)),
+                    status=('partial' if outcome == 'partial' else 'completed') if useful else 'no_data',
+                    row_count=(len(parent_signals) if adapter.name == "google_suggest" else int(useful)),
                 )
         except Exception as exc:
             _log(f"[niche_research] {adapter.name} error: {exc}")
@@ -235,6 +242,8 @@ def run(
                     row_count=0,
                     error=str(exc),
                 )
+        finally:
+            timings[adapter.name] = time.monotonic() - adapter_started
 
     if keyword_search_data and marketplace_source:
         sources_used.append(marketplace_source)
@@ -311,6 +320,7 @@ def run(
         entry_strategy=synthesis.get("entry_strategy", ""),
         sources_used=sources_used,
         report_id=f"rpt_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}",
+        timings_seconds=timings,
     )
 
     path = report.save()

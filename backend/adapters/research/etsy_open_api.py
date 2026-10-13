@@ -232,13 +232,18 @@ class EtsyOpenAPIError(RuntimeError):
 
 class EtsyOpenAPIClient:
     def __init__(self, timeout: float = 20.0):
-        self._client = httpx.Client(timeout=timeout, follow_redirects=True)
+        from services.collection_transport import transport
+        self._client = transport('etsy')
+        self._owns_client = self._client is None
+        if self._owns_client:
+            self._client = httpx.Client(timeout=timeout, follow_redirects=True)
 
     def is_configured(self) -> bool:
         return is_etsy_open_api_configured()
 
     def close(self) -> None:
-        self._client.close()
+        if self._owns_client:
+            self._client.close()
 
     def search_listings(self, keyword: str, limit: int = 50, *, pages: int = 1) -> EtsySearchResult:
         if not self.is_configured():

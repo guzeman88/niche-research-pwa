@@ -5,8 +5,10 @@ Replaces the broken Etsy autocomplete adapter.
 """
 from __future__ import annotations
 
-import json, time, random
+import json, time, random, os
+from contextlib import nullcontext
 from datetime import datetime, timezone
+from datetime import timedelta
 import httpx
 from adapters.base.research import BaseResearchAdapter, NicheSignal
 
@@ -23,6 +25,7 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
 
     def __init__(self, request_delay: float = 0.3):
         self._delay = request_delay
+        self.keyword_outcomes = {}
 
     @property
     def name(self) -> str:
@@ -47,7 +50,8 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
                 geography="US",
                 query=record["query"],
                 position=record["position"],
-                metadata={"surface": "shopping_suggest", "language": "en"},
+                metadata={"surface": "shopping_suggest", "language": "en", "parent_keyword": keyword,
+                          "capture_status": self.keyword_outcomes.get(keyword, 'completed')},
             ))
         return results
 
@@ -63,8 +67,15 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
 
     def _get_suggestion_records(self, keyword: str) -> list[dict]:
         """Fetch suggestions with the exact query and provider-returned position."""
+        from services.collection_transport import transport
+        shared = transport('suggest')
+        with nullcontext(shared) if shared is not None else httpx.Client(timeout=8) as client:
+            return self._records(keyword, client)
+
+    def _records(self, keyword, client):
         suggestions: list[dict] = []
         prefixes = ["", "etsy ", "custom ", "personalized "]
+        successful = 0
 
         for prefix in prefixes:
             try:
@@ -80,10 +91,16 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
                     "User-Agent": random.choice(_USER_AGENTS),
                     "Accept": "application/json",
                 }
-                r = httpx.get(_SUGGEST_URL, params=params, headers=headers, timeout=8)
+                r = client.get(_SUGGEST_URL, params=params, headers=headers, timeout=8)
+                r.raise_for_status()
                 if r.status_code == 200:
                     data = json.loads(r.text.replace("window.google.ac.h(", "").rstrip(")")) if "google.ac.h" in r.text else json.loads(r.text)
-                    items = data[1] if isinstance(data, list) and len(data) > 1 else []
+                    if not isinstance(data, list) or len(data) < 2:
+                        raise ValueError('InvalidSuggestResponse')
+                    items = data[1]
+                    if not isinstance(items, list):
+                        raise ValueError('InvalidSuggestResponse')
+                    successful += 1
                     for position, s in enumerate(items, start=1):
                         if isinstance(s, str):
                             clean = s.replace("etsy ", "").strip().lower()
@@ -93,9 +110,34 @@ class GoogleSuggestAdapter(BaseResearchAdapter):
                                     "suggestion": clean,
                                     "position": position,
                                 })
-                time.sleep(self._delay)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code in {429, 503}:
+                    if os.environ.get('FEED_MAX_COLLECTION') == '1':
+                        from pipeline import keyword_database as db
+                        from email.utils import parsedate_to_datetime
+                        retry = exc.response.headers.get('retry-after', '900')
+                        try:
+                            seconds = max(900, float(retry))
+                        except ValueError:
+                            try:
+                                seconds = max(900, (parsedate_to_datetime(retry) - datetime.now(timezone.utc)).total_seconds())
+                            except (ValueError, TypeError):
+                                seconds = 900
+                        due = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat()
+                        with db._conn() as con:
+                            con.execute('INSERT OR REPLACE INTO feed_provider_cooldowns VALUES(?,?,?,?,?)',
+                                        ('google_suggest', '__provider__', 0, 1, due))
+                    break
+                continue
             except Exception:
                 continue
+            finally:
+                time.sleep(self._delay)
+
+        if successful < len(prefixes) and not suggestions:
+            self.keyword_outcomes[keyword] = 'failed'
+            raise RuntimeError('SuggestIncompleteResponse')
+        self.keyword_outcomes[keyword] = 'completed' if successful == len(prefixes) else 'partial'
 
         # Dedup and limit
         # The same phrase often appears for several prefix queries.  Preserve

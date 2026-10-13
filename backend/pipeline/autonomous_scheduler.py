@@ -262,7 +262,8 @@ class AutonomousScheduler:
             raise RuntimeError("Cannot run a one-shot batch while the scheduler is running")
 
         requested = self._batch_size if batch_size is None else int(batch_size)
-        requested = max(1, min(requested, 50))
+        native = os.environ.get('FEED_MAX_COLLECTION') == '1' and os.environ.get('EVIDENCE_DURABILITY_MODE') == 'local-outbox'
+        requested = max(1, min(requested, 170 if native else 50))
         self._stop_event.clear()
         self._pause_event.set()
         self._keywords_scanned = 0
@@ -276,6 +277,7 @@ class AutonomousScheduler:
         discovery_added = 0
         status = "completed"
         deferred_reason = None
+        discovery_failures = 0
 
         try:
             if run_discovery:
@@ -286,6 +288,12 @@ class AutonomousScheduler:
                 stale_days=self._stale_days,
             )
             for index, keyword in enumerate(selected_keywords):
+                if os.environ.get('FEED_COLLECTION_LANE') == 'discovery':
+                    from services.feed_optimization import provider_available
+                    with kdb._conn() as con:
+                        if not provider_available(con, 'google_suggest'):
+                            deferred_reason = 'discovery_provider_backoff'
+                            break
                 scan_started = time.monotonic()
                 self._current_keyword = keyword
                 try:
@@ -294,6 +302,13 @@ class AutonomousScheduler:
                     self._consecutive_failures = 0
                     self._keywords_scanned += 1
                     self._new_seeds_found += new_seeds
+                    if os.environ.get('FEED_COLLECTION_LANE') == 'discovery':
+                        with kdb._conn() as con:
+                            outcome = con.execute("SELECT status FROM provider_keyword_state WHERE provider='google_suggest' AND keyword=?", (keyword,)).fetchone()
+                        discovery_failures = discovery_failures + 1 if outcome and outcome[0] == 'failed' else 0
+                        if discovery_failures >= 3:
+                            deferred_reason = 'discovery_transport_backoff'
+                            break
                     if self._run_id:
                         kdb.update_scheduler_run(
                             self._run_id,

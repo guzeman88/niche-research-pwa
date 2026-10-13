@@ -59,6 +59,8 @@ def record_attempt(con, provider, keyword, status, rows, timestamp):
 
 def provider_due(con, provider, keyword, at=None):
     at = at or datetime.now(timezone.utc)
+    if not provider_available(con, provider, at):
+        return False
     if provider == 'google_suggest':
         # The independent collector's immutable observations are imported,
         # while its mutable provider-state table is deliberately not copied.
@@ -74,6 +76,46 @@ def provider_due(con, provider, keyword, at=None):
         return True
     delay = timedelta(hours=2) if old['status'] == 'failed' else timedelta(days=PROVIDERS.get(provider, 14))
     return utc(old['last_attempt_at']) + delay <= at
+
+
+def provider_available(con, provider, at=None):
+    at = at or datetime.now(timezone.utc)
+    row = con.execute('SELECT next_due FROM feed_provider_cooldowns WHERE provider=? AND keyword=?', (provider, '__provider__')).fetchone()
+    return not row or utc(row[0]) <= at
+
+
+def due_keywords(con, provider, keywords, at):
+    """Read shared provider history once, rather than issuing queries per candidate."""
+    if not provider_available(con, provider, at):
+        return set()
+    states = {r['keyword']: r for r in con.execute('SELECT * FROM provider_keyword_state WHERE provider=?', (provider,))}
+    cooldowns = {r['keyword']: r['next_due'] for r in con.execute('SELECT keyword,next_due FROM feed_provider_cooldowns WHERE provider=?', (provider,))}
+    observed = {r[0]: r[1] for r in con.execute("SELECT parent_keyword,max(observed_at) FROM keyword_suggestions WHERE source='google_suggest' GROUP BY parent_keyword")} if provider == 'google_suggest' else {}
+    result = set()
+    for keyword in keywords:
+        if observed.get(keyword) and utc(observed[keyword]) <= at < utc(observed[keyword]) + timedelta(days=14):
+            continue
+        if keyword in cooldowns:
+            ready = utc(cooldowns[keyword]) <= at
+        elif keyword in states:
+            row = states[keyword]
+            ready = utc(row['last_attempt_at']) + (timedelta(hours=2) if row['status'] == 'failed' else timedelta(days=PROVIDERS.get(provider, 14))) <= at
+        else:
+            ready = True
+        if ready:
+            result.add(keyword)
+    return result
+
+
+def google_monthly_coverage(con, at=None):
+    at = at or datetime.now(timezone.utc)
+    direct = set(); shared = set()
+    for row in con.execute("SELECT keyword,metadata_json FROM keyword_observations WHERE source='google_ads_keyword_planner' AND metric='monthly_searches' AND observed_at>=? AND observed_at<=?", ((at - timedelta(days=28)).isoformat(), at.isoformat())):
+        direct.add(row[0]); shared.add(row[0])
+        metadata = json.loads(row[1] or '{}')
+        variants = metadata.get('close_variants', []) if isinstance(metadata, dict) else []
+        shared.update(v for v in variants if isinstance(v, str))
+    return direct, shared
 
 
 def rebuild_candidates(con, focused=(), limit=500):
@@ -144,11 +186,22 @@ def next_batch(con, count, at=None):
         LEFT JOIN provider_keyword_state p ON p.keyword=c.keyword AND p.provider='etsy_open_api'
         WHERE c.tier IN ('active','exploration') ORDER BY c.priority DESC,
         COALESCE(s.last_collected_at,''),c.keyword''').fetchall()
+    lane_mode = os.environ.get('FEED_COLLECTION_LANE')
+    providers = ('etsy_open_api',) if lane_mode == 'competition' else ('google_suggest',) if lane_mode == 'discovery' else ('etsy_open_api', 'google_suggest')
+    ready = set().union(*(due_keywords(con, p, [r['keyword'] for r in rows], at) for p in providers))
+    if os.environ.get('FEED_MAX_COLLECTION') == '1':
+        _, measured = google_monthly_coverage(con, at)
+        samples = {r[0] for r in con.execute('SELECT DISTINCT keyword FROM keyword_listing_snapshots WHERE observed_at>=?', ((at - timedelta(days=7)).isoformat(),))}
+        rows.sort(key=lambda r: (0 if r['priority'] >= 100 else 1,
+                                0 if r['keyword'] in (samples if lane_mode == 'discovery' else measured) else 1,
+                                -r['priority'], r['last_collected_at'] or '', r['keyword']))
     for lane, budget in budgets:
         chosen = 0
         for row in rows:
+            if chosen >= budget:
+                break
             kw = row['keyword']
-            if kw in result or not any(provider_due(con, provider, kw, at) for provider in ('etsy_open_api', 'google_suggest')):
+            if kw in result or kw not in ready:
                 continue
             eligible = row['tier'] == 'exploration' if lane == 'exploration' else row['tier'] == 'active' and ((row['etsy_attempt'] is not None) == (lane == 'refresh'))
             if eligible and chosen < max(0, budget):
@@ -157,7 +210,7 @@ def next_batch(con, count, at=None):
         # Preserve each lane's initial share, then lend idle capacity to eligible work.
         for row in rows:
             kw = row['keyword']
-            if kw not in result and any(provider_due(con, p, kw, at) for p in ('etsy_open_api', 'google_suggest')):
+            if kw not in result and kw in ready:
                 result.append(kw)
             if len(result) >= count:
                 break
@@ -176,6 +229,9 @@ def coverage(con, at=None):
         value = dict(row); value['repeated_attempts'] = value['attempts'] - value['unique_keywords']; providers.append(value)
     sample_cutoff = (at - timedelta(days=7)).isoformat()
     google_cutoff = (at - timedelta(days=28)).isoformat()
+    active = {r[0] for r in con.execute("SELECT keyword FROM feed_candidates WHERE tier='active'")}
+    samples = {r[0] for r in con.execute('SELECT DISTINCT keyword FROM keyword_listing_snapshots WHERE observed_at>=?', (sample_cutoff,))}
+    direct, shared = google_monthly_coverage(con, at)
     preview = []
     for row in con.execute("SELECT keyword,priority,cluster FROM feed_candidates WHERE tier='active' ORDER BY priority DESC,keyword LIMIT 10"):
         value = dict(row)
@@ -186,5 +242,9 @@ def coverage(con, at=None):
             'library_keywords': con.execute('SELECT count(*) FROM seeds').fetchone()[0],
             'active_keywords': con.execute("SELECT count(*) FROM feed_candidates WHERE tier='active'").fetchone()[0],
             'exploration_keywords': con.execute("SELECT count(*) FROM feed_candidates WHERE tier='exploration'").fetchone()[0],
+            'active_current_competition': len(active & samples),
+            'active_google_monthly_direct': len(active & direct),
+            'active_google_monthly_supported': len(active & shared),
+            'active_paired_keywords': len(active & samples & shared),
             'candidate_preview': preview,
             'notes': ['Priority is a research heuristic, not a profit forecast.', 'Imported history is separate from new native attempts.', 'Suggestion entries and overlapping keyword demand are not additive sales demand.']}
