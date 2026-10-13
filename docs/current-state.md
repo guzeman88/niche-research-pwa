@@ -2,7 +2,7 @@
 
 The successor implements additive schema 19 with actual Etsy request accounting,
 compressed raw reply retention, bounded pagination, rotating broader candidates
-and 500-phrase Google packages. The root orchestrator controls hourly ramps,
+and up to 2,000-phrase Google packages. The root orchestrator controls hourly ramps,
 rolling budgets, pauses and installation. Read the canonical handoff and the
 successor section of `docs/keyword-evidence-optimization.md` in the desktop repo
 for actual installed commits and dated proof. No source merge deploys the public

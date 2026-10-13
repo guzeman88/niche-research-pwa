@@ -84,16 +84,17 @@ def test_paginated_samples_deduplicate_and_keep_success_before_defer(monkeypatch
     finally: client.close()
 
 
-def test_google_500_keyword_package_is_atomic_and_idempotent(research):
-    keywords = [f'teacher mug {i}' for i in range(500)]
+@pytest.mark.parametrize('size', [500, 2000])
+def test_google_large_keyword_package_is_atomic_and_idempotent(research, size):
+    keywords = [f'teacher mug {i}' for i in range(size)]
     payload = {'schema_version': 1, 'source': 'google_ads_keyword_planner',
                'collected_at': datetime.now(timezone.utc).isoformat(), 'requested_keywords': keywords,
                'signals': [{'keyword': k, 'monthly_searches': None, 'metadata': {}} for k in keywords]}
     package = {'payload': payload, 'sha256': digest(payload)}
     with research._conn() as con:
-        assert import_package(con, package)['requested'] == 500
+        assert import_package(con, package)['requested'] == size
         assert import_package(con, package)['duplicate']
-        assert con.execute('SELECT count(*) FROM feed_provider_attempts').fetchone()[0] == 500
+        assert con.execute('SELECT count(*) FROM feed_provider_attempts').fetchone()[0] == size
         assert con.execute('SELECT count(*) FROM keyword_observations').fetchone()[0] == 0
 
 
