@@ -230,6 +230,14 @@ class EtsyOpenAPIError(RuntimeError):
     """Raised when Etsy Open API credentials or requests fail."""
 
 
+def paced_request_interval_seconds(quota):
+    qps = quota.get('limit_per_second')
+    interval = 1.0 / (qps * .8) if qps and qps > 0 else 1.0
+    if quota.get('remaining_this_second') == 0:
+        interval = max(1.0, interval)
+    return interval
+
+
 class EtsyOpenAPIClient:
     def __init__(self, timeout: float = 20.0):
         from services.collection_transport import transport
@@ -315,7 +323,7 @@ class EtsyOpenAPIClient:
             identity = start_request(etsy_rate_limit_snapshot())
             # Enforce QPS on every page, not only between keyword scans.
             quota = etsy_rate_limit_snapshot()
-            time.sleep(max(1.0, 1.0 / (quota.get('limit_per_second') or 1)))
+            time.sleep(paced_request_interval_seconds(quota))
         try:
             resp = self._client.get(f"{_BASE_URL}{path}", params=params, headers=headers)
         except httpx.HTTPError:

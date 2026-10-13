@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -128,7 +129,9 @@ def record_provider_attempt(
         "prefer": "resolution=merge-duplicates,return=minimal",
     }
     try:
-        with httpx.Client(timeout=15) as client:
+        from services.collection_transport import transport
+        shared = transport('mirror')
+        with nullcontext(shared) if shared is not None else httpx.Client(timeout=15) as client:
             event_response = client.post(
                 f"{url}/rest/v1/provider_collection_events",
                 headers=headers,

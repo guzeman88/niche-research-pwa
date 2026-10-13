@@ -138,3 +138,34 @@ def test_shared_google_variants_count_coverage_without_copying_volume(research):
         direct, shared = opt.google_monthly_coverage(con)
         assert direct == {'teacher mug'} and shared == {'teacher mug', 'teacher mugs'}
         assert con.execute("SELECT count(*) FROM keyword_observations WHERE metric='monthly_searches'").fetchone()[0] == 1
+
+
+def test_separate_lanes_never_inherit_legacy_ninety_second_delay(monkeypatch):
+    monkeypatch.setenv('FEED_MAX_COLLECTION', '1')
+    monkeypatch.setenv('FEED_COLLECTION_LANE', 'discovery')
+    monkeypatch.setenv('SCHEDULER_RESEARCH_ADAPTERS', 'google_suggest')
+    worker = AutonomousScheduler(mode='continuous', skip_scraper=True)
+    assert worker._scan_interval_seconds() == 1.0
+    monkeypatch.setenv('FEED_COLLECTION_LANE', 'competition')
+    assert worker._scan_interval_seconds() == 0.0
+
+
+def test_actual_page_pacing_uses_observed_qps_and_keeps_headroom():
+    from adapters.research.etsy_open_api import paced_request_interval_seconds
+    assert paced_request_interval_seconds({'limit_per_second':5,'remaining_this_second':4}) == .25
+    assert paced_request_interval_seconds({'limit_per_second':5,'remaining_this_second':0}) == 1
+    assert paced_request_interval_seconds({}) == 1
+    assert paced_request_interval_seconds({'limit_per_second':1}) >= 1
+
+
+def test_provider_telemetry_uses_existing_mirror_pool(monkeypatch):
+    from services.provider_telemetry import record_provider_attempt
+    calls = []
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: calls.append(r.url.path) or httpx.Response(201)))
+    monkeypatch.setattr(pool, 'transport', lambda _name: client)
+    monkeypatch.setenv('SUPABASE_URL', 'http://127.0.0.1:18000')
+    monkeypatch.setenv('SUPABASE_SERVICE_ROLE_KEY', 'test-only')
+    record_provider_attempt(provider='etsy_open_api',operation='search',status='completed',
+                            started_at=datetime.now(timezone.utc),keyword_count=1,row_count=100)
+    assert len(calls) == 2 and not client.is_closed
+    client.close()
