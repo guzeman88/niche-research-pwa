@@ -11,7 +11,12 @@ export interface ValidationProject {
   outcomes: {status: string; periods: number; contribution: number | null; net_profit: number | null; currencies: string[]; revenue: number | null; orders: number | null; visits: number | null; conversion_pct: number | null}
   records: ValidationRecord[]; input_fingerprint: string; model_version: string
 }
-export interface ValidationOverview {projects: ValidationProject[]; pending_sync: number; model_version: string; feed_status?: {status: string; last_attempt?: string | null; last_completed?: string | null; last_success?: string | null; errors?: string[]; bulk?: {mirror?: {pending: number} | null}}}
+export interface FeedCoverage {
+  as_of?: string; library_keywords?: number; active_keywords?: number; exploration_keywords?: number
+  providers?: Array<{provider: string; attempts: number; unique_keywords: number; useful_attempts: number; empty_attempts: number; failed_attempts: number; repeated_attempts: number; entries: number}>
+  candidate_preview?: Array<{keyword: string; competition_sample_current: boolean; google_demand_measured: boolean}>
+}
+export interface ValidationOverview {projects: ValidationProject[]; pending_sync: number; model_version: string; feed_status?: {status: string; last_attempt?: string | null; last_completed?: string | null; last_success?: string | null; errors?: string[]; bulk?: {mirror?: {pending: number} | null}; coverage?: FeedCoverage; bridge?: {status?: string; imported_rows?: number; pending_rows?: number}; marketplace_plan?: {status?: string; weekly_free_limit?: number; suggestions?: Array<{keyword: string; lane: string}>}}}
 export const validationRequest = <T,>(path = '', body?: unknown) => operatorRequest<T>(`/api/product-validation${path}`, body)
 export function values(form: HTMLFormElement): Record<string, string> {
   return Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, String(value)]))

@@ -37,7 +37,7 @@ _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.
 DB_PATH = Path(_os.environ.get("KEYWORD_DB_PATH", _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"))
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -339,6 +339,10 @@ def init_db() -> None:
         if version < 17:
             _migrate_v17(con)
             _set_version(con, 17)
+        if version < 18:
+            from services.feed_optimization import schema
+            schema(con)
+            _set_version(con, 18)
     if rebuild_scores_after_migration:
         rebuild_gap_scores()
 
@@ -1918,6 +1922,8 @@ def record_provider_keyword_attempt(
             clean_provider, normalized, timestamp, success_at, status,
             max(0, int(row_count)), str(error)[:2000] if error else None,
         ))
+        from services.feed_optimization import record_attempt
+        record_attempt(con, clean_provider, normalized, status, row_count, timestamp)
 
 
 def get_provider_keyword_coverage(provider: str, *, hours: int = 24) -> dict:
@@ -2040,6 +2046,10 @@ def get_profit_evidence_gaps(limit: int = 20, min_age_hours: int = 12) -> list[s
 
 def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
     """Smart batch: evidence refresh plus protected new-niche discovery lanes."""
+    if _os.environ.get('FEED_OPTIMIZED_QUEUE') == '1':
+        from services.feed_optimization import next_batch
+        with _conn() as con:
+            return next_batch(con, count)
     result: list[str] = []
     seen: set[str] = set()
 
@@ -2070,7 +2080,7 @@ def get_next_batch(count: int = 10, stale_days: int = 30) -> list[str]:
                 seen.add(kw)
 
     evidence_budget = max(1, min(count, count // 4 or 1))
-    _add(get_profit_evidence_gaps(limit=max(25, evidence_budget * 10)))
+    _add(get_profit_evidence_gaps(limit=max(25, evidence_budget * 10))[:evidence_budget])
 
     remaining = count - len(result)
     if remaining > 0:

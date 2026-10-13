@@ -35,7 +35,7 @@ from services.provider_telemetry import record_provider_attempt as _record_provi
 log = logging.getLogger(__name__)
 
 ROOT      = Path(__file__).parent.parent.parent
-WORKSPACE = ROOT / "workspace"
+WORKSPACE = Path(os.environ.get('BACKEND_DIR', ROOT)) / "workspace"
 
 
 # ── Data models ───────────────────────────────────────────────────────────────
@@ -158,6 +158,14 @@ def run(
         # signal adapter too would spend a second Etsy request for the same query.
         if adapter.name == "etsy_open_api":
             continue
+        requested = seed_keywords
+        if os.environ.get('FEED_OPTIMIZED_QUEUE') == '1':
+            from pipeline import keyword_database as kdb
+            from services.feed_optimization import provider_due
+            with kdb._conn() as con:
+                requested = [kw for kw in seed_keywords if provider_due(con, adapter.name, kw)]
+            if not requested:
+                continue
         started_at = datetime.now(timezone.utc)
         if not adapter.is_configured():
             _log(f"[niche_research] Skipping {adapter.name} - not configured")
@@ -169,7 +177,7 @@ def run(
             continue
         _log(f"[niche_research] {adapter.name}...")
         try:
-            sigs = adapter.bulk_search(seed_keywords)
+            sigs = adapter.bulk_search(requested)
             all_signals.extend(sigs)
             if sigs:
                 sources_used.append(adapter.name)
@@ -194,7 +202,7 @@ def run(
             signal_keywords = {
                 str(signal.keyword).strip().lower() for signal in sigs if signal.keyword
             }
-            for requested_keyword in seed_keywords:
+            for requested_keyword in requested:
                 normalized = " ".join(requested_keyword.lower().split())
                 # Suggest returns child phrases, so any returned rows make the
                 # parent request useful even though their keywords differ.
@@ -218,7 +226,7 @@ def run(
                 },
             )
             from pipeline import keyword_database as kdb
-            for requested_keyword in seed_keywords:
+            for requested_keyword in requested:
                 kdb.record_provider_keyword_attempt(
                     adapter.name,
                     requested_keyword,
@@ -417,6 +425,14 @@ def _run_etsy_open_api_search(
     results: list[KeywordSearchData] = []
     errors: list[str] = []
     targets = keywords[:5]
+    if os.environ.get('FEED_OPTIMIZED_QUEUE') == '1':
+        from pipeline import keyword_database as kdb
+        from services.feed_optimization import provider_due
+        with kdb._conn() as con:
+            targets = [kw for kw in targets if provider_due(con, 'etsy_open_api', kw)]
+        if not targets:
+            client.close()
+            return []
     log_fn(f"[niche_research] Fetching Etsy Open API listing evidence for: {targets}")
     try:
         for kw in targets:

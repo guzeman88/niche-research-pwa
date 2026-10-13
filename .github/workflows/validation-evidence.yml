@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       keywords:
-        description: Up to 15 comma-separated buyer keywords from the validation queue
+        description: Up to 50 comma-separated buyer keywords from validation or the research shortlist
         required: true
         type: string
       request_id:
