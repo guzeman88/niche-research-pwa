@@ -14,9 +14,11 @@ on:
           - full
           - metrics-only
         default: full
-  schedule:
-    - cron: '17 */4 * * *'
-    - cron: '41 3 1 * *'
+      legacy_hosted_recovery:
+        description: Explicitly run the preserved legacy hosted collector for recovery
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -24,6 +26,7 @@ permissions:
 
 jobs:
   ensure-collector:
+    if: ${{ inputs.legacy_hosted_recovery == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 210
     concurrency:
@@ -119,7 +122,7 @@ jobs:
         run: python backend/scripts/run_evidence_batch.py --batch-size "$SCHEDULED_BATCH_SIZE"
 
   google-keyword-validation:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 1 * *' }}
+    if: ${{ inputs.legacy_hosted_recovery == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 210
     concurrency:
