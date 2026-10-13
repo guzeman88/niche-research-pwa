@@ -1,3 +1,13 @@
+# October 13 collection optimization
+
+The native feed now supports an additive schema-18 research shortlist, enforced
+lane budgets, provider cooldowns, an incremental read-only original collector
+bridge and atomic broader Google imports. The private Collection feed UI shows
+recorded daily useful coverage and evidence gaps. See the desktop repository's
+`docs/keyword-evidence-optimization.md` and dated `docs/CURRENT_STATE.md` for the
+policy, verified installation and remaining runtime/public boundaries. Original
+research, private validation and public snapshots keep their existing authorities.
+
 # Continuation entry point
 
 Updated October 13, 2026. The canonical cross-repository operational handoff is

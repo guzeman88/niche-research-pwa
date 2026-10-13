@@ -275,6 +275,13 @@ class EtsyOpenAPIClient:
         return _listing_detail_from_api(str(listing_id), row)
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if os.environ.get('FEED_OPTIMIZED_QUEUE') == '1':
+            quota = etsy_rate_limit_snapshot()
+            daily = quota.get('limit_per_day'); remaining = quota.get('remaining_today')
+            if daily and remaining is not None and remaining <= daily * .2:
+                raise EtsyOpenAPIError('Etsy rolling quota reserve reached; defer collection')
+            if quota.get('retry_after_until') and quota['retry_after_until'] > time.time():
+                raise EtsyOpenAPIError('Etsy provider requested backoff; defer collection')
         headers = {"x-api-key": _api_key_header(), "accept": "application/json"}
         oauth_token = os.getenv("ETSY_OAUTH_TOKEN", "").strip()
         if oauth_token:

@@ -81,7 +81,7 @@ def retry_collection_outbox(limit: int = 10) -> dict:
     since = os.getenv("EVIDENCE_OUTBOX_SINCE", "")
     with kdb._conn() as con:
         rows = con.execute(
-            "SELECT id FROM evidence_collection_runs WHERE durable_sync_status != 'synced' AND started_at >= ? "
+            "SELECT id FROM evidence_collection_runs WHERE durable_sync_status != 'synced' AND id NOT LIKE 'bridge:%' AND started_at >= ? "
             "ORDER BY started_at LIMIT ?", (since, max(1, min(limit, 100)))
         ).fetchall()
     synced, failed = 0, 0
@@ -93,7 +93,7 @@ def retry_collection_outbox(limit: int = 10) -> dict:
             failed += 1
             break  # A host outage must not cause a long retry storm.
     with kdb._conn() as con:
-        pending = con.execute("SELECT count(*) FROM evidence_collection_runs WHERE durable_sync_status != 'synced' AND started_at >= ?", (since,)).fetchone()[0]
+        pending = con.execute("SELECT count(*) FROM evidence_collection_runs WHERE durable_sync_status != 'synced' AND id NOT LIKE 'bridge:%' AND started_at >= ?", (since,)).fetchone()[0]
     return {"synced": synced, "failed": failed, "pending": pending}
 
 
