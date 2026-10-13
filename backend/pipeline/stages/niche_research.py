@@ -440,6 +440,7 @@ def _run_etsy_open_api_search(
             try:
                 pages = 1
                 if os.environ.get('FEED_MAX_COLLECTION') == '1':
+                    from pipeline import keyword_database as kdb
                     with kdb._conn() as con:
                         leaders = [r[0] for r in con.execute("SELECT keyword FROM feed_candidates WHERE tier='active' ORDER BY priority DESC,keyword LIMIT 20")]
                     pages = 3 if kw in leaders else 1

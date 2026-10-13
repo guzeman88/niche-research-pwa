@@ -124,3 +124,20 @@ def test_raw_response_archive_retains_exact_values(research):
         assert json.loads(gzip.decompress(row['response_gzip'])) == raw
         assert json.loads(row['request_json'])['params']['offset'] == 100
         assert con.execute('SELECT max(version) FROM schema_version').fetchone()[0] == 19
+
+
+def test_explicit_verification_can_bypass_queue_with_maximum_policy(research, monkeypatch):
+    from adapters.research import etsy_open_api as api
+    from adapters.research.etsy_search_scraper import EtsySearchResult
+    from pipeline.stages import niche_research as stage
+    monkeypatch.setenv('FEED_MAX_COLLECTION', '1')
+    monkeypatch.setenv('FEED_OPTIMIZED_QUEUE', '0')
+    monkeypatch.setattr(api, 'is_etsy_open_api_configured', lambda: True)
+    monkeypatch.setattr(stage, '_record_provider_attempt', lambda **_kw: None)
+    calls = []
+    def search(_self, keyword, limit=100, **_kw):
+        calls.append(keyword)
+        return EtsySearchResult(keyword=keyword, total_listing_count=0)
+    monkeypatch.setattr(api.EtsyOpenAPIClient, 'search_listings', search)
+    assert stage._run_etsy_open_api_search(['teacher mug'], lambda _msg: None) == []
+    assert calls == ['teacher mug']
