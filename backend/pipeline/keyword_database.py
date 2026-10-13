@@ -1586,10 +1586,15 @@ def save_scan(keyword: str, report) -> None:
                 sources_json=excluded.sources_json,
                 last_run_id=excluded.last_run_id,
                 updated_at=excluded.updated_at
+            WHERE NOT (? AND excluded.evidence_status != 'verified'
+                AND keyword_collection_state.evidence_status='verified'
+                AND keyword_collection_state.last_collected_at >= ?)
         """, (
             kw, now, evidence_status, metrics.get("listing_count"),
             metrics.get("sampled_listings"), metrics.get("avg_price_usd"),
             json.dumps(sources), collection_run_id, now,
+            _os.environ.get('FEED_OPTIMIZED_QUEUE') == '1',
+            (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(),
         ))
         _record_scan_observations(con, kw, now, metrics, sources, collection_run_id)
 
