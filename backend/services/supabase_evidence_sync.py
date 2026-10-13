@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 import time
+from pathlib import Path
+import uuid
 from typing import Any
 
 import httpx
@@ -195,9 +197,22 @@ def _scan_row(row):
 def sync_native_scan_history(after_id):
     """Idempotently catch up summaries collected before this mirror was installed."""
     from pipeline import keyword_database as kdb
+    checkpoint = kdb.DB_PATH.parent / 'native-scan-mirror.json'
+    namespace = os.environ['EVIDENCE_SCAN_NAMESPACE']
+    if checkpoint.exists():
+        previous = json.loads(checkpoint.read_text(encoding='utf-8'))
+        if previous.get('namespace') != namespace:
+            raise ValueError('Scan mirror origin changed; review the preserved checkpoint')
+        after_id = max(after_id, int(previous['last_ack_id']))
     with kdb._conn() as con:
         rows = [dict(r) for r in con.execute('SELECT * FROM scans WHERE id>? ORDER BY id', (after_id,))]
     _upsert('keyword_scans', 'source_scan_id', [_scan_row(r) for r in rows])
+    # Advance only after every chunk was acknowledged. Partial failures replay
+    # the same stable IDs, without losing rows or repeating all history forever.
+    if rows:
+        temporary = checkpoint.with_name(checkpoint.name + '.' + uuid.uuid4().hex + '.tmp')
+        temporary.write_text(json.dumps({'namespace': namespace, 'last_ack_id': rows[-1]['id']}), encoding='utf-8')
+        os.replace(temporary, checkpoint)
     return len(rows)
 
 
