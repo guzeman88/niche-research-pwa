@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import ValidationForms, { CreateValidation } from '../components/ValidationForms'
 import ValidationEvidence from '../components/ValidationEvidence'
+import KeywordFeedStatus from '../components/KeywordFeedStatus'
 import { readConnection, saveConnection } from '../lib/operatorConnection'
 import { display, download, label, validationRequest } from '../lib/productValidation'
 import type { ValidationOverview } from '../lib/productValidation'
@@ -12,7 +13,7 @@ export default function ProductValidation() {
   const [url, setUrl] = useState(initial.url || (['localhost', '127.0.0.1'].includes(location.hostname) ? 'http://127.0.0.1:18020' : ''))
   const [token, setToken] = useState(initial.token), [connected, setConnected] = useState(Boolean(initial.url))
   const [version, setVersion] = useState(0), [selected, setSelected] = useState(''), [message, setMessage] = useState('')
-  const query = useQuery<ValidationOverview>({queryKey: ['product-validation', version], queryFn: () => validationRequest(), enabled: connected, retry: false})
+  const query = useQuery<ValidationOverview>({queryKey: ['product-validation', version], queryFn: () => validationRequest(), enabled: connected, retry: false, refetchInterval: 60000})
   const refresh = async () => {await query.refetch()}
   const current = query.data?.projects.find(project => project.id === selected) || query.data?.projects[0]
   return <main className="page min-h-screen bg-surface-950 text-surface-50">
@@ -28,6 +29,7 @@ export default function ProductValidation() {
     {query.error && <div role="alert" className="my-4 space-y-3"><p>{query.error.message}</p><button className="btn-secondary" onClick={() => void refresh()}>Retry connection</button></div>}
     {message && <p className="my-4 text-sm" role="status">{message}</p>}
     {query.data && <>
+      <KeywordFeedStatus feed={query.data.feed_status} project={current} />
       <div className="my-6 flex flex-wrap items-center gap-3"><span className="text-sm text-surface-200">{query.data.pending_sync} records awaiting database mirror</span>
         <button className="btn-secondary" onClick={async () => {try {const result = await validationRequest<{pending: number; configured: boolean}>('/sync', {}); setMessage(result.configured ? `${result.pending} records still awaiting mirror. Local saves remain available.` : 'Database mirror is not configured. Local records remain saved.'); await refresh()} catch (error) {setMessage(String(error))}}}>Retry backup sync</button>
         <button className="btn-secondary" onClick={async () => {try {const ledger = await validationRequest('/export'); download('product-validation-ledger.json', JSON.stringify(ledger, null, 2)); setMessage('Export downloaded. It contains private research and cost records; store it securely.')} catch (error) {setMessage(String(error))}}}>Export evidence ledger</button>

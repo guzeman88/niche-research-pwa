@@ -135,7 +135,8 @@ def run(
 ) -> NicheReport:
     """
     Full niche research pipeline.
-    skip_scraper=True skips the Etsy HTML scraper (useful for fast testing).
+    skip_scraper=True skips all Etsy marketplace collection (fast tests only).
+    For API-only operation keep it False and disable ETSY_HTML_SCRAPER_ENABLED.
     """
     _log = log_fn or (lambda msg: log.info(msg))
     _log(f"[niche_research] Starting research for: {seed_keywords}")

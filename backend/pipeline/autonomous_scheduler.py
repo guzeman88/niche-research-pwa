@@ -33,7 +33,7 @@ from typing import Callable, Optional
 
 from pipeline import keyword_database as kdb
 
-STATE_FILE = Path(__file__).parent.parent / "workspace/_keyword_db/scheduler_state.json"
+STATE_FILE = kdb.DB_PATH.parent / "scheduler_state.json"
 
 # Rates: how long to sleep between each keyword scan (seconds)
 RATES = {
@@ -526,7 +526,7 @@ class AutonomousScheduler:
             self._queue_secondary_collection(keyword)
 
         # Gap analysis — runs after every scan to score the 6 gap types
-        if not self._skip_scraper and has_market_data:
+        if not self._skip_scraper and has_market_data and os.getenv("SCHEDULER_ANALYZE_GAPS", "1") != "0":
             try:
                 self._analyze_gaps(keyword, report)
             except Exception as e:

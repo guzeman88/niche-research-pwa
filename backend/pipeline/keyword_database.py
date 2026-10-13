@@ -34,7 +34,7 @@ from typing import Optional
 # Paths resolved relative to the backend/ directory
 import os as _os
 _BACKEND_DIR = Path(_os.environ.get("BACKEND_DIR", Path(__file__).parent.parent.resolve()))
-DB_PATH = _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"
+DB_PATH = Path(_os.environ.get("KEYWORD_DB_PATH", _BACKEND_DIR / "workspace/_keyword_db/keywords.sqlite"))
 SEED_PATH = _BACKEND_DIR / "config/seed_keywords.json"
 SEED_DB_PATH = _BACKEND_DIR / "seed_data/_keyword_db/keywords.sqlite"
 SCHEMA_VERSION = 17

@@ -317,6 +317,7 @@ def outcomes_summary(rows):
 
 
 def summary(project_id):
+    from services.keyword_feed_status import freshness
     concept = project(project_id)
     rows = records(project_id)
     market = [row["payload"] for row in rows if row["kind"] == "market"]
@@ -355,6 +356,7 @@ def summary(project_id):
         if economics and (today() - date.fromisoformat(economics["observed_at"])).days > MAX_AGE_DAYS:
             blockers.append("Refresh product cost evidence")
         queue.append({"keyword": keyword, "market": latest, "sample_count": listing_count, "sample_age_days": sample_age,
+            "sources": freshness(rows, keyword),
             "market_age_days": market_age, "status": "ready_to_test" if not blockers else "needs_evidence", "blockers": blockers,
             "distinct_sample_shops": len({row["shop_id"] for row in latest_samples["listings"]}) if latest_samples else 0})
     outcomes = outcomes_summary([row["payload"] for row in rows if row["kind"] == "outcome"])
@@ -531,9 +533,11 @@ def collect_etsy(project_id, keyword):
             rows.append({"listing_id": str(row.get("listing_id") or ""), "shop_id": str(row.get("shop_id") or ""),
                 "title": row.get("title"), "price": float(money["amount"]) / float(money["divisor"]),
                 "currency": money["currency_code"], "shipping": None})
+        # Preserve the unfiltered provider response before validation/normalizing
+        # samples, including successful empty responses and malformed currencies.
+        put("etsy_raw", project_id, {"keyword": keyword, "collected_at": stamp(), "response": raw})
         saved = save_competitors(project_id, {"keyword": keyword, "observed_at": today().isoformat(),
             "source": "etsy_open_api", "listings": rows, "filters": "keywords; score descending; first 50 API results; relevance requires review"})
-        put("etsy_raw", project_id, {"keyword": keyword, "collected_at": stamp(), "response": raw})
         return {**saved, "sampled": len(rows), "provider_listing_count": raw.get("count"), "project": summary(project_id)}
     except (EtsyOpenAPIError, httpx.HTTPError) as exc:
         raise ValueError("Etsy collection failed: " + type(exc).__name__ + "; existing evidence is preserved") from exc
