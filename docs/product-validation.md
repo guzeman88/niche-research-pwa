@@ -1,5 +1,8 @@
 # Product validation
 
+Read [current-state.md](current-state.md) for installed runtime and verified
+collection status. This page describes the evidence contract, not live shop sales.
+
 Open `/validation`, connect to your private operator backend and create focused
 product concepts with up to 15 buyer keywords each. The standalone local page
 works during owner account recovery; remote evidence APIs still require operator
@@ -36,5 +39,8 @@ configuration in addition to the database mirror.
 
 Installation, scheduled backup and recovery instructions live in the desktop
 repository's `docs/product-validation.md`. No public deployment or shop publishing
-is performed by the evidence workflow. Seller reports and sales tests depend on
-completion of the existing shop's payment/billing onboarding.
+is performed by the evidence workflow. The correct EtgenStudios seller payment,
+billing and security setup was verified complete October 12; seller reports were
+collected. Use the verified private account map, not the separate developer shop's
+unfinished onboarding. First live listing, actual costs and sales results remain
+pending. Public access still has separate owner/endpoint/cutover gates.

@@ -1,5 +1,10 @@
 # Evidence source operations
 
+Read [current-state.md](current-state.md) for installed runtime and verified
+provider results. The capabilities/schedules below describe the broad research
+collector, separate from focused product validation. Configured connectors and
+workflow schedules do not prove current collection or authorize paid access.
+
 EtGen records source-native observations and leaves unknown values null. A
 configured connector is not evidence until a dated provider response has been
 stored.

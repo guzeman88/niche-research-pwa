@@ -1,5 +1,11 @@
 # Operator workspace
 
+Read [current-state.md](current-state.md) for active installation and recovery.
+This guide covers the generic workspace. The separate `/validation` page uses
+its revisioned SQLite ledger and can persist only the local API address across
+account refresh; it never persists an operator token that way. Neither workspace
+transfer nor Supabase mirror replay replaces encrypted disaster recovery.
+
 ## Private API
 
 Set `PIPELINE_API_TOKEN` to a randomly generated operator secret in the backend environment or ignored `.env.local`. Never set a `VITE_` token: that would embed the credential in the public app. Set `PIPELINE_ALLOWED_ORIGINS` to comma-separated web origins; the default is the production Netlify site. Local browser origins are allowed for development.
