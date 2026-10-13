@@ -1,5 +1,11 @@
 # Automated keyword validation
 
+Read [current-state.md](current-state.md) before operational use. This is the
+separate bulk collection capability/configuration; its limits and schedules do
+not establish newly collected evidence. The installed private validation backend
+disables broad scheduling and uses focused due-batch collection with the existing
+keyless Google workflow. Verify current authorization and successful dated results.
+
 EtGen collects bulk keyword evidence without browser automation or model calls.
 
 ## Scheduled cycle

@@ -1,5 +1,10 @@
 # Profitable Product Roadmap
 
+This is a product/design roadmap, not an operational profitability claim. Read
+[current-state.md](current-state.md) and [product-validation.md](product-validation.md)
+for implemented evidence collection and remaining real cost/sales validation.
+No concept has yet established profitability from recorded own outcomes.
+
 This roadmap turns the app from niche discovery into a product pipeline that can create specific Etsy-ready products from real keyword evidence.
 
 ## Current Baseline

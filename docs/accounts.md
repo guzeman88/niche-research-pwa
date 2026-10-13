@@ -1,5 +1,9 @@
 # Account service
 
+Read [current-state.md](current-state.md) first. This is the implemented service
+contract, not proof of a working owner session. Old cloud recovery and new local
+owner/email remain pending; private loopback validation works independently.
+
 `netlify/functions/account.mjs` hosts same-origin `/api/account/*`. Supabase Auth
 handles passwords, verified email and TOTP; service-only database sessions provide
 opaque HttpOnly cookies, encryption, idle expiry and immediate revocation.
@@ -12,7 +16,7 @@ with tested custom SMTP or the restricted free personal mode described below. An
 service keys through Vite variables.
 
 Account migrations and the owner invitation/configuration script live in the
-[desktop repository](https://github.com/guzeman88/etsy-pipeline/tree/codex/accounts-and-profiles).
+[desktop repository](https://github.com/guzeman88/etsy-pipeline/tree/main).
 Its `docs/ACCOUNTS.md` describes setup, RLS, data preservation and the release gate.
 The initial owner must choose their own password and verify their email. Production
 rollout stays pending until email delivery and owner access work.

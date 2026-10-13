@@ -1,5 +1,9 @@
 # Launch Lab decision contract
 
+Read [current-state.md](current-state.md) for current operations. Launch Lab's
+gates below are a separate contract from private product-validation review
+defaults; neither proves sales, statistically calibrated confidence or profit.
+
 Launch Lab is the evidence-gated path from one exact keyword to one reviewable
 product and listing package. It is intentionally narrower than bulk keyword
 collection: the purpose is to prove each handoff before scaling it.
