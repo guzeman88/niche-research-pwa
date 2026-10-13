@@ -67,3 +67,14 @@ def test_status_does_not_expose_paths_or_configuration(tmp_path, monkeypatch):
     result = status()
     assert "private" not in json.dumps(result)
     assert result["status"] == "completed"
+
+
+def test_native_scan_ids_are_separate_stable_and_safe_for_web_numbers(monkeypatch):
+    monkeypatch.setenv('EVIDENCE_SCAN_NAMESPACE', 'preserved-origin')
+    row = {'id': 1, 'keyword': 'mug', 'scanned_at': '2026-10-13', 'listing_count': None}
+    first = sync._scan_row(row)
+    assert first == sync._scan_row(row)
+    assert (1 << 48) <= first['source_scan_id'] < (1 << 53)
+    assert first['listing_count'] is None
+    monkeypatch.setenv('EVIDENCE_SCAN_NAMESPACE', 'other-origin')
+    assert sync._scan_row(row)['source_scan_id'] != first['source_scan_id']

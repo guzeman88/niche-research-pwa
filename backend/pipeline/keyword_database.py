@@ -1565,6 +1565,9 @@ def save_scan(keyword: str, report) -> None:
             metrics.get("sampled_listings"),
             cur.lastrowid,
         ))
+        if collection_run_id:
+            con.execute("UPDATE evidence_collection_runs SET request_json=? WHERE id=?",
+                        (json.dumps({"keyword": kw, "sources": sources, "scan_id": cur.lastrowid}), collection_run_id))
         con.execute("""
             INSERT INTO keyword_collection_state
                 (keyword, last_collected_at, evidence_status, listing_count,
