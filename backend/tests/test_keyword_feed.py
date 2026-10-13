@@ -41,6 +41,26 @@ def test_freshness_keeps_sources_and_reporting_windows_separate():
     assert result[2]["observations"] == 1  # Unknown measurement is still a collected result.
 
 
+def test_new_host_outbox_does_not_relabel_historical_source_runs(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "research.sqlite")
+    db.init_db()
+    old = db.start_evidence_collection("etsy_open_api")
+    new = db.start_evidence_collection("etsy_open_api")
+    with db._conn() as con:
+        con.execute("UPDATE evidence_collection_runs SET started_at='2020-01-01' WHERE id=?", (old,))
+    monkeypatch.setenv("EVIDENCE_OUTBOX_SINCE", "2025-01-01")
+    replayed = []
+    def replay(identity):
+        replayed.append(identity)
+        db.mark_evidence_collection_sync(identity, "synced")
+        return {"status": "synced"}
+    monkeypatch.setattr(sync, "sync_collection_run", replay)
+    assert sync.retry_collection_outbox()["pending"] == 0
+    assert replayed == [new]
+    with db._conn() as con:
+        assert con.execute("SELECT durable_sync_status FROM evidence_collection_runs WHERE id=?", (old,)).fetchone()[0] != 'synced'
+
+
 def test_status_does_not_expose_paths_or_configuration(tmp_path, monkeypatch):
     monkeypatch.setenv("VALIDATION_DB_PATH", str(tmp_path / "validation.sqlite"))
     (tmp_path / "feed-status.json").write_text(json.dumps({"status": "completed", "started_at": "date", "secret": "private", "focused": {"before": "private/path"}}))
