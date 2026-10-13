@@ -120,10 +120,20 @@ async def startup():
     else:
         safe_log("[startup] Scheduler auto-start disabled by AUTO_START_SCHEDULER=0")
 
+    from services.app_keyword_feed import configured_worker
+    worker = configured_worker()
+    app.state.keyword_feed_worker = worker
+    if worker:
+        worker.start()
+        safe_log('[startup] App-owned keyword collection started')
+
 
 @app.on_event("shutdown")
 async def shutdown():
     """Gracefully stop the scheduler if running."""
+    worker = getattr(app.state, 'keyword_feed_worker', None)
+    if worker:
+        await worker.stop()
     try:
         task = getattr(app.state, "scheduler_watchdog_task", None)
         if task:
@@ -163,4 +173,7 @@ def api_health():
         "boot_id": _PROCESS_BOOT_ID,
         "started_at": _PROCESS_STARTED_AT,
         "revision": os.environ.get("RENDER_GIT_COMMIT") or None,
+        "collection_scheduler": dict(app.state.keyword_feed_worker.state)
+        if getattr(app.state, 'keyword_feed_worker', None)
+        else {"owner": "etgen_backend", "enabled": False},
     }
