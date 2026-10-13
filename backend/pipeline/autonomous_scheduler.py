@@ -33,7 +33,7 @@ from typing import Callable, Optional
 
 from pipeline import keyword_database as kdb
 
-STATE_FILE = Path(__file__).parent.parent / "workspace/_keyword_db/scheduler_state.json"
+STATE_FILE = kdb.DB_PATH.parent / "scheduler_state.json"
 
 # Rates: how long to sleep between each keyword scan (seconds)
 RATES = {

@@ -14,8 +14,10 @@ def invoke(action, *args, **kwargs):
 
 @router.get("")
 def overview():
+    from services.keyword_feed_status import status
     return {"projects": [service.summary(row["project_id"]) for row in service.records(kind="project")],
-        "model_version": service.MODEL_VERSION, "pending_sync": sum(row["sync_status"] == "pending" for row in service.records())}
+        "model_version": service.MODEL_VERSION, "pending_sync": sum(row["sync_status"] == "pending" for row in service.records()),
+        "feed_status": status()}
 
 
 @router.post("/projects", status_code=201)

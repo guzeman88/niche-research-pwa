@@ -60,11 +60,37 @@ def require_collection_sync(run_id: str) -> dict:
         raise DurableEvidenceSyncError("Durable evidence storage is required but not configured")
     result = sync_collection_run(run_id)
     if result.get("configured") and result.get("status") != "synced":
+        # Explicit persistent-host mode: the transaction has already committed
+        # to SQLite. Keep its durable outbox and continue collecting locally.
+        # Ephemeral/cloud workers retain their original fail-closed behavior.
+        if os.getenv("EVIDENCE_DURABILITY_MODE") == "local-outbox":
+            return {**result, "locally_preserved": True}
         raise DurableEvidenceSyncError(
             f"Durable evidence sync failed for {run_id}: "
             f"{result.get('error') or result.get('status') or 'unknown error'}"
         )
     return result
+
+
+def retry_collection_outbox(limit: int = 10) -> dict:
+    """Replay committed runs; acknowledgements survive worker restarts."""
+    from pipeline import keyword_database as kdb
+    with kdb._conn() as con:
+        rows = con.execute(
+            "SELECT id FROM evidence_collection_runs WHERE durable_sync_status != 'synced' "
+            "ORDER BY started_at LIMIT ?", (max(1, min(limit, 100)),)
+        ).fetchall()
+    synced, failed = 0, 0
+    for row in rows:
+        result = sync_collection_run(row["id"])
+        if result.get("status") == "synced":
+            synced += 1
+        else:
+            failed += 1
+            break  # A host outage must not cause a long retry storm.
+    with kdb._conn() as con:
+        pending = con.execute("SELECT count(*) FROM evidence_collection_runs WHERE durable_sync_status != 'synced'").fetchone()[0]
+    return {"synced": synced, "failed": failed, "pending": pending}
 
 
 def _payloads(run_id: str) -> dict[str, list[dict[str, Any]]]:
@@ -222,20 +248,21 @@ def _upsert(table: str, conflict: str, rows: list[dict[str, Any]]) -> None:
     # observations in one run. Keep each idempotent PostgREST request bounded.
     for start in range(0, len(rows), 500):
         batch = rows[start:start + 500]
-        for attempt in range(8):
+        attempts = 1 if os.getenv("EVIDENCE_DURABILITY_MODE") == "local-outbox" else 8
+        for attempt in range(attempts):
             try:
                 response = httpx.post(
                     f"{url}/rest/v1/{table}",
                     params={"on_conflict": conflict},
                     headers=headers,
                     content=json.dumps(batch),
-                    timeout=60,
+                    timeout=10 if attempts == 1 else 60,
                 )
                 response.raise_for_status()
                 break
             except (httpx.TransportError, httpx.HTTPStatusError) as exc:
                 status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
-                if attempt == 7 or (status is not None and status not in {429, 500, 502, 503, 504}):
+                if attempt == attempts - 1 or (status is not None and status not in {429, 500, 502, 503, 504}):
                     raise
                 time.sleep(min(2 ** (attempt + 1), 30))
 

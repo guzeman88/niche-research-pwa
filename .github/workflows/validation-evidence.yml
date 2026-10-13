@@ -1,10 +1,15 @@
 name: Google Validation Evidence
+run-name: Google Validation Evidence ${{ inputs.request_id || 'manual' }}
 on:
   workflow_dispatch:
     inputs:
       keywords:
         description: Up to 15 comma-separated buyer keywords from the validation queue
         required: true
+        type: string
+      request_id:
+        description: Optional unique local orchestrator request identity
+        required: false
         type: string
 permissions:
   contents: read

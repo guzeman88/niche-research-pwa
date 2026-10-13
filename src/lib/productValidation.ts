@@ -6,12 +6,12 @@ export interface ValidationRecord {id: string; kind: string; fingerprint: string
 export interface Scenario {price: number; contribution_per_order: number | null; first_month_break_even_orders: number | null; missing: string[]}
 export interface ValidationProject {
   id: string; name: string; product_type: string; keywords: string[]; status: string; sync_pending: number
-  queue: Array<{keyword: string; status: string; sample_count: number; distinct_sample_shops: number; blockers: string[]; market: {searches: number; listings: number; period_start: string; period_end: string} | null}>
+  queue: Array<{keyword: string; status: string; sample_count: number; distinct_sample_shops: number; blockers: string[]; sources?: Array<{source: string; last_observed: string | null; next_due: string | null; observations: number; status: string}>; market: {searches: number; listings: number; period_start: string; period_end: string} | null}>
   economics: Record<string, Scenario> | null; economics_currency: string | null
   outcomes: {status: string; periods: number; contribution: number | null; net_profit: number | null; currencies: string[]; revenue: number | null; orders: number | null; visits: number | null; conversion_pct: number | null}
   records: ValidationRecord[]; input_fingerprint: string; model_version: string
 }
-export interface ValidationOverview {projects: ValidationProject[]; pending_sync: number; model_version: string}
+export interface ValidationOverview {projects: ValidationProject[]; pending_sync: number; model_version: string; feed_status?: {status: string; last_attempt?: string | null; last_completed?: string | null; last_success?: string | null; errors?: string[]; bulk?: {mirror?: {pending: number} | null}}}
 export const validationRequest = <T,>(path = '', body?: unknown) => operatorRequest<T>(`/api/product-validation${path}`, body)
 export function values(form: HTMLFormElement): Record<string, string> {
   return Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, String(value)]))

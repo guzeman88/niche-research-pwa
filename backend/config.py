@@ -25,7 +25,7 @@ load_dotenv(_ENV_PATH.with_name(".env.local"))
 ROOT = Path(__file__).parent.resolve()
 
 # Workspace for outputs (reports, database, logs)
-WORKSPACE = ROOT / "workspace"
+WORKSPACE = Path(os.environ.get("BACKEND_DIR", ROOT)) / "workspace"
 WORKSPACE.mkdir(parents=True, exist_ok=True)
 
 # Config directory
