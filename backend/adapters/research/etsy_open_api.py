@@ -240,25 +240,35 @@ class EtsyOpenAPIClient:
     def close(self) -> None:
         self._client.close()
 
-    def search_listings(self, keyword: str, limit: int = 50) -> EtsySearchResult:
+    def search_listings(self, keyword: str, limit: int = 50, *, pages: int = 1) -> EtsySearchResult:
         if not self.is_configured():
             raise EtsyOpenAPIError("Etsy Open API is not configured")
 
-        payload = self._get(
-            "/listings/active",
-            params={
-                "keywords": keyword,
-                "limit": max(1, min(int(limit), 100)),
-                "offset": 0,
-                "sort_on": "score",
-                "sort_order": "down",
-            },
-        )
-        rows = _extract_results(payload)
-        result = EtsySearchResult(
-            keyword=keyword,
-            total_listing_count=_extract_count(payload),
-        )
+        from services.feed_request_budget import CollectionDeferred
+        page_size = max(1, min(int(limit), 100))
+        rows = []; seen = set(); completed_pages = 0; truncated = False
+        result = EtsySearchResult(keyword=keyword, total_listing_count=None)
+        for page in range(max(1, min(int(pages), 3))):
+            try:
+                payload = self._get('/listings/active', params={'keywords': keyword,
+                    'limit': page_size, 'offset': page * page_size, 'sort_on': 'score', 'sort_order': 'down'})
+            except (CollectionDeferred, EtsyOpenAPIError, httpx.HTTPError):
+                if not completed_pages:
+                    raise
+                truncated = True; break  # Retain successful pages if a deeper page fails.
+            completed_pages += 1
+            if page == 0:
+                result.total_listing_count = _extract_count(payload)
+            page_rows = _extract_results(payload)
+            added = 0
+            for row in page_rows:
+                identity = row.get('listing_id')
+                if identity is not None and str(identity) not in seen:
+                    seen.add(str(identity)); rows.append(row); added += 1
+            if len(page_rows) < page_size or not added or (result.total_listing_count is not None and (page + 1) * page_size >= result.total_listing_count):
+                break
+        result.sample_metadata = {'pages_completed': completed_pages, 'page_size': page_size,
+                                  'sort_on': 'score', 'truncated': truncated, 'census': False}
         result.listings = [
             listing
             for row in rows
@@ -279,16 +289,41 @@ class EtsyOpenAPIClient:
             quota = etsy_rate_limit_snapshot()
             daily = quota.get('limit_per_day'); remaining = quota.get('remaining_today')
             if daily and remaining is not None and remaining <= daily * .2:
+                if os.environ.get('FEED_MAX_COLLECTION') == '1':
+                    from services.feed_request_budget import CollectionDeferred
+                    raise CollectionDeferred('Etsy rolling quota reserve reached')
                 raise EtsyOpenAPIError('Etsy rolling quota reserve reached; defer collection')
             if quota.get('retry_after_until') and quota['retry_after_until'] > time.time():
+                if os.environ.get('FEED_MAX_COLLECTION') == '1':
+                    from services.feed_request_budget import CollectionDeferred
+                    raise CollectionDeferred('Etsy provider backoff')
                 raise EtsyOpenAPIError('Etsy provider requested backoff; defer collection')
         headers = {"x-api-key": _api_key_header(), "accept": "application/json"}
         oauth_token = os.getenv("ETSY_OAUTH_TOKEN", "").strip()
         if oauth_token:
             headers["authorization"] = f"Bearer {oauth_token}"
 
-        resp = self._client.get(f"{_BASE_URL}{path}", params=params, headers=headers)
+        tracked = os.environ.get('FEED_MAX_COLLECTION') == '1'
+        identity = None
+        if tracked:
+            from services.feed_request_budget import start_request, finish_request
+            identity = start_request(etsy_rate_limit_snapshot())
+            # Enforce QPS on every page, not only between keyword scans.
+            quota = etsy_rate_limit_snapshot()
+            time.sleep(max(1.0, 1.0 / (quota.get('limit_per_second') or 1)))
+        try:
+            resp = self._client.get(f"{_BASE_URL}{path}", params=params, headers=headers)
+        except httpx.HTTPError:
+            if tracked:
+                finish_request(identity, 'transport_error', etsy_rate_limit_snapshot(), path, params)
+            raise
         _capture_rate_limits(resp)
+        if tracked:
+            try:
+                raw = resp.json()
+            except ValueError:
+                raw = None
+            finish_request(identity, str(resp.status_code), etsy_rate_limit_snapshot(), path, params, raw)
         if resp.status_code == 401:
             raise EtsyOpenAPIError("Etsy Open API rejected credentials (401)")
         if resp.status_code == 403:

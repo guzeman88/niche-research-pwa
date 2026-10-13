@@ -483,8 +483,8 @@ def import_google_package(project_id, data):
     if not isinstance(payload, dict) or payload.get("schema_version") != 1 or payload.get("source") != "google_ads_keyword_planner":
         raise ValueError("Unsupported Google evidence package")
     signals = payload.get("signals")
-    if not isinstance(signals, list) or len(signals) > 100:
-        raise ValueError("Google package must contain at most 100 keyword results")
+    if not isinstance(signals, list) or len(signals) > 500:
+        raise ValueError("Google package must contain at most 500 keyword results")
     useful = []
     for row in signals:
         if not isinstance(row, dict):

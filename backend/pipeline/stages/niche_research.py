@@ -63,6 +63,7 @@ class KeywordSearchData:
     max_favorites: int | None = None
     pct_high_favorites: float | None = None
     listing_samples: list[dict] = field(default_factory=list)
+    sample_metadata: dict = field(default_factory=dict)
 
 @dataclass
 class SeasonalityPoint:
@@ -437,8 +438,17 @@ def _run_etsy_open_api_search(
     try:
         for kw in targets:
             try:
-                sr = client.search_listings(kw, limit=100)
+                pages = 1
+                if os.environ.get('FEED_MAX_COLLECTION') == '1':
+                    from pipeline import keyword_database as kdb
+                    with kdb._conn() as con:
+                        leaders = [r[0] for r in con.execute("SELECT keyword FROM feed_candidates WHERE tier='active' ORDER BY priority DESC,keyword LIMIT 20")]
+                    pages = 3 if kw in leaders else 1
+                sr = client.search_listings(kw, limit=100, pages=pages) if pages > 1 else client.search_listings(kw, limit=100)
             except Exception as exc:
+                from services.feed_request_budget import CollectionDeferred
+                if isinstance(exc, CollectionDeferred):
+                    raise
                 log_fn(f"[niche_research] Etsy Open API error for '{kw}': {exc}")
                 errors.append(f"{kw}: {exc}")
                 continue
@@ -467,6 +477,7 @@ def _run_etsy_open_api_search(
                 max_favorites=sr.max_favorites,
                 pct_high_favorites=sr.pct_high_favorites,
                 listing_samples=[asdict(listing) for listing in sr.listings],
+                sample_metadata=getattr(sr, 'sample_metadata', {}),
             )
             results.append(ksd)
             log_fn(
