@@ -39,9 +39,7 @@ one of these server-side credential forms, in priority order:
 4. The older client ID, client secret, and refresh-token flow.
 
 Developer tokens were sunset on September 9, 2026. An existing token remains
-an optional compatibility header but is no longer required. The GitHub Actions
-collector runs the full Google validation cycle on the first day of each month
-and can also be started manually. GitHub exchanges its short-lived OIDC token
+an optional compatibility header but is no longer required. The legacy GitHub Actions collector retains the full Google validation cycle as an explicit manual recovery operation. Its old monthly schedule was retired in October 2026; native focused collection is now the active lane. GitHub exchanges its short-lived OIDC token
 through `GCP_WORKLOAD_IDENTITY_PROVIDER` and impersonates the dedicated EtGen
 service account; no long-lived Google key is created or committed. The
 provider resource name and customer IDs are stored as GitHub Actions secrets.
@@ -129,7 +127,7 @@ visible blockers; the application never fills them with estimates.
 
 ## Scheduled collection fallback
 
-When the hosted API is unavailable, `.github/workflows/keepalive.yml` runs an
+Historical design (retired October 13, 2026): when the hosted API was unavailable, `.github/workflows/keepalive.yml` ran an
 ephemeral GitHub Actions worker instead. It restores the durable queue from
 Supabase, processes up to 50 quota-paced keywords every four hours, flushes
 secondary evidence in five-keyword batches, and writes each completed run back

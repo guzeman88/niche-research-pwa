@@ -1,6 +1,6 @@
 # Continuation entry point
 
-Updated October 12, 2026. The canonical cross-repository operational handoff is
+Updated October 13, 2026. The canonical cross-repository operational handoff is
 [etsy-pipeline/docs/CURRENT_STATE.md](https://github.com/guzeman88/etsy-pipeline/blob/main/docs/CURRENT_STATE.md).
 Read it before using historical setup instructions. It records verification date,
 source/runtime/deployment mapping, provider access, private evidence locations,
@@ -8,7 +8,7 @@ backup/recovery boundaries and remaining work. In the shared Windows workspace,
 the file is also at `../../docs/CURRENT_STATE.md` relative to this checkout root.
 
 The local app at http://127.0.0.1:5175/validation is installed from web revision
-`1cd92bebae941d77c1e7018b5f157d6585cde20d`. Its exact code/control/data/Python
+`79ca9749882c24f99bca3e21267845565415d96e`. Its exact code/control/data/Python
 paths live in `%USERPROFILE%/EtGen/product-validation/installation.json`. Merging
 this documentation does not reinstall the bundle. The private API is loopback
 http://127.0.0.1:18020/api/product-validation; broad research scheduling is disabled
@@ -29,9 +29,7 @@ endpoint, off-machine backup and public cutover are still pending. The public si
 continues to serve the October 1 release. Bank verification does not resolve those
 separate infrastructure gates.
 
-Windows startup/backup tasks and the weekly Codex focused-evidence heartbeat are
-installed. They depend on the PC/user/app being available; do not interpret old
-bulk schedule descriptions as confirmed current collection. The manual GitHub
+Windows startup/backup and the native EtGenKeywordFeed task are installed. The native worker runs independently of Codex at logon/every four hours, with weekly competition and due monthly Google dispatch/import. The weekly Codex heartbeat now monitors and assists browser demand capture, without duplicating native work. The old failing hosted collector schedules are recovery-only. The PC must remain awake with its user logged in. The manual GitHub
 `Google Validation Evidence` workflow uses existing keyless identity; due imports
 and Etsy samples are orchestrated by the verified root collection runner. Inspect
 the visible free Marketplace Insights allowance before further buyer-demand queries.
@@ -45,3 +43,5 @@ When changing installed/runtime/provider state, update the canonical handoff and
 the relevant contract/runbook. Reverify versions/counts rather than duplicating
 the dated inventory here. Keep production changes Git-backed and verify the live
 release fingerprint after an authorized cutover.
+
+For native controls, source identities, mirror checkpoints, successful Google run and verified external USB backup, read the desktop [keyword-feed runbook](https://github.com/guzeman88/etsy-pipeline/blob/main/docs/keyword-feed.md). The validation ledger remains private; original collector data and older versions are retained.
