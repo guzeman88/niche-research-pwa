@@ -58,6 +58,12 @@ def record_attempt(con, provider, keyword, status, rows, timestamp):
 
 def provider_due(con, provider, keyword, at=None):
     at = at or datetime.now(timezone.utc)
+    if provider == 'google_suggest':
+        # The independent collector's immutable observations are imported,
+        # while its mutable provider-state table is deliberately not copied.
+        observed = con.execute("SELECT max(observed_at) FROM keyword_suggestions WHERE parent_keyword=? AND source='google_suggest'", (keyword,)).fetchone()[0]
+        if observed and utc(observed) <= at < utc(observed) + timedelta(days=PROVIDERS[provider]):
+            return False
     row = con.execute('SELECT next_due FROM feed_provider_cooldowns WHERE provider=? AND keyword=?', (provider, keyword)).fetchone()
     if row:
         return utc(row['next_due']) <= at

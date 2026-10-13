@@ -161,3 +161,33 @@ def test_etsy_reserve_guard_prevents_requests(monkeypatch):
             client._get('/listings/active')
     finally:
         client.close()
+
+
+def test_imported_suggestions_prevent_redundant_calls_without_native_attempt(research):
+    at = datetime.now(timezone.utc)
+    research.add_seed('teacher mug')
+    with research._conn() as con:
+        con.execute('INSERT INTO keyword_suggestions(parent_keyword,suggestion,source,query,position,observed_at) VALUES(?,?,?,?,?,?)', ('teacher mug', 'funny teacher mug', 'google_suggest', 'teacher mug', 1, at.isoformat()))
+        assert not opt.provider_due(con, 'google_suggest', 'teacher mug', at)
+        assert opt.provider_due(con, 'google_suggest', 'teacher mug', at + timedelta(days=15))
+        assert opt.provider_due(con, 'etsy_open_api', 'teacher mug', at)
+        assert con.execute('SELECT count(*) FROM feed_provider_attempts').fetchone()[0] == 0
+
+
+def test_supporting_refresh_preserves_fresh_verified_market_state_and_attempt_history(research, monkeypatch):
+    monkeypatch.setenv('FEED_OPTIMIZED_QUEUE', '1')
+    research.add_seed('teacher mug'); at = datetime.now(timezone.utc).isoformat()
+    with research._conn() as con:
+        con.execute('INSERT INTO keyword_collection_state VALUES(?,?,?,?,?,?,?,?,?)', ('teacher mug', at, 'verified', 1000, 20, 25, '["etsy_open_api"]', None, at))
+    research.save_scan('teacher mug', {'sources_used': ['google_suggest']})
+    with research._conn() as con:
+        state = con.execute('SELECT * FROM keyword_collection_state').fetchone()
+        assert state['last_collected_at'] == at
+        assert state['evidence_status'] == 'verified'
+        assert state['listing_count'] == 1000
+        assert con.execute('SELECT scan_status FROM scans').fetchone()[0] == 'signals'
+        con.execute("UPDATE keyword_collection_state SET last_collected_at='2020-01-01'")
+    research.save_scan('teacher mug', {'sources_used': ['google_suggest']})
+    with research._conn() as con:
+        assert con.execute('SELECT evidence_status FROM keyword_collection_state').fetchone()[0] == 'unverified'
+        assert con.execute('SELECT count(*) FROM scans').fetchone()[0] == 2
