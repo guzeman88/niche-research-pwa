@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 import time
+from pathlib import Path
+import uuid
 from typing import Any
 
 import httpx
@@ -39,6 +41,7 @@ def sync_collection_run(run_id: str) -> dict:
             ("keyword_suggestions", "source_suggestion_id"),
             ("keyword_trend_points", "source_trend_point_id"),
             ("keyword_listing_snapshots", "source_listing_snapshot_id"),
+            ("keyword_scans", "source_scan_id"),
             ("keyword_collection_state", "keyword"),
         ):
             _upsert(table, conflict, payloads[table])
@@ -111,6 +114,10 @@ def _payloads(run_id: str) -> dict[str, list[dict[str, Any]]]:
             "SELECT * FROM keyword_listing_snapshots WHERE collection_run_id=?", (run_id,)
         ).fetchall()]
         run = con.execute("SELECT * FROM evidence_collection_runs WHERE id=?", (run_id,)).fetchone()
+        request = _json(run["request_json"]) if run else {}
+        scans = []
+        if os.getenv("EVIDENCE_SCAN_NAMESPACE") and (request or {}).get("scan_id"):
+            scans = [dict(row) for row in con.execute("SELECT * FROM scans WHERE id=?", (request["scan_id"],))]
         keywords = {
             *(row["keyword"] for row in observations),
             *(row["parent_keyword"] for row in suggestions),
@@ -152,6 +159,7 @@ def _payloads(run_id: str) -> dict[str, list[dict[str, Any]]]:
         "keyword_suggestions": [_suggestion_row(row) for row in suggestions],
         "keyword_trend_points": [_trend_row(row) for row in trends],
         "keyword_listing_snapshots": [_listing_row(row) for row in listings],
+        "keyword_scans": [_scan_row(row) for row in scans],
         "keyword_collection_state": [
             {
                 "keyword": row["keyword"],
@@ -167,6 +175,45 @@ def _payloads(run_id: str) -> dict[str, list[dict[str, Any]]]:
             for row in collection_states
         ],
     }
+
+
+def _scan_row(row):
+    namespace = os.environ["EVIDENCE_SCAN_NAMESPACE"]
+    # Separate native origin from legacy numeric IDs; remain JS-safe (<2^53).
+    identity = (1 << 48) + int.from_bytes(hashlib.sha256((namespace + ':' + str(row['id'])).encode()).digest()[:6], 'big')
+    fields = ('keyword', 'scanned_at', 'scan_status', 'scan_error', 'opportunity_score', 'demand_score',
+              'competition_score', 'margin_score', 'trend_score', 'avg_price_usd', 'monthly_revenue_usd',
+              'competition_quality', 'listing_count', 'entry_strategy', 'gap_score', 'listing_efficiency',
+              'score_delta', 'trajectory', 'price_min_usd', 'price_p25_usd', 'price_median_usd',
+              'price_p75_usd', 'price_max_usd', 'avg_favorites', 'max_favorites', 'pct_high_favorites',
+              'pct_star_sellers', 'pct_bestsellers', 'revenue_per_listing', 'market_evidence_score',
+              'profitability_index', 'score_version', 'evidence_status', 'observed_search_volume', 'sampled_listing_count')
+    return {key: row.get(key) for key in fields} | {'source_scan_id': identity,
+        'sources_used': _json(row.get('sources_used')) or [], 'peak_months': _json(row.get('peak_months')) or [],
+        'keyword_clusters': _json(row.get('keyword_clusters_json')) or [],
+        'evidence_details': _json(row.get('evidence_details_json')) or {}}
+
+
+def sync_native_scan_history(after_id):
+    """Idempotently catch up summaries collected before this mirror was installed."""
+    from pipeline import keyword_database as kdb
+    checkpoint = kdb.DB_PATH.parent / 'native-scan-mirror.json'
+    namespace = os.environ['EVIDENCE_SCAN_NAMESPACE']
+    if checkpoint.exists():
+        previous = json.loads(checkpoint.read_text(encoding='utf-8'))
+        if previous.get('namespace') != namespace:
+            raise ValueError('Scan mirror origin changed; review the preserved checkpoint')
+        after_id = max(after_id, int(previous['last_ack_id']))
+    with kdb._conn() as con:
+        rows = [dict(r) for r in con.execute('SELECT * FROM scans WHERE id>? ORDER BY id', (after_id,))]
+    _upsert('keyword_scans', 'source_scan_id', [_scan_row(r) for r in rows])
+    # Advance only after every chunk was acknowledged. Partial failures replay
+    # the same stable IDs, without losing rows or repeating all history forever.
+    if rows:
+        temporary = checkpoint.with_name(checkpoint.name + '.' + uuid.uuid4().hex + '.tmp')
+        temporary.write_text(json.dumps({'namespace': namespace, 'last_ack_id': rows[-1]['id']}), encoding='utf-8')
+        os.replace(temporary, checkpoint)
+    return len(rows)
 
 
 def _run_row(row: dict[str, Any]) -> dict[str, Any]:

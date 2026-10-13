@@ -21,7 +21,7 @@ stored.
 | Pinterest Trends | Approved Pinterest business app and token | Ranked current trends, WoW/MoM/YoY growth, one-year weekly relative-interest series | Independent source schedule derived from its configured cache duration, plus exact-keyword queue matches |
 | Reddit Data API | Reddit commercial-use approval plus credentials | Exact-query post counts and engagement aggregates with source records | Keyword queue only after explicit approval flag |
 
-The GitHub `Evidence Collector Heartbeat` runs every ten minutes, wakes the
+Historical hosted design (its schedules were retired October 13, 2026): the GitHub `Evidence Collector Heartbeat` woke the
 backend, and idempotently starts a 30-keyword continuous-queue batch. The batch
 size prevents free-host suspension between five-keyword bursts while the Etsy
 pacer still controls the actual request interval. It uses a short-lived

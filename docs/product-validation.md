@@ -44,3 +44,5 @@ billing and security setup was verified complete October 12; seller reports were
 collected. Use the verified private account map, not the separate developer shop's
 unfinished onboarding. First live listing, actual costs and sales results remain
 pending. Public access still has separate owner/endpoint/cutover gates.
+
+The native Windows worker now owns automatic due collection and Google workflow/import jobs; see [current-state.md](current-state.md). The weekly Codex heartbeat is for monitoring and browser-assisted seller demand, not a second scheduler. Source dates/history and native health are visible in the local validation page.

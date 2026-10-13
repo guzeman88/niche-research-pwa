@@ -67,3 +67,33 @@ def test_status_does_not_expose_paths_or_configuration(tmp_path, monkeypatch):
     result = status()
     assert "private" not in json.dumps(result)
     assert result["status"] == "completed"
+
+
+def test_native_scan_ids_are_separate_stable_and_safe_for_web_numbers(monkeypatch):
+    monkeypatch.setenv('EVIDENCE_SCAN_NAMESPACE', 'preserved-origin')
+    row = {'id': 1, 'keyword': 'mug', 'scanned_at': '2026-10-13', 'listing_count': None}
+    first = sync._scan_row(row)
+    assert first == sync._scan_row(row)
+    assert (1 << 48) <= first['source_scan_id'] < (1 << 53)
+    assert first['listing_count'] is None
+    monkeypatch.setenv('EVIDENCE_SCAN_NAMESPACE', 'other-origin')
+    assert sync._scan_row(row)['source_scan_id'] != first['source_scan_id']
+
+
+def test_scan_checkpoint_advances_only_after_successful_mirror(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, 'DB_PATH', tmp_path / 'research.sqlite')
+    monkeypatch.setenv('EVIDENCE_SCAN_NAMESPACE', 'preserved-origin')
+    db.init_db()
+    db.save_scan('mug', {'sources_used': []})
+    monkeypatch.setattr(sync, '_upsert', lambda *_: None)
+    assert sync.sync_native_scan_history(0) == 1
+    assert sync.sync_native_scan_history(0) == 0
+    db.save_scan('mug', {'sources_used': []})
+    def fail(*_):
+        raise OSError('isolated mirror outage')
+    monkeypatch.setattr(sync, '_upsert', fail)
+    with pytest.raises(OSError):
+        sync.sync_native_scan_history(0)
+    assert json.loads((tmp_path / 'native-scan-mirror.json').read_text())['last_ack_id'] == 1
+    monkeypatch.setattr(sync, '_upsert', lambda *_: None)
+    assert sync.sync_native_scan_history(0) == 1
