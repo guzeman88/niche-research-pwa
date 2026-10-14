@@ -35,6 +35,24 @@ def sync():
     return service.retry_sync()
 
 
+@router.get('/supported-keywords')
+def supported_keywords():
+    from services.research_listing import overview
+    return overview()
+
+
+@router.post('/listing-drafts', status_code=201)
+def listing_draft(data: dict = Body(...)):
+    from services.research_listing import create_draft
+    return invoke(create_draft, data)
+
+
+@router.get('/listing-drafts/{record_id}/export')
+def export_listing_draft(record_id: str):
+    from services.research_listing import export_draft
+    return invoke(export_draft, record_id)
+
+
 @router.post("/projects/{project_id}/outcomes/import")
 def import_outcomes(project_id: str, data: dict = Body(...), commit: bool = False):
     return invoke(service.import_outcomes_csv, project_id, data, commit=commit)

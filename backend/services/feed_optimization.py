@@ -195,6 +195,17 @@ def next_batch(con, count, at=None):
         rows.sort(key=lambda r: (0 if r['priority'] >= 100 else 1,
                                 0 if r['keyword'] in (samples if lane_mode == 'discovery' else measured) else 1,
                                 -r['priority'], r['last_collected_at'] or '', r['keyword']))
+        if lane_mode == 'competition':
+            from services.supported_keywords import RULES
+            high_demand = set()
+            for observation in con.execute("SELECT keyword,value,metadata_json FROM keyword_observations WHERE source='google_ads_keyword_planner' AND metric='monthly_searches' AND geography=? AND observed_at>=? ORDER BY observed_at,id", (RULES['geography'], (at-timedelta(days=28)).isoformat())):
+                metadata = json.loads(observation['metadata_json'] or '{}')
+                aliases = [observation['keyword'], *metadata.get('close_variants', [])] if isinstance(metadata, dict) else [observation['keyword']]
+                for alias in aliases:
+                    high_demand.discard(alias)
+                    if observation['value'] is not None and observation['value'] >= RULES['google_minimum']:
+                        high_demand.add(alias)
+            rows.sort(key=lambda r: (r['priority'] < 100, r['keyword'] not in high_demand))
     for lane, budget in budgets:
         chosen = 0
         for row in rows:
