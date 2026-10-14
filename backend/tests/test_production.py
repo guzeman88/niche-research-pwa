@@ -73,8 +73,17 @@ def test_actual_production_review_and_export(setup):
     exported=setup.post(f'/api/production/jobs/{job["id"]}/export');assert exported.status_code==200
     assert exported.json()['publication_performed'] is False
     assert len(product_validation.records(kind='production_job'))==1
+    assert product_validation.records(kind='production_job')[0]['payload']['status']=='exported'
     assert len(product_validation.records(kind='project'))==1
     assert product_validation.records(kind='project')[0]['payload']['source']=='production_engine'
+
+
+def test_cancel_updates_the_private_validation_record(setup):
+    job=setup.post('/api/production/jobs',json={'spec':spec()}).json()
+    response=setup.post(f'/api/production/jobs/{job["id"]}/action',json={'action':'cancel'})
+    assert response.status_code==200,response.text
+    assert production.engine().job(job['id'])['status']=='cancelled'
+    assert product_validation.records(kind='production_job')[0]['payload']['status']=='cancelled'
 
 
 def test_provider_and_profile_gates(setup,monkeypatch):

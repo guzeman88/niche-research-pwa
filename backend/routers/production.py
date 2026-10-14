@@ -19,6 +19,12 @@ def invoke(fn,*args,**kwargs):
     except httpx.HTTPError as exc:raise HTTPException(502,'Provider request failed. Saved receipts preserve progress; reconcile uncertain creation before retrying.') from exc
 
 
+def mutate(job_id,fn,*args):
+    result=invoke(fn,*args)
+    service.mirror(service.engine().job(job_id))
+    return result
+
+
 @router.get('')
 def overview():return service.overview()
 
@@ -33,15 +39,15 @@ def job(job_id:str):return invoke(service.engine().job,job_id)
 
 @router.post('/jobs/{job_id}/review')
 def review(job_id:str,data:dict=Body(...)):
-    job=invoke(service.engine().review,job_id,data);service.mirror(job);return job
+    return mutate(job_id,service.engine().review,job_id,data)
 
 
 @router.post('/jobs/{job_id}/export')
-def export(job_id:str):return invoke(service.engine().export,job_id)
+def export(job_id:str):return mutate(job_id,service.engine().export,job_id)
 
 
 @router.post('/jobs/{job_id}/action')
-def action(job_id:str,data:dict=Body(...)):return invoke(service.engine().action,job_id,data.get('action'))
+def action(job_id:str,data:dict=Body(...)):return mutate(job_id,service.engine().action,job_id,data.get('action'))
 
 
 @router.get('/jobs/{job_id}/files/{name}')
@@ -51,7 +57,7 @@ def file(job_id:str,name:str):
 
 
 @router.post('/jobs/{job_id}/assess')
-def assess(job_id:str,data:dict=Body(...)):return invoke(service.engine().machine_review,job_id,data.get('vision') is True)
+def assess(job_id:str,data:dict=Body(...)):return mutate(job_id,service.engine().machine_review,job_id,data.get('vision') is True)
 
 
 @router.get('/jobs/{job_id}/duplicates')
@@ -111,7 +117,7 @@ def training_experiment(data:dict=Body(...)):
 @router.post('/jobs/{job_id}/mockups')
 def mockups(job_id:str):
     from etgen_production.marketplace import printify_mockups
-    return invoke(printify_mockups,service.engine(),job_id)
+    return mutate(job_id,printify_mockups,service.engine(),job_id)
 
 
 @router.post('/jobs/{job_id}/etsy-draft')
