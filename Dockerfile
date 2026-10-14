@@ -12,10 +12,12 @@ WORKDIR /app
 
 # Install Python deps
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements-constraints.txt ./
+RUN pip install --no-cache-dir -c requirements-constraints.txt -r requirements.txt
 
 # Copy backend code
 COPY backend/ ./backend/
+RUN python backend/install_production_engine.py
 
 # Copy built frontend to be served by FastAPI
 COPY --from=frontend /app/dist ./static/

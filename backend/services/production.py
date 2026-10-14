@@ -5,12 +5,19 @@ import json
 import os
 from pathlib import Path
 import time
-from etgen_production.engine import Engine
-from etgen_production.providers import capabilities,LocalModels,related
+try:
+    from etgen_production.engine import Engine
+    from etgen_production.providers import capabilities,LocalModels,related
+except ModuleNotFoundError as exc:
+    if exc.name!='etgen_production':raise
+    # Older external build settings may omit the optional engine install step.
+    # Keep their research API available; private production routes report 503.
+    Engine=None
 from services import product_validation as validation
 
 
 def engine():
+    if Engine is None:raise ValueError('Install the verified bundled production engine before enabling production')
     return Engine(Path(os.getenv('PRODUCTION_ROOT',validation.db_path().parent/'production')))
 
 

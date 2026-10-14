@@ -36,6 +36,30 @@ def test_private_reads_and_writes(setup):
     assert setup.get('/api/production').status_code==200
 
 
+def test_optional_engine_omission_keeps_backend_running(tmp_path):
+    import os,subprocess,sys
+    from pathlib import Path
+    env={k:v for k,v in os.environ.items() if not k.startswith(('SUPABASE_','ETSY_','GOOGLE_ADS_','APP_'))}
+    env.update(BACKEND_DIR=str(tmp_path),VALIDATION_DB_PATH=str(tmp_path/'ledger.sqlite'),
+               AUTO_START_SCHEDULER='0',APP_PRODUCTION_ENABLED='0',APP_KEYWORD_FEED_ENABLED='0',
+               SUPABASE_URL='',SUPABASE_SERVICE_ROLE_KEY='',SUPABASE_ANON_KEY='')
+    code="""
+import importlib.abc,sys
+class MissingEngine(importlib.abc.MetaPathFinder):
+ def find_spec(self,fullname,path=None,target=None):
+  if fullname=='etgen_production':raise ModuleNotFoundError('isolated missing engine',name=fullname)
+sys.meta_path.insert(0,MissingEngine())
+from fastapi.testclient import TestClient
+from main import app
+with TestClient(app,base_url='http://127.0.0.1',client=('127.0.0.1',123)) as client:
+ assert client.get('/api/health').status_code==200
+ assert client.get('/api/product-validation').status_code==200
+ assert client.get('/api/production').status_code==503
+"""
+    subprocess.run([sys.executable,'-c',code],cwd=Path(__file__).resolve().parents[1],env=env,
+                   check=True,capture_output=True,timeout=30)
+
+
 def test_actual_production_review_and_export(setup):
     response=setup.post('/api/production/jobs',json={'spec':spec()});assert response.status_code==201,response.text
     job=response.json();assert job['spec']['research']['status']=='unvalidated_operator_concept'

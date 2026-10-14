@@ -1,11 +1,16 @@
 """Private operator APIs; no automatic publication or billable provider fallback."""
 import base64
 import httpx
-from fastapi import APIRouter,Body,HTTPException
+from fastapi import APIRouter,Body,Depends,HTTPException
 from fastapi.responses import FileResponse
 from services import production as service
 
-router=APIRouter(prefix='/api/production',tags=['production'])
+def require_engine():
+    if service.Engine is None:
+        raise HTTPException(503,'Production engine is not installed. Run the verified backend engine installer; existing research remains available.')
+
+
+router=APIRouter(prefix='/api/production',tags=['production'],dependencies=[Depends(require_engine)])
 
 
 def invoke(fn,*args,**kwargs):
