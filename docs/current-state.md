@@ -1,3 +1,19 @@
+# October 13 supported keyword production successor
+
+The installed private app now tracks a 3,000/month supported-demand-group target,
+with baseline/refresh/close-variant deduplication, measured pace and explicit
+qualification blockers. The private validation page prepares fact-grounded
+listing drafts, reuses preserved evidence, retains revisions and connects to
+relevance, economics and outcomes. Drafts require review and never publish or
+create marketplace shops. Collection remains inside EtGen, under existing quotas.
+
+The first live qualification produced zero passing groups; the earlier paired
+coverage count is not a count of high-demand/low-competition opportunities.
+The target and illustrative 5% yield are not established production rates.
+Read the canonical desktop `docs/CURRENT_STATE.md` and
+`docs/supported-keyword-pipeline.md` for exact installed commits, preservation,
+criteria, live proof and limitations. No public cutover was performed.
+
 # October 13 complete collection optimization successor
 
 The collector now pools provider/mirror connections, separates competition and
