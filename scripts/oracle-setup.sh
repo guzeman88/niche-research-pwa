@@ -22,7 +22,8 @@ cd /opt/niche-research-pwa/backend
 echo "[3/6] Installing Python dependencies..."
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -c requirements-constraints.txt -r requirements.txt
+python install_production_engine.py
 
 # 4. Copy .env (you'll need to set API keys)
 echo "[4/6] Setting up environment..."

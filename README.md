@@ -11,7 +11,9 @@ public production site do not automatically follow merged source.
 
 Use Node 22 with `npm ci`. Checks: `npm test`, `npm run lint`, `npx tsc -b`,
 `npm run build`. Install backend dependencies from `backend/requirements.txt`
-with `-c backend/requirements-constraints.txt` to reproduce the tested versions;
+with `-c backend/requirements-constraints.txt` to reproduce the tested versions,
+then run `python scripts/install-production-engine.py` to verify/install the bundled
+private engine. From the backend directory use `python install_production_engine.py`.
 run `python -m pytest tests -q` from `backend` with its configured environment.
 Builds validate the snapshot contract; choose the intended snapshot source.
 Do not use real-provider/live-account tests as routine setup commands.

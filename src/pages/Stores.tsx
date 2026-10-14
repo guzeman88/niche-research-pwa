@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { preserveProductionIntake } from '../lib/production'
 import { generateDesignAsset, getDesignProviders, getStores } from '../lib/api'
 import type { DesignProviderInfo, GeneratedDesignAsset, StoreItem } from '../lib/api'
 import Icon from '../components/Icon'
@@ -739,6 +740,7 @@ function KeywordProductCreationPage({
         </div>
 
         <div ref={designPanelRef} className="space-y-3">
+          {savedProduct && <Link className="btn-secondary" to="/validation#production-heading" onClick={() => preserveProductionIntake(savedProduct)}>Prepare this concept in the production queue</Link>}
           <div className="panel p-3">
             <div className="flex min-w-0 items-center justify-between gap-3">
               <div className="min-w-0">
