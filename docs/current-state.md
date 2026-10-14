@@ -5,12 +5,14 @@ real customer files, revisioned specifications, technical/human quality gates
 and approved exports. See [production operations](production.md) and the desktop
 repository's `docs/CURRENT_STATE.md` for exact installed hashes, backup proof,
 model/provider limits and current collection observations. Backend/web installed
-revision is `c90db27843faed8c94d73abce6ab8acc5ebe4cdc`; bundled engine 0.1.3 is
+revision is `d028d1ccf2519fadb26c603252887719f54d5f3d`; bundled engine 0.1.3 is
 verified against root revision `5c5e98689b18f9ec9c85027c76b0913de6c5ce56`.
 Code, immutable installation and public deployment remain separate states.
 The public site was not upgraded during this local rollout. All lower dated
 snapshots are historical. Collection belongs to the backend; obsolete Codex
 heartbeat or Windows collection-timer instructions below must not be re-enabled.
+The final status repair also keeps mirrored validation records current after
+successful export/cancel/review, machine assessment and mockup mutations.
 
 # October 13 supported keyword production successor
 
