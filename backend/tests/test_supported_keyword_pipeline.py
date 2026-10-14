@@ -157,3 +157,19 @@ def test_draft_requires_real_facts_and_confirmation(research):
     with pytest.raises(ValueError,match='Price'):
         listing.create_draft({**facts,'product_matches_keyword':True,'price':float('nan')})
     assert validation.records() == []
+
+
+def test_same_actual_product_uses_one_concept_across_keyword_phrases(research):
+    at=datetime.now(timezone.utc)-timedelta(minutes=1)
+    with research._conn() as con:
+        evidence(con,'teacher mug',at)
+        evidence(con,'teacher coffee mug',at)
+        support.refresh(con,at)
+    facts={'keyword':'teacher mug','product_name':'Personalized Teacher Coffee Mug','product_type':'mug',
+           'details':'Teacher coffee mug with a name.','product_matches_keyword':True}
+    first=listing.create_draft(facts)
+    second=listing.create_draft({**facts,'keyword':'teacher coffee mug'})
+    assert first['project_id']==second['project_id']
+    assert len(validation.records(kind='project'))==1
+    assert len(validation.records(kind='listing_draft'))==1
+    assert set(validation.project(first['project_id'])['keywords'])=={'teacher mug','teacher coffee mug'}

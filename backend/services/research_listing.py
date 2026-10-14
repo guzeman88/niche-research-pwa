@@ -174,14 +174,14 @@ def create_draft(data):
             raise ValueError('Provide at most 13 unique tags, each 2–20 characters')
     # IDs represent actual distinct products, not keyword variants. Changes in
     # price/copy become revisions of the same product rather than extra listings.
-    product_id = 'research-' + validation.digest({'niche': evidence['niche_key'], 'product_name': support.normalized(facts['product_name']),
+    product_id = 'research-' + validation.digest({'product_name': support.normalized(facts['product_name']),
                                                  'product_type': support.normalized(facts['product_type'])})[:24]
     existing = validation.records(product_id, 'project')
     previous_keywords = existing[0]['payload']['keywords'] if existing else []
     keywords = list(dict.fromkeys(previous_keywords + [keyword, *evidence['supporting_keywords']]))[:15]
     project = {'name': facts['product_name'], 'product_type': facts['product_type'], 'keywords': keywords,
                'created_at': existing[0]['payload']['created_at'] if existing else validation.stamp(),
-               'source': 'supported_keyword_research', 'shop_theme': evidence['niche_key']}
+               'source': 'supported_keyword_research', 'shop_theme': existing[0]['payload']['shop_theme'] if existing else evidence['niche_key']}
     validation.put('project', product_id, project, product_id)
     attach_preserved_evidence(product_id, evidence)
     description = facts['product_name'] + '. ' + facts['details']
