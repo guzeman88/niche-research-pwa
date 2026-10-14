@@ -13,7 +13,7 @@ EtGen collects bulk keyword evidence without browser automation or model calls.
 1. Up to 500 library seeds are sent to the official Google Ads Keyword Planner API in groups of 20.
 2. The cycle keeps at most 50,000 unique, non-IP-risk keyword ideas.
 3. Historical metrics are requested in batches of up to 10,000 keywords.
-4. Exact monthly searches, 12-month series, competition index, CPC, and bid ranges are stored in the evidence database.
+4. Provider-reported approximate monthly searches, 12-month series, competition index, CPC, and bid ranges are stored in the evidence database.
 5. Existing Etsy Open API listing counts and samples are joined at scoring time without changing their provenance.
 6. A deterministic report shortlists 200 keywords, 25 niche clusters, and 5 finalists.
 

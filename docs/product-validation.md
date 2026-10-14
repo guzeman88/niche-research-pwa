@@ -45,4 +45,4 @@ collected. Use the verified private account map, not the separate developer shop
 unfinished onboarding. First live listing, actual costs and sales results remain
 pending. Public access still has separate owner/endpoint/cutover gates.
 
-The native Windows worker now owns automatic due collection and Google workflow/import jobs; see [current-state.md](current-state.md). The weekly Codex heartbeat is for monitoring and browser-assisted seller demand, not a second scheduler. Source dates/history and native health are visible in the local validation page.
+Automatic due collection and Google dispatch/import jobs run under the installed EtGen backend supervisor; see [current-state.md](current-state.md). The Windows logon launcher starts the app, the retired Windows collection timer is disabled, and no Codex collection or demand monitor remains. Marketplace Insights capture/import stays manual within the free allowance. Source dates, history and monthly qualification progress are visible in the local validation page.
