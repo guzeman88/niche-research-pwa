@@ -53,7 +53,7 @@ export async function operatorRequest<T>(path: string, body?: unknown): Promise<
     method: body === undefined ? 'GET' : 'POST',
     headers: {'Content-Type': 'application/json', ...operatorHeaders(url)},
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(path.startsWith('/api/production') ? 120000 : 20000),
   })
   if (!response.ok) {
     const detail = await response.json().catch(() => ({})) as {detail?: unknown}

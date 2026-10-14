@@ -38,6 +38,7 @@ export default function ProductValidation() {
       </div>
       <details className="mb-6 border-b border-surface-600 pb-6" open={!query.data.projects.length}><summary className="mb-4 cursor-pointer text-base font-semibold">Add a product concept</summary><div className="max-w-xl"><CreateValidation refresh={refresh} /></div></details>
       {query.data.projects.length === 0 && <p className="text-surface-200">Start with three concepts and a focused set of buyer keywords. Your queue will show what evidence each product still needs.</p>}
+      <ProductionQueue />
       {current && <>
         <label className="block max-w-xl text-sm">Product concept<select className="input mt-2 w-full" value={current.id} onChange={event => setSelected(event.target.value)}>{query.data.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
         <div className="mt-6 flex flex-wrap items-baseline gap-4"><h2 className="text-xl font-semibold">{current.name}</h2><span className="text-sm text-surface-200">{label(current.status)}</span></div>
@@ -52,3 +53,4 @@ export default function ProductValidation() {
     </>}
   </main>
 }
+import ProductionQueue from '../components/ProductionQueue'

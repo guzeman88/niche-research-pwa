@@ -22,3 +22,5 @@ curl-cffi>=0.7.0             # Browser-grade Etsy fetch fallback
 
 # ─── Utilities ──────────────────────────────────────────────────────────────
 Pillow>=10.0.0               # Image processing (needed by some adapters)
+reportlab==4.5.1
+pypdf==6.20.1

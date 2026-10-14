@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
 from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace, evidence, validation, product_validation
+from routers import production
 
 _PROCESS_BOOT_ID = uuid.uuid4().hex
 _PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
@@ -49,6 +50,7 @@ app.add_middleware(
 
 # Mount routers
 app.include_router(research.router)
+app.include_router(production.router)
 app.include_router(keywords.router)
 app.include_router(gaps.router)
 app.include_router(scheduler.router)
@@ -123,6 +125,10 @@ async def startup():
     from services.app_keyword_feed import configured_worker
     worker = configured_worker()
     app.state.keyword_feed_worker = worker
+    if os.environ.get('APP_PRODUCTION_ENABLED') == '1':
+        from services.production import Worker
+        app.state.production_worker = Worker()
+        app.state.production_worker.start()
     if worker:
         worker.start()
         safe_log('[startup] App-owned keyword collection started')
@@ -131,6 +137,9 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     """Gracefully stop the scheduler if running."""
+    production_worker = getattr(app.state, 'production_worker', None)
+    if production_worker:
+        await production_worker.stop()
     worker = getattr(app.state, 'keyword_feed_worker', None)
     if worker:
         await worker.stop()
@@ -173,6 +182,8 @@ def api_health():
         "boot_id": _PROCESS_BOOT_ID,
         "started_at": _PROCESS_STARTED_AT,
         "revision": os.environ.get("RENDER_GIT_COMMIT") or None,
+        "production_scheduler": {"owner":"etgen_backend", "enabled": bool(getattr(app.state,'production_worker',None)),
+            "last_outcome": getattr(getattr(app.state,'production_worker',None),'last_outcome','disabled')},
         "collection_scheduler": dict(app.state.keyword_feed_worker.state)
         if getattr(app.state, 'keyword_feed_worker', None)
         else {"owner": "etgen_backend", "enabled": False},
