@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import ValidationForms, { CreateValidation } from '../components/ValidationForms'
 import ValidationEvidence from '../components/ValidationEvidence'
 import KeywordFeedStatus from '../components/KeywordFeedStatus'
+import SupportedKeywordPipeline from '../components/SupportedKeywordPipeline'
 import { readConnection, saveConnection } from '../lib/operatorConnection'
 import { display, download, label, validationRequest } from '../lib/productValidation'
 import type { ValidationOverview } from '../lib/productValidation'
@@ -30,6 +31,7 @@ export default function ProductValidation() {
     {message && <p className="my-4 text-sm" role="status">{message}</p>}
     {query.data && <>
       <KeywordFeedStatus feed={query.data.feed_status} project={current} />
+      <SupportedKeywordPipeline onCreated={async id => {setSelected(id); await refresh()}} />
       <div className="my-6 flex flex-wrap items-center gap-3"><span className="text-sm text-surface-200">{query.data.pending_sync} records awaiting database mirror</span>
         <button className="btn-secondary" onClick={async () => {try {const result = await validationRequest<{pending: number; configured: boolean}>('/sync', {}); setMessage(result.configured ? `${result.pending} records still awaiting mirror. Local saves remain available.` : 'Database mirror is not configured. Local records remain saved.'); await refresh()} catch (error) {setMessage(String(error))}}}>Retry backup sync</button>
         <button className="btn-secondary" onClick={async () => {try {const ledger = await validationRequest('/export'); download('product-validation-ledger.json', JSON.stringify(ledger, null, 2)); setMessage('Export downloaded. It contains private research and cost records; store it securely.')} catch (error) {setMessage(String(error))}}}>Export evidence ledger</button>

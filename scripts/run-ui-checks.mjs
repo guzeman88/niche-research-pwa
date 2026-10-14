@@ -37,6 +37,7 @@ try {
     'scripts/test-store-candidates-ui.mjs',
     'scripts/test-launch-ui.mjs',
     'scripts/run-validation-ui-check.mjs',
+    'scripts/test-supported-keywords-ui.mjs',
   ]) {
     const result = spawnSync(process.execPath, [script], { env, stdio: 'inherit' })
     if (result.error) throw result.error
