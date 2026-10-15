@@ -3,7 +3,7 @@ const LOCAL_KEY = 'etgen:local-validation-address'
 export interface OperatorConnection { url: string; token: string }
 
 function localValidationPage() {
-  return ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) && location.pathname === '/validation'
+  return ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) && ['/validation', '/selling'].includes(location.pathname)
 }
 
 function loopbackOrigin(value: string) {

@@ -13,12 +13,12 @@ export default function ProductValidation() {
   const initial = readConnection()
   const [url, setUrl] = useState(initial.url || (['localhost', '127.0.0.1'].includes(location.hostname) ? 'http://127.0.0.1:18020' : ''))
   const [token, setToken] = useState(initial.token), [connected, setConnected] = useState(Boolean(initial.url))
-  const [version, setVersion] = useState(0), [selected, setSelected] = useState(''), [message, setMessage] = useState('')
+  const [version, setVersion] = useState(0), [selected, setSelected] = useState(() => new URLSearchParams(location.search).get('project') || ''), [message, setMessage] = useState('')
   const query = useQuery<ValidationOverview>({queryKey: ['product-validation', version], queryFn: () => validationRequest(), enabled: connected, retry: false, refetchInterval: 60000})
   const refresh = async () => {await query.refetch()}
   const current = query.data?.projects.find(project => project.id === selected) || query.data?.projects[0]
   return <main className="page min-h-screen bg-surface-950 text-surface-50">
-    <div className="flex flex-wrap items-baseline justify-between gap-4"><h1 className="text-2xl font-semibold">Product validation</h1><Link className="text-sm text-surface-200 underline" to="/evidence">Research tools</Link></div>
+    <div className="flex flex-wrap items-baseline justify-between gap-4"><h1 className="text-2xl font-semibold">Product validation</h1><nav className="flex flex-wrap gap-4" aria-label="Research workspaces"><Link className="text-sm text-surface-200 underline" to="/selling">Selling products</Link><Link className="text-sm text-surface-200 underline" to="/evidence">Research tools</Link></nav></div>
     <p className="mt-3 max-w-2xl text-base leading-relaxed text-surface-200">Build evidence for a profitable product: buyer demand, comparable listings, complete costs, and your own sales results.</p>
     <details className="my-6 border-y border-surface-600 py-4" open={!connected}><summary className="cursor-pointer text-sm font-semibold">Research workspace connection</summary>
       <form className="mt-4 grid max-w-3xl gap-4 sm:grid-cols-2" onSubmit={event => {

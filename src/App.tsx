@@ -14,6 +14,7 @@ const LaunchLab = lazy(() => import('./pages/LaunchLab'))
 const Workspace = lazy(() => import('./pages/Workspace'))
 const EvidenceOperations = lazy(() => import('./pages/EvidenceOperations'))
 const ProductValidation = lazy(() => import('./pages/ProductValidation'))
+const SellingProducts = lazy(() => import('./pages/SellingProducts'))
 const Account = lazy(() => import('./pages/Account'))
 const SignIn = lazy(() => import('./pages/SignIn'))
 const ConfirmAccount = lazy(() => import('./pages/ConfirmAccount'))
@@ -62,6 +63,7 @@ function AppRoutes() {
       <Route path="/terms" element={page(<Terms />)} />
       <Route path="/auth/etsy" element={page(<EtsyAuth />)} />
       <Route path="/validation" element={page(<ProductValidation />)} />
+      <Route path="/selling" element={page(<SellingProducts />)} />
       <Route element={<RequireAccount><Layout /></RequireAccount>}>
         <Route index element={page(<Dashboard />)} />
         <Route path="/keywords" element={page(<Keywords />)} />
