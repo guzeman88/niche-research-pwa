@@ -1,3 +1,20 @@
+# October 15, 2026 advisory keyword flags
+
+The user requested a simple nonblocking flag rather than a rights-clearance or
+approval system. Keywords (desktop/mobile), supported candidates and product
+preparation now show expandable **Possible rights issue** notices from a small
+local watchlist. Names such as Ted Baker and Baker Mayfield are included; generic
+professions stay unflagged. No registry search or legal finding is implied. See
+[keyword-rights-flags.md](keyword-rights-flags.md) for scope and maintenance.
+
+Installed local backend/web source is `0c97023aaa767cf373ef519ab8ed5f14354ca6c0`,
+release SHA-256 `afb415cf0d8bae1efee2d548febe52269597e96f41f184ffbfbf1f605f79eaf4`.
+Web PR 114 is a draft with passing CI. The production engine, native collector,
+private records, runtime environments and data paths were preserved; no public
+deploy occurred. Read the canonical root handoff for dated verification and both
+verified incremental encrypted backups. Later documentation commits do not change
+the installed runtime revision.
+
 # October 14, 2026 production successor
 
 The local validation app now includes a private product production queue with
