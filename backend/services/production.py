@@ -42,9 +42,19 @@ def save_models(data):
 
 def submit(data):
     spec=dict(data['spec']);keyword=spec.get('keyword','')
+    selling_context=spec.get('research') or {}
+    if not isinstance(selling_context,dict):raise ValueError('Research context must be an object')
+    selling_context=selling_context.get('selling_products',selling_context)
+    if not isinstance(selling_context,dict):raise ValueError('Selling-product context must be an object')
     from services.research_listing import current_candidate
     try:spec['research']=current_candidate(keyword)
     except ValueError:spec['research']={'status':'unvalidated_operator_concept','keyword':keyword,'qualification_credit':False}
+    if selling_context.get('selling_opportunity'):
+        from services.selling_products import production_intake
+        intake=production_intake(selling_context['selling_opportunity'])
+        if selling_context.get('evidence_fingerprint')!=intake['research']['evidence_fingerprint']:
+            raise ValueError('Selling-product evidence changed. Reopen the reviewed brief before queuing production.')
+        spec['research']['selling_products']=intake['research']
     job=engine().submit(spec,data.get('product_id'))
     mirror(job);return job
 

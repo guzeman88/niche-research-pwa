@@ -6,6 +6,7 @@ export default function ProductionSpecForm({initial, productId, refresh, close}:
   initial?: ProductionSpec; productId?: string; refresh: () => void; close: () => void
 }) {
   const [family, setFamily] = useState(initial ? initial.family : 'planner')
+  const selling = (initial?.research?.selling_products || initial?.research || {}) as Record<string, unknown>
   const physical = ['mug', 'apparel'].includes(family)
   const mutation = useMutation({mutationFn: ({path, body}: {path: string; body: unknown}) => productionRequest(path, body), onSuccess: () => {refresh(); close()}})
   const [error, setError] = useState('')
@@ -19,12 +20,13 @@ export default function ProductionSpecForm({initial, productId, refresh, close}:
         price: data.price ? Number(data.price) : null, unit_cost: data.unit_cost ? Number(data.unit_cost) : null,
         category_id: data.category_id ? Number(data.category_id) : null,
         provider: JSON.parse(data.provider || '{}'), artwork_id: data.artwork_id || null,
-        research: {}, schema_version: 1}
+        research: selling.selling_opportunity ? {selling_opportunity: selling.selling_opportunity, evidence_fingerprint: selling.evidence_fingerprint} : {}, schema_version: 1}
       mutation.mutate({path: recipe ? '/profiles' : '/jobs', body: recipe ? {spec, enabled: false, facts_reviewed: true} : {spec, product_id: productId}})
     } catch {setError('Provider configuration must be valid JSON.')}
   }
   return <form aria-label="Production specification" className="mt-5 max-w-3xl space-y-5" onSubmit={event => {event.preventDefault(); submit(event.currentTarget)}}>
     <p className="max-w-prose text-sm text-surface-200">Enter actual product facts and original content. Research support is checked by the server. Unvalidated concepts stay labeled.</p>
+    {selling.original_direction != null && <aside className="space-y-3 border-l-2 border-surface-500 pl-4 text-sm"><p className="font-semibold">Saved original direction</p><p className="whitespace-pre-wrap leading-relaxed">{String(selling.original_direction)}</p>{Array.isArray(selling.improvements) && <ul className="list-disc space-y-2 pl-5">{selling.improvements.map((value, index) => <li key={index}>{String(value)}</li>)}</ul>}</aside>}
     <div className="grid gap-4 sm:grid-cols-2">
       <label className="text-sm">Product name<input name="name" className="input mt-2 w-full" required minLength={3} maxLength={120} defaultValue={initial?.name} /></label>
       <label className="text-sm">Buyer keyword<input name="keyword" className="input mt-2 w-full" required minLength={3} defaultValue={initial?.keyword} /></label>

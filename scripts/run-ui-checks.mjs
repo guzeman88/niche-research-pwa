@@ -39,6 +39,7 @@ try {
     'scripts/run-validation-ui-check.mjs',
     'scripts/test-supported-keywords-ui.mjs',
     'scripts/test-keyword-rights-ui.mjs',
+    'scripts/test-selling-products-ui.mjs',
     'scripts/test-production-ui.mjs',
   ]) {
     const result = spawnSync(process.execPath, [script], { env, stdio: 'inherit' })

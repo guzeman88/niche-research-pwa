@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
 from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace, evidence, validation, product_validation
-from routers import production
+from routers import production, selling_products
 
 _PROCESS_BOOT_ID = uuid.uuid4().hex
 _PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
@@ -65,6 +65,7 @@ app.include_router(workspace.router)
 app.include_router(evidence.router)
 app.include_router(validation.router)
 app.include_router(product_validation.router)
+app.include_router(selling_products.router)
 
 
 async def _scheduler_watchdog() -> None:
