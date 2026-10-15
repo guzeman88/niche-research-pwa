@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listKeywords, getDomains, runDiscovery } from '../lib/api'
 import Icon from '../components/Icon'
+import KeywordRightsFlag from '../components/KeywordRightsFlag'
 import PullToRefresh from '../components/PullToRefresh'
 import { KeywordsSkeleton } from '../components/Skeleton'
 import { fmtDate } from '../lib/utils'
@@ -191,6 +192,7 @@ export default function Keywords() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-[13px] font-extrabold text-surface-50">{kw.keyword}</div>
+                      <KeywordRightsFlag keyword={kw.keyword} />
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <span className="tag max-w-full truncate bg-accent-violet/10 text-accent-violet border-accent-violet/20">{kw.domain}</span>
                         <EvidenceStatus keyword={kw} />
@@ -238,7 +240,7 @@ export default function Keywords() {
                   const gapColor = gapScore == null ? 'text-surface-400' : gapScore >= 70 ? 'text-accent-green' : gapScore >= 50 ? 'text-accent-amber' : 'text-accent-red'
                   return (
                     <tr key={kw.keyword} className="border-b border-surface-600/35 hover:bg-surface-700/35 transition-colors">
-                      <td className="px-4 py-3 text-surface-50 font-semibold whitespace-nowrap">{kw.keyword}</td>
+                      <td className="px-4 py-3 text-surface-50 font-semibold"><span className="whitespace-nowrap">{kw.keyword}</span><KeywordRightsFlag keyword={kw.keyword} /></td>
                       <td className="px-4 py-3"><span className="tag bg-accent-violet/10 text-accent-violet border-accent-violet/20 whitespace-nowrap">{kw.domain}</span></td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <EvidenceStatus keyword={kw} />
