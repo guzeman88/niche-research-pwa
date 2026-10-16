@@ -46,6 +46,8 @@ or another tool's estimates.
 7. Require daily estimates for at least 3/7 or 14/30 days before extrapolating
    missing bins using the mean supported rate. Disclose missing days. Explicit
    baseline-only scenarios retain zero evidence coverage.
+   Clip the modeled history to the declared creation date (UTC midnight); partial
+   days contribute proportionally. Never extrapolate into pre-listing history.
 8. Scenario error is the maximum of 1 purchase, uncovered equivalent days, and
    total × [0.25 + 0.5 × missing-coverage fraction] + family disagreement scaled
    to the window. A fitted model's held-out residual envelope can widen it. These

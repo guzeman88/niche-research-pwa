@@ -192,6 +192,16 @@ def test_stale_purchase_messages_do_not_supply_current_persistence():
     assert result['opportunity']['components']['persistence'] is None
 
 
+def test_estimates_cannot_extend_before_declared_listing_creation():
+    created = (AT - timedelta(days=20)).date().isoformat()
+    result = run(listings=[{**listing(), 'created_on': created}], config={'baseline_daily': 3, 'assumptions_note': 'Synthetic baseline for age regression.'})['listings'][0]['windows']['30']
+    assert result['active_days'] == 20.5
+    assert result['estimate'] == 61.5
+    assert result['extrapolated_days'] == 0
+    young = run(listings=[{**listing(), 'created_on': AT.date().isoformat()}], config={'baseline_daily': 3, 'assumptions_note': 'Synthetic baseline for new listing.'})['listings'][0]['windows']['7']
+    assert young['estimate'] is None and young['active_days'] == 0.5
+
+
 @pytest.fixture
 def opportunity(tmp_path, monkeypatch):
     monkeypatch.setenv('VALIDATION_DB_PATH', str(tmp_path / 'private.sqlite'))

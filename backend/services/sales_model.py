@@ -250,6 +250,7 @@ def review_rate(listing, observations, listings, end, config):
 
 def estimate_listing(listing, observations, listings, config, artifact, end):
     identity = listing['listing_id']
+    created = datetime.combine(date.fromisoformat(listing['created_on']), time(), UTC) if listing.get('created_on') else end - timedelta(days=30)
     windows, issues = purchase_windows(observations, identity, end)
     bins = [{'end': end - timedelta(days=i), 'rates': [], 'anchor': None} for i in range(30)]
     observed = []
@@ -304,8 +305,12 @@ def estimate_listing(listing, observations, listings, config, artifact, end):
     outputs = {}
     for days in (7, 30):
         selected = bins[:days]
-        daily, coverage, used, dispersion = [], 0.0, set(), 0.0
+        active_days = overlap(end - timedelta(days=days), end, created, end) / DAY
+        daily, coverage, used, dispersion, supported_days = [], 0.0, set(), 0.0, 0.0
         for bucket in selected:
+            active_fraction = overlap(bucket['end'] - timedelta(days=1), bucket['end'], created, end) / DAY
+            if active_fraction == 0:
+                continue
             grouped = defaultdict(list)
             for method, rate, exposure in bucket['rates']:
                 grouped[method].append((rate, exposure))
@@ -314,20 +319,21 @@ def estimate_listing(listing, observations, listings, config, artifact, end):
             if not candidates:
                 continue
             observed_coverage = min(1.0, sum(w for method, _, w in bucket['rates'] if method != 'assumed_baseline'))
-            coverage += observed_coverage
+            coverage += observed_coverage * active_fraction
             if 'purchase_message' in candidates:
                 anchor_coverage = min(1.0, sum(w for method, _, w in bucket['rates'] if method == 'purchase_message'))
                 other = median([v for k, v in candidates.items() if k != 'purchase_message']) if len(candidates) > 1 else candidates['purchase_message']
                 rate = anchor_coverage * candidates['purchase_message'] + (1 - anchor_coverage) * other
             else:
                 rate = median(candidates.values())
-            daily.append(rate)
+            daily.append(rate * active_fraction)
+            supported_days += active_fraction
             bucket['estimate'] = rate
             used.update(candidates)
             dispersion += max(candidates.values()) - min(candidates.values())
-        supported = len(daily) >= (3 if days == 7 else 14)
+        supported = supported_days >= (3 if days == 7 else 14)
         # Baseline-only values need explicit operator assumptions, never automatic defaults.
-        estimate = sum(daily) * days / len(daily) if supported else None
+        estimate = sum(daily) * active_days / supported_days if supported else None
         uncertainty = (0.5 * (1 - coverage / days) + 0.25) if daily else None
         error = (max(1.0, days - coverage, estimate * uncertainty + dispersion * days / max(1, len(daily))) if estimate is not None else None)
         if error is not None and trained:
@@ -335,8 +341,8 @@ def estimate_listing(listing, observations, listings, config, artifact, end):
         outputs[str(days)] = {'days': days, 'start': (end - timedelta(days=days)).isoformat(), 'end': end.isoformat(), 'estimate': round(estimate, 2) if estimate is not None else None,
             'low': round(max(0, estimate - error), 2) if estimate is not None else None,
             'high': round(estimate + error, 2) if estimate is not None else None,
-            'supported_days': len(daily), 'coverage_days': round(min(days, coverage), 2),
-            'extrapolated_days': days - len(daily), 'methods': sorted(used), 'unit': 'estimated_purchases',
+            'supported_days': round(supported_days, 2), 'active_days': round(active_days, 2), 'coverage_days': round(min(active_days, coverage), 2),
+            'extrapolated_days': round(max(0, active_days - supported_days), 2), 'methods': sorted(used), 'unit': 'estimated_purchases',
             'range_type': 'provisional_scenario_envelope', 'status': 'provisional' if supported else 'insufficient_evidence'}
     shop = listing.get('shop', '').strip().casefold()
     shop_segments, shop_issues = counter_segments(observations, 'shop_sales', end, shop=shop, listings=listings) if shop else ([], [])
