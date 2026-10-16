@@ -1,11 +1,31 @@
 """Operator-only selling-products research, imports and original briefs."""
 import json
-from fastapi import APIRouter, Body, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query, Response
 from pydantic import ValidationError
 from services import selling_products as service
 from services.sales_model import parse_message
 
 router = APIRouter(prefix='/api/selling-products', tags=['selling products'])
+
+
+@router.get('/discovery')
+def discovery(q: str = Query('', max_length=200), signal: str = Query('all', max_length=30),
+              page: int = Query(0, ge=0, le=50000)):
+    from services.selling_discovery import browse
+    return invoke(browse, q, signal, page)
+
+
+@router.post('/discovery/refresh', status_code=202)
+def discovery_refresh(background: BackgroundTasks):
+    from services.selling_discovery_worker import cycle
+    background.add_task(cycle)
+    return {'status': 'queued', 'collection_owner': 'etgen_backend'}
+
+
+@router.post('/discovery/{listing_id}/investigate')
+def discovery_investigate(listing_id: str, data: dict = Body(...)):
+    from services.selling_discovery import investigate
+    return invoke(investigate, listing_id, data.get('expected_fingerprint'))
 
 
 def invoke(action, *args, **kwargs):

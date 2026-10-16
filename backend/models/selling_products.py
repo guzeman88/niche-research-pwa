@@ -35,6 +35,7 @@ class Listing(Input):
     title: str = Field(min_length=3, max_length=300)
     shop: str = Field(default='', max_length=120)
     url: str = Field(default='', max_length=1000)
+    image_url: str = Field(default='', max_length=1000)
     tags: list[str] = Field(default_factory=list, max_length=30)
     created_on: date | None = None
     source: Source = 'manual'
@@ -63,6 +64,16 @@ class Listing(Input):
     def creation_not_future(cls, value):
         if value and value > datetime.now(timezone.utc).date():
             raise ValueError('Listing creation date cannot be in the future')
+        return value
+
+    @field_validator('image_url')
+    @classmethod
+    def public_image_url(cls, value):
+        if value:
+            parsed = urlparse(value)
+            if (parsed.scheme != 'https' or parsed.hostname != 'i.etsystatic.com'
+                    or parsed.port not in (None, 443) or parsed.username or parsed.password):
+                raise ValueError('Use an HTTPS Etsy static image URL, or leave it blank')
         return value
 
 
