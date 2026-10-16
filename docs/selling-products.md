@@ -1,5 +1,10 @@
 # Selling-product opportunities
 
+October 16 successor: [EtGen sales model](sales-model.md) adds a Sales model tab,
+parsed purchase messages, explicit conversion/lag assumptions, provisional
+7/30-day ranges, sample-scoped opportunity ranking and held-out calibration.
+Original observations, the five methods and production workflow are preserved.
+
 Implemented October 15, 2026. Operational installation hashes and backup proofs
 belong in the root repository's `docs/CURRENT_STATE.md`.
 
@@ -61,8 +66,9 @@ Saved listing observations are read-only from the trusted native installation
 database, falling back to the existing research connection. No browser-supplied
 database paths are accepted. Exact-match lookup reads at most 200 snapshots.
 Invalid/incomplete records are skipped with a count, and absent evidence stays
-unknown. It does not initialize or reset research databases or infer sales from
-review counts, favorites, stock changes or shop totals.
+unknown. It does not initialize or reset research databases. The separate sales
+model uses explicit assumptions or fitted coefficients; original observations
+never become order records. See its contract for units, review lag and limits.
 
 ## Original development and existing workflows
 

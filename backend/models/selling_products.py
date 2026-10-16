@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Family = Literal['planner', 'worksheet', 'wall_art', 'mug', 'apparel', 'other']
-Source = Literal['manual', 'everbee', 'alura', 'erank', 'ehunt', 'saved_research',
+Source = Literal['manual', 'everbee', 'alura', 'erank', 'ehunt', 'saved_research', 'etsy_public',
                  'seller_records', 'etsy_marketplace_insights', 'google_ads', 'other']
 
 
@@ -15,7 +15,7 @@ class Input(BaseModel):
     @field_validator('*', mode='before')
     @classmethod
     def no_boolean_numbers(cls, value, info):
-        if isinstance(value, bool) and info.field_name in {'value', 'rating', 'readability'}:
+        if isinstance(value, bool):
             raise ValueError('Use a number, not a checkbox value')
         return value
 
@@ -39,6 +39,8 @@ class Listing(Input):
     created_on: date | None = None
     source: Source = 'manual'
     source_ref: str = Field(min_length=3, max_length=1000)
+    category: str = Field(default='', max_length=100)
+    product_type: Literal['unknown', 'digital', 'physical'] = 'unknown'
 
     @field_validator('url')
     @classmethod
@@ -67,7 +69,8 @@ class Listing(Input):
 class Observation(Input):
     listing_id: str = Field(min_length=1, max_length=100)
     metric: Literal['estimated_sales', 'seller_reported_sales', 'reviews', 'favorites',
-                    'shop_sales', 'price', 'keyword_searches', 'listing_count']
+                    'shop_sales', 'shop_reviews', 'views', 'carts', 'stock', 'purchase_message',
+                    'price', 'keyword_searches', 'listing_count']
     value: float | None = Field(default=None, ge=0, le=1e12)
     basis: Literal['period', 'lifetime', 'lifetime_average', 'point_in_time'] = 'point_in_time'
     observed_at: datetime
@@ -79,6 +82,10 @@ class Observation(Input):
     source: Source = 'manual'
     source_ref: str = Field(min_length=3, max_length=1000)
     note: str = Field(default='', max_length=1500)
+    unit: Literal['unknown', 'purchases', 'buyers', 'units'] = 'unknown'
+    precision: Literal['exact', 'lower_bound'] = 'exact'
+    raw_message: str = Field(default='', max_length=500)
+    window_hours: int = Field(default=24, ge=1, le=168)
 
     @field_validator('observed_at')
     @classmethod
@@ -108,10 +115,21 @@ class Observation(Input):
             raise ValueError('Search demand needs a keyword, geography and reporting window')
         if self.metric == 'price' and (not self.currency or self.basis != 'point_in_time'):
             raise ValueError('Price needs a currency and point-in-time basis')
-        if self.metric in ('reviews', 'favorites', 'shop_sales') and self.basis != 'lifetime':
+        if self.metric in ('reviews', 'favorites', 'shop_sales', 'shop_reviews', 'views') and self.basis != 'lifetime':
             raise ValueError('Review, favorite and shop-sales counters need a lifetime basis')
-        if self.metric in ('reviews', 'favorites', 'shop_sales', 'listing_count', 'seller_reported_sales') and self.value is not None and self.value != int(self.value):
+        if self.metric in ('reviews', 'favorites', 'shop_sales', 'shop_reviews', 'views', 'carts', 'stock', 'purchase_message', 'listing_count', 'seller_reported_sales') and self.value is not None and self.value != int(self.value):
             raise ValueError('Counts must be whole numbers')
+        if self.metric in ('purchase_message', 'carts', 'stock') and self.basis != 'point_in_time':
+            raise ValueError('Purchase messages, carts and stock need a point-in-time basis')
+        if self.metric == 'purchase_message' and not self.raw_message:
+            raise ValueError('Preserve the original purchase message')
+        if self.metric == 'purchase_message' and self.value is not None:
+            from services.sales_model import parse_message
+            parsed = parse_message(self.raw_message)
+            if any(getattr(self, key) != parsed[key] for key in ('value', 'precision', 'unit', 'window_hours')):
+                raise ValueError('Purchase value, unit, precision and window must match the original message')
+        if self.raw_message and self.metric != 'purchase_message':
+            raise ValueError('Raw purchase messages apply only to purchase_message')
         if self.metric != 'price' and self.currency:
             raise ValueError('Currency applies only to price observations')
         return self
@@ -151,16 +169,63 @@ class Pattern(Input):
         return list(dict.fromkeys(item.casefold().strip() for item in value))
 
 
+class CalibrationCase(Input):
+    case_id: str = Field(min_length=1, max_length=100)
+    listing_id: str = Field(min_length=1, max_length=100)
+    period_start: date
+    period_end: date
+    actual_purchases: int = Field(ge=0, le=100000000)
+    source_ref: str = Field(min_length=3, max_length=1000)
+    note: str = Field(min_length=10, max_length=1000)
+
+    @model_validator(mode='after')
+    def window(self):
+        if self.period_start > self.period_end or self.period_end >= datetime.now(timezone.utc).date():
+            raise ValueError('Calibration needs a completed, ordered UTC date window')
+        if (self.period_end - self.period_start).days > 90:
+            raise ValueError('Calibration windows must be at most 91 days')
+        return self
+
+
+class SalesConfig(Input):
+    purchases_per_buyer: float | None = Field(default=None, ge=1, le=100)
+    review_rate: float | None = Field(default=None, gt=0, le=1)
+    view_conversion: float | None = Field(default=None, gt=0, le=1)
+    baseline_daily: float | None = Field(default=None, ge=0, le=1000000)
+    review_delay_min: int = Field(default=0, ge=0, le=365)
+    review_delay_max: int = Field(default=180, ge=0, le=730)
+    seasonality: list[float] = Field(default_factory=lambda: [1.0] * 12, min_length=12, max_length=12)
+    assumptions_note: str = Field(default='', max_length=1500)
+
+    @field_validator('seasonality', mode='before')
+    @classmethod
+    def no_checkbox_seasons(cls, value):
+        if isinstance(value, list) and any(isinstance(x, bool) for x in value):
+            raise ValueError('Seasonal multipliers must be numbers, not checkbox values')
+        return value
+
+    @model_validator(mode='after')
+    def assumptions(self):
+        if self.review_delay_min > self.review_delay_max:
+            raise ValueError('Review delay minimum must not exceed maximum')
+        if any(isinstance(x, bool) or not 0.1 <= x <= 10 for x in self.seasonality):
+            raise ValueError('Supply twelve seasonal multipliers between 0.1 and 10')
+        if any(x is not None for x in (self.review_rate, self.view_conversion, self.baseline_daily, self.purchases_per_buyer)) and len(self.assumptions_note) < 10:
+            raise ValueError('Record the basis for conversion and baseline assumptions')
+        return self
+
+
 class Packet(Input):
     schema_version: Literal[1] = 1
     listings: list[Listing] = Field(default_factory=list, max_length=500)
     observations: list[Observation] = Field(default_factory=list, max_length=1000)
     reviews: list[Review] = Field(default_factory=list, max_length=1000)
     patterns: list[Pattern] = Field(default_factory=list, max_length=500)
+    calibration: list[CalibrationCase] = Field(default_factory=list, max_length=1000)
 
     @model_validator(mode='after')
     def bounded(self):
-        if sum(len(getattr(self, key)) for key in ('listings', 'observations', 'reviews', 'patterns')) > 2000:
+        if sum(len(getattr(self, key)) for key in ('listings', 'observations', 'reviews', 'patterns', 'calibration')) > 2000:
             raise ValueError('Import at most 2,000 rows at a time')
         return self
 

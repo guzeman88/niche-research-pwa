@@ -10,12 +10,13 @@ from contextlib import closing
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
-from models.selling_products import Opportunity, Packet, Brief, Listing, Observation, Review, Pattern
+from models.selling_products import Opportunity, Packet, Brief, Listing, Observation, Review, Pattern, CalibrationCase, SalesConfig
 from services import product_validation as ledger
 from services.selling_analysis import analyze
+from services import sales_model
 
 KINDS = {'listings': 'selling_listing', 'observations': 'selling_observation',
-         'reviews': 'selling_review', 'patterns': 'selling_pattern'}
+         'reviews': 'selling_review', 'patterns': 'selling_pattern', 'calibration': 'selling_calibration'}
 MAX_BYTES = 2_000_000
 
 
@@ -24,6 +25,8 @@ class Conflict(ValueError):
 
 
 def identity(kind, value):
+    if kind == 'calibration':
+        return value['case_id']
     if kind in ('listings', 'patterns'):
         return value['listing_id']
     if kind == 'reviews':
@@ -61,9 +64,13 @@ def detail(opportunity_id):
     current_evidence = fingerprint(research_rows)
     brief = ({**briefs[0]['payload'], 'stale': briefs[0]['payload']['evidence_fingerprint'] != current_evidence}
              if briefs else None)
+    analysis = analyze(**{k: v for k, v in packet.items() if k != 'calibration'})
+    config = next((r['payload'] for r in rows if r['kind'] == 'selling_model_config'), SalesConfig().model_dump(mode='json'))
+    artifact = next((r['payload'] for r in rows if r['kind'] == 'selling_model_artifact'), None)
+    analysis['sales_model'] = sales_model.run(**packet, config=config, artifact=artifact, themes=analysis['methods']['reviews']['themes'])
     return {'id': opportunity_id, **opportunity, 'fingerprint': fingerprint(rows),
             'evidence_fingerprint': current_evidence, 'evidence': packet,
-            'analysis': analyze(**packet), 'brief': brief,
+            'analysis': analysis, 'brief': brief,
             'pending_sync': sum(r['sync_status'] == 'pending' for r in rows),
             'record_count': len(rows), 'revision_count': revision_count(rows)}
 
@@ -88,7 +95,9 @@ def overview(query='', stage=''):
             'evidence_level': item['analysis']['evidence_level'],
             'listing_count': item['analysis']['listing_count'],
             'selling_shops': item['analysis']['independent_selling_shops'],
-            'has_brief': item['brief'] is not None, 'brief_stale': bool(item['brief'] and item['brief']['stale'])})
+            'has_brief': item['brief'] is not None, 'brief_stale': bool(item['brief'] and item['brief']['stale']),
+            'model_score': item['analysis']['sales_model']['opportunity']['score'],
+            'model_status': item['analysis']['sales_model']['status']})
     order = {'seller_reported_sales': 0, 'estimated_recent_sales': 1, 'recent_reviews': 2,
              'historical_estimates': 3, 'interest_only': 4, 'needs_evidence': 5}
     items.sort(key=lambda item: (order[item['evidence_level']], -item['selling_shops'], item['name'].casefold()))
@@ -128,7 +137,7 @@ def parse_import(data):
     if data.get('format') != 'csv':
         raise ValueError('Choose JSON or CSV')
     dataset = data.get('dataset', 'listings')
-    models = {'listings': Listing, 'observations': Observation, 'reviews': Review, 'patterns': Pattern}
+    models = {'listings': Listing, 'observations': Observation, 'reviews': Review, 'patterns': Pattern, 'calibration': CalibrationCase}
     if dataset not in models:
         raise ValueError('Choose a supported CSV record type')
     reader = csv.DictReader(io.StringIO(content.lstrip('\ufeff')))
@@ -195,6 +204,27 @@ def import_packet(opportunity_id, data):
             ledger.write_record(con, key, kind, opportunity_id, json.dumps(payload, sort_keys=True, allow_nan=False),
                                 ledger.digest(payload), ledger.stamp())
     return {'imported': counts, 'opportunity': detail(opportunity_id)}
+
+
+@ledger.single_writer
+def configure_model(opportunity_id, data):
+    rows = opportunity_records(opportunity_id)
+    if data.get('expected_fingerprint') != fingerprint(rows):
+        raise Conflict('Evidence changed. Refresh before changing model assumptions.')
+    config = SalesConfig.model_validate(data.get('config')).model_dump(mode='json')
+    ledger.put('selling_model_config', opportunity_id, config, 'selling:' + opportunity_id + ':model-config')
+    return detail(opportunity_id)
+
+
+@ledger.single_writer
+def train_model(opportunity_id, data):
+    rows = opportunity_records(opportunity_id)
+    if data.get('expected_fingerprint') != fingerprint(rows):
+        raise Conflict('Evidence changed. Refresh before calibrating the model.')
+    packet = evidence(rows)
+    artifact = sales_model.train(packet['listings'], packet['observations'], packet['calibration'])
+    ledger.put('selling_model_artifact', opportunity_id, artifact, 'selling:' + opportunity_id + ':model-artifact')
+    return detail(opportunity_id)
 
 
 @ledger.single_writer

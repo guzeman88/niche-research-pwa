@@ -6,6 +6,7 @@ const templates: Record<string, string> = {
   observations: 'listing_id,metric,value,basis,observed_at,period_start,period_end,currency,keyword,geography,source,source_ref,note\n',
   reviews: 'review_id,listing_id,reviewed_on,rating,text,source_ref\n',
   patterns: 'listing_id,typography,layout,palette,features,readability,notes,source_ref\n',
+  calibration: 'case_id,listing_id,period_start,period_end,actual_purchases,source_ref,note\n',
 }
 export default function SellingImport({ item, refresh }: { item: Detail; refresh: () => Promise<void> }) {
   const [content, setContent] = useState(''), [format, setFormat] = useState('json'), [dataset, setDataset] = useState('listings')
