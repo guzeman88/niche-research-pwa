@@ -34,7 +34,7 @@ Etsy's [API terms section 5](https://www.etsy.com/legal/api/) address automated
 analytics and collection authorization; its [general terms section 6C](https://www.etsy.com/legal/terms-of-use/)
 also address crawling. A functioning API credential is not written authorization
 for the new use case. No such approval was located in the current project records.
-The browser session checked October 16 belongs to the separate seller identity;
+The Etsy browser session checked October 16 belonged to the separate seller identity;
 its developer dashboard showed no registered application. The known developer
 app belongs to another identity. This check does not prove that no approval exists.
 
@@ -54,8 +54,10 @@ approval should create it, with the approval's real scopes and expiry:
 
 No proof is generated automatically or accepted from the browser. Missing,
 malformed, future-issued or expired proof leaves external collection off and is
-shown in the UI. `docs/etsy-analytics-authorization-request.md` is a concrete draft
-for the developer-account owner; it has not been sent.
+shown in the UI. The request in `docs/etsy-analytics-authorization-request.md` was
+sent October 16 from the documented developer mailbox with explicit user approval
+and verified in Yahoo Sent. A written Etsy response is still pending. Sending the
+request does not authorize collection or change the protected access proof.
 
 With appropriate scopes, a source pass runs at most every 15 minutes, samples
 at most three due listings and makes at most 15 combined API/page requests. It

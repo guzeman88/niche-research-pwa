@@ -1,8 +1,11 @@
-# Draft request for the Etsy developer-account owner
+# Request sent by the Etsy developer-account owner
 
-Prepared October 16, 2026. **Not sent.** Intended recipient: **developers@etsy.com**,
+Prepared and **sent October 16, 2026**, with explicit user approval, from the
+documented developer mailbox. Verified in Yahoo Sent; written authorization is
+still pending. Recipient: **developers@etsy.com**,
 the contact in Etsy's [official API reference](https://developers.etsy.com/documentation/reference/).
-Send through the existing developer-account owner and retain the response privately. No credentials, seller
+The sent receipt and original pre-send text are retained in the protected discovery
+operations `email-request/` directory. Keep the response private. No credentials, seller
 identity details, account email or financial data belong in this document.
 
 Subject: Written authorization and permitted data sources for EtGen product research
