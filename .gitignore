@@ -26,3 +26,6 @@ gha-creds-*.json
 # SQLite process sidecars contain live local transactions, never source files.
 *.sqlite-wal
 *.sqlite-shm
+
+# Local design-review captures; keep source and review notes in docs.
+/.impeccable/review/

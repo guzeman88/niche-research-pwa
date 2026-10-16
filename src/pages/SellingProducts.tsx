@@ -5,6 +5,7 @@ import { readConnection, saveConnection } from '../lib/operatorConnection'
 import { sellingRequest, text, families, values, type Overview, type Detail } from '../lib/sellingProducts'
 import SellingOpportunity from '../components/selling/SellingOpportunity'
 import KeywordRightsFlag from '../components/KeywordRightsFlag'
+import SellingDiscovery from '../components/selling/SellingDiscovery'
 
 export default function SellingProducts() {
   const initial = readConnection()
@@ -34,6 +35,8 @@ export default function SellingProducts() {
     {query.isFetching && !query.data && <div className="space-y-4 py-6" aria-busy="true" aria-label="Loading selling-product research"><div className="h-8 max-w-sm animate-pulse rounded-sm bg-surface-700" /><div className="h-32 animate-pulse rounded-sm bg-surface-800" /></div>}
     {query.error && <div role="alert" className="my-6 space-y-3"><p>{query.error.message}</p><button className="btn-secondary" onClick={() => void refresh()}>Retry connection</button></div>}
     {query.data && <>
+      <SellingDiscovery key={version} onInvestigate={id => {setSelected(id); void refresh()}} />
+      <section id="opportunity-workspace" tabIndex={-1} aria-label="Opportunity workspace" className="outline-none">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><h2 className="text-lg font-semibold">Opportunity watchlist</h2><p className="mt-2 text-sm text-surface-200">{query.data.items.length} saved opportunities · ranked by evidence type and independent selling shops</p></div>
         <div className="flex flex-wrap gap-3"><button className="btn-secondary" onClick={() => void refresh()} disabled={query.isFetching}>Refresh analysis</button><button className="btn-primary" onClick={() => setCreate(!create)}>New opportunity</button></div>
@@ -57,8 +60,9 @@ export default function SellingProducts() {
             <KeywordRightsFlag keyword={item.keyword} />
           </div>)}
         </aside>
-        <section className="min-w-0" aria-label="Selected opportunity">{selected ? <SellingOpportunity key={`${version}:${selected}`} id={selected} refreshList={() => void query.refetch()} /> : <div className="max-w-xl py-4"><h2 className="text-lg font-semibold">Build a case for a better product</h2><p className="mt-3 text-sm leading-relaxed text-surface-200">Select an opportunity to compare sales estimates, momentum, reviews, keywords and design attributes. Each method keeps its sources and uncertainties visible.</p><p className="mt-4 text-sm leading-relaxed text-surface-200">Saved research and permitted imports only. No new marketplace requests, subscriptions or scraping. A working API key does not establish approval for expanded analytics.</p></div>}</section>
+        <section className="min-w-0" aria-label="Selected opportunity">{selected ? <SellingOpportunity key={`${version}:${selected}`} id={selected} refreshList={() => void query.refetch()} /> : <div className="max-w-xl py-4"><h2 className="text-lg font-semibold">Build a case for a better product</h2><p className="mt-3 text-sm leading-relaxed text-surface-200">Select an opportunity to compare sales estimates, momentum, reviews, keywords and design attributes. Each method keeps its sources and uncertainties visible.</p><p className="mt-4 text-sm leading-relaxed text-surface-200">Choose Investigate on a discovered listing, or create an opportunity from saved evidence. Source access and sales uncertainty remain visible throughout the research.</p></div>}</section>
       </div>
+      </section>
     </>}
   </main>
 }

@@ -126,6 +126,10 @@ async def startup():
     from services.app_keyword_feed import configured_worker
     worker = configured_worker()
     app.state.keyword_feed_worker = worker
+    from services.selling_discovery_worker import configured_worker as discovery_worker
+    app.state.selling_discovery_worker = discovery_worker()
+    if app.state.selling_discovery_worker:
+        app.state.selling_discovery_worker.start()
     if os.environ.get('APP_PRODUCTION_ENABLED') == '1':
         from services.production import Worker
         app.state.production_worker = Worker()
@@ -138,6 +142,9 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     """Gracefully stop the scheduler if running."""
+    discovery_worker = getattr(app.state, 'selling_discovery_worker', None)
+    if discovery_worker:
+        await discovery_worker.stop()
     production_worker = getattr(app.state, 'production_worker', None)
     if production_worker:
         await production_worker.stop()
