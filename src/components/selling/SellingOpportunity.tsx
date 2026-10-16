@@ -6,8 +6,9 @@ import SellingImport from './SellingImport'
 import SellingForms from './SellingForms'
 import SellingAnalysis from './SellingAnalysis'
 import SellingBrief from './SellingBrief'
+import SellingModel from './SellingModel'
 
-const tabs = ['analysis', 'evidence', 'improvement brief']
+const tabs = ['analysis', 'sales model', 'evidence', 'improvement brief']
 export default function SellingOpportunity({ id, refreshList }: { id: string; refreshList: () => void }) {
   const query = useQuery({ queryKey: ['selling-opportunity', id], queryFn: () => sellingRequest<Detail>(`/opportunities/${id}`), retry: false })
   const [tab, setTab] = useState('analysis'), [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState('')
@@ -37,10 +38,11 @@ export default function SellingOpportunity({ id, refreshList }: { id: string; re
     <nav aria-label="Opportunity sections" className="my-5 flex flex-wrap gap-2 border-b border-surface-600 pb-4">{tabs.map(value => <button className={tab === value ? 'btn-primary' : 'btn-secondary'} key={value} aria-pressed={tab === value} onClick={() => setTab(value)}>{text(value)}</button>)}</nav>
     {error && <p className="my-4 text-sm text-accent-amber" role="alert">{error}</p>}{message && <p className="my-4 text-sm" role="status">{message}</p>}
     {tab === 'analysis' && <SellingAnalysis item={item} />}
+    {tab === 'sales model' && <SellingModel item={item} refresh={refresh} />}
     {tab === 'evidence' && <div className="space-y-8"><SellingImport item={item} refresh={refresh} /><SellingForms item={item} refresh={refresh} />
       <details><summary className="cursor-pointer text-sm font-semibold">Saved source records · {number(item.record_count)} records / {number(item.revision_count)} retained revisions</summary>
         <p className="my-3 text-sm text-surface-200">{item.pending_sync} records awaiting the private database mirror. The authoritative local records remain saved.</p>
-        {(['listings', 'observations', 'reviews', 'patterns'] as const).map(kind => { const rows = item.evidence[kind]; return <div className="mt-5" key={kind}><h3 className="text-sm font-semibold">{text(kind)} · {rows.length}</h3>{rows.map((row, index) => <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words bg-surface-900 p-3 text-xs leading-relaxed" key={index}>{JSON.stringify(row, null, 2)}</pre>)}</div> })}
+        {(['listings', 'observations', 'reviews', 'patterns', 'calibration'] as const).map(kind => { const rows = item.evidence[kind] || []; return <div className="mt-5" key={kind}><h3 className="text-sm font-semibold">{text(kind)} · {rows.length}</h3>{rows.map((row, index) => <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words bg-surface-900 p-3 text-xs leading-relaxed" key={index}>{JSON.stringify(row, null, 2)}</pre>)}</div> })}
       </details></div>}
     {tab === 'improvement brief' && <SellingBrief key={item.fingerprint} item={item} refresh={refresh} />}
   </>

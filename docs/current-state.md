@@ -1,3 +1,16 @@
+# October 16, 2026 sales model successor
+
+The private /selling workspace now includes the EtGen sales model: preserved
+purchase messages, provisional 7/30-day ranges, explicit conversion/review-delay
+assumptions, sample-scoped opportunity scores and held-out calibration. See
+[sales-model.md](sales-model.md) for the numerical contract and limits, and
+[design review](sales-model-design-review.md) for the bounded UI review.
+No collector, paid provider or schedule was added. Original evidence, source
+authenticity and model estimates remain distinct; no live accuracy is established.
+Source changes do not install the local runtime. Read the desktop repository's
+canonical CURRENT_STATE.md for exact installed revision, backups and verification.
+Older sections below describe predecessor installations, not current live state.
+
 # October 15, 2026 advisory keyword flags
 
 The user requested a simple nonblocking flag rather than a rights-clearance or

@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter, Body, HTTPException, Query, Response
 from pydantic import ValidationError
 from services import selling_products as service
+from services.sales_model import parse_message
 
 router = APIRouter(prefix='/api/selling-products', tags=['selling products'])
 
@@ -26,6 +27,24 @@ def overview(q: str = Query('', max_length=200), stage: str = Query('', max_leng
 @router.get('/research')
 def research(keyword: str = Query(..., min_length=3, max_length=160)):
     return invoke(service.research, keyword)
+
+
+@router.post('/parse-purchase-message')
+def purchase_message(data: dict = Body(...)):
+    raw = data.get('message')
+    if not isinstance(raw, str) or not 1 <= len(raw) <= 500:
+        raise HTTPException(400, 'Supply a purchase message of at most 500 characters')
+    return invoke(parse_message, raw)
+
+
+@router.post('/opportunities/{opportunity_id}/model-config')
+def model_config(opportunity_id: str, data: dict = Body(...)):
+    return invoke(service.configure_model, opportunity_id, data)
+
+
+@router.post('/opportunities/{opportunity_id}/calibrate')
+def calibrate(opportunity_id: str, data: dict = Body(...)):
+    return invoke(service.train_model, opportunity_id, data)
 
 
 @router.post('/opportunities', status_code=201)
