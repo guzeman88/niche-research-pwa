@@ -32,6 +32,12 @@ Default archive: the existing validation ledger's sibling directory
 Schema version 3 has transactional additive migrations, a newer-version refusal,
 WAL/full-sync transactions and indexed latest metadata. Back up SQLite through
 the existing snapshot API, including its WAL, rather than copying an open file.
+Concurrent first initialization is serialized within the API process; SQLite's
+writer transaction guards the migration version. Long dataset/audit reads use
+consistent read transactions and only hold a writer briefly to retain results.
+An unknown-model comparison can therefore return while an archive writer runs.
+App health now uses a bounded read-only seed check instead of rerunning catalog
+migrations and full analytics on each liveness request.
 
 The operator-only `/api/sales-intelligence` routes reuse existing authentication,
 origin restrictions, response no-store rules and a 2 MB / 2,000-row import limit.

@@ -6,8 +6,10 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+from threading import RLock
 
 SCHEMA = 3
+INITIALIZE_LOCK = RLock()
 
 
 def migrate(con, script):
@@ -48,74 +50,76 @@ def database(write=False):
     con = sqlite3.connect(directory / 'intelligence.sqlite', timeout=20)
     con.row_factory = sqlite3.Row
     try:
-        con.execute('PRAGMA journal_mode=WAL')
-        con.execute('PRAGMA foreign_keys=ON')
-        con.execute('PRAGMA synchronous=FULL')
-        version = con.execute('PRAGMA user_version').fetchone()[0]
-        if version > SCHEMA:
-            raise ValueError('Research archive belongs to a newer runtime; use a compatible release')
-        if version < SCHEMA:
-            con.execute('BEGIN IMMEDIATE')
+        with INITIALIZE_LOCK:
+            if con.execute('PRAGMA journal_mode').fetchone()[0] != 'wal':
+                con.execute('PRAGMA journal_mode=WAL')
+            con.execute('PRAGMA foreign_keys=ON')
+            con.execute('PRAGMA synchronous=FULL')
             version = con.execute('PRAGMA user_version').fetchone()[0]
             if version > SCHEMA:
-                raise ValueError('Research archive belongs to a newer runtime')
-        if version < 1:
-            migrate(con, '''
-            BEGIN IMMEDIATE;
-            CREATE TABLE control(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-            CREATE TABLE sources(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
-            CREATE TABLE artifacts(id TEXT PRIMARY KEY,source_id TEXT NOT NULL,captured_at TEXT NOT NULL,payload TEXT NOT NULL);
-            CREATE TABLE observations(id TEXT PRIMARY KEY,source_id TEXT NOT NULL,listing_id TEXT NOT NULL,
-              metric TEXT NOT NULL,basis TEXT NOT NULL,unit TEXT NOT NULL,available_at TEXT NOT NULL,
-              captured_at TEXT NOT NULL,period_start TEXT,period_end TEXT,artifact_id TEXT NOT NULL,
-              supersedes TEXT,payload TEXT NOT NULL,FOREIGN KEY(artifact_id) REFERENCES artifacts(id));
-            CREATE INDEX observations_listing ON observations(listing_id,metric,available_at DESC);
-            CREATE INDEX observations_source ON observations(source_id,available_at);
-            CREATE INDEX observations_superseded ON observations(supersedes);
-            CREATE TABLE metadata(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,captured_at TEXT NOT NULL,
-              available_at TEXT NOT NULL,payload TEXT NOT NULL);
-            CREATE INDEX metadata_asof ON metadata(listing_id,available_at DESC,captured_at DESC);
-            CREATE TABLE jobs(id TEXT PRIMARY KEY,source_id TEXT NOT NULL,status TEXT NOT NULL,
-              due_at TEXT NOT NULL,lease_until TEXT,attempts INTEGER NOT NULL DEFAULT 0,payload TEXT NOT NULL,result TEXT);
-            CREATE INDEX jobs_due ON jobs(status,due_at);
-            CREATE TABLE quota_events(id TEXT PRIMARY KEY,source_id TEXT NOT NULL,account_ref TEXT NOT NULL,
-              bucket TEXT NOT NULL,cost REAL NOT NULL,at TEXT NOT NULL,status TEXT NOT NULL);
-            CREATE INDEX quota_bucket ON quota_events(source_id,account_ref,bucket);
-            CREATE TABLE outcomes(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,shop TEXT NOT NULL,
-              period_start TEXT NOT NULL,period_end TEXT NOT NULL,payload TEXT NOT NULL);
-            CREATE TABLE panels(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
-            CREATE TABLE datasets(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,payload TEXT NOT NULL);
-            CREATE TABLE models(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL);
-            CREATE TABLE predictions(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,model_id TEXT NOT NULL,
-              as_of TEXT NOT NULL,payload TEXT NOT NULL);
-            CREATE INDEX predictions_listing ON predictions(listing_id,as_of DESC);
-            CREATE TABLE snapshots(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,kind TEXT NOT NULL,
-              as_of TEXT NOT NULL,payload TEXT NOT NULL);
-            CREATE TABLE outbox(id TEXT PRIMARY KEY,opportunity_id TEXT NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL);
-            CREATE TABLE audit(id INTEGER PRIMARY KEY,at TEXT NOT NULL,event TEXT NOT NULL,payload TEXT NOT NULL);
-            PRAGMA user_version=1;
-            COMMIT;
-            ''')
-        if version < 2:
-            migrate(con, '''
-            BEGIN IMMEDIATE;
-            CREATE TABLE IF NOT EXISTS metadata_latest(listing_id TEXT PRIMARY KEY,id TEXT NOT NULL,
-              captured_at TEXT NOT NULL,available_at TEXT NOT NULL,payload TEXT NOT NULL);
-            CREATE INDEX IF NOT EXISTS metadata_latest_time ON metadata_latest(captured_at DESC,listing_id);
-            CREATE INDEX IF NOT EXISTS metadata_capture ON metadata(listing_id,captured_at DESC,available_at DESC,id DESC);
-            INSERT OR REPLACE INTO metadata_latest SELECT m.listing_id,m.id,m.captured_at,m.available_at,m.payload FROM metadata m
-              WHERE m.id=(SELECT n.id FROM metadata n WHERE n.listing_id=m.listing_id ORDER BY n.captured_at DESC,n.available_at DESC,n.id DESC LIMIT 1);
-            PRAGMA user_version=2;
-            COMMIT;
-            ''')
-        if version < 3:
-            migrate(con, '''
-            CREATE INDEX IF NOT EXISTS observations_metric_listing ON observations(metric,listing_id,captured_at);
-            ALTER TABLE metadata_latest ADD COLUMN search_text TEXT NOT NULL DEFAULT '';
-            UPDATE metadata_latest SET search_text=lower(listing_id||char(10)||coalesce(json_extract(payload,'$.title'),'')||char(10)||coalesce(json_extract(payload,'$.shop'),''));
-            PRAGMA user_version=3;
-            ''')
-        con.commit()
+                raise ValueError('Research archive belongs to a newer runtime; use a compatible release')
+            if version < SCHEMA:
+                con.execute('BEGIN IMMEDIATE')
+                version = con.execute('PRAGMA user_version').fetchone()[0]
+                if version > SCHEMA:
+                    raise ValueError('Research archive belongs to a newer runtime')
+            if version < 1:
+                migrate(con, '''
+                BEGIN IMMEDIATE;
+                CREATE TABLE control(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+                CREATE TABLE sources(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
+                CREATE TABLE artifacts(id TEXT PRIMARY KEY,source_id TEXT NOT NULL,captured_at TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE TABLE observations(id TEXT PRIMARY KEY,source_id TEXT NOT NULL,listing_id TEXT NOT NULL,
+                  metric TEXT NOT NULL,basis TEXT NOT NULL,unit TEXT NOT NULL,available_at TEXT NOT NULL,
+                  captured_at TEXT NOT NULL,period_start TEXT,period_end TEXT,artifact_id TEXT NOT NULL,
+                  supersedes TEXT,payload TEXT NOT NULL,FOREIGN KEY(artifact_id) REFERENCES artifacts(id));
+                CREATE INDEX observations_listing ON observations(listing_id,metric,available_at DESC);
+                CREATE INDEX observations_source ON observations(source_id,available_at);
+                CREATE INDEX observations_superseded ON observations(supersedes);
+                CREATE TABLE metadata(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,captured_at TEXT NOT NULL,
+                  available_at TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE INDEX metadata_asof ON metadata(listing_id,available_at DESC,captured_at DESC);
+                CREATE TABLE jobs(id TEXT PRIMARY KEY,source_id TEXT NOT NULL,status TEXT NOT NULL,
+                  due_at TEXT NOT NULL,lease_until TEXT,attempts INTEGER NOT NULL DEFAULT 0,payload TEXT NOT NULL,result TEXT);
+                CREATE INDEX jobs_due ON jobs(status,due_at);
+                CREATE TABLE quota_events(id TEXT PRIMARY KEY,source_id TEXT NOT NULL,account_ref TEXT NOT NULL,
+                  bucket TEXT NOT NULL,cost REAL NOT NULL,at TEXT NOT NULL,status TEXT NOT NULL);
+                CREATE INDEX quota_bucket ON quota_events(source_id,account_ref,bucket);
+                CREATE TABLE outcomes(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,shop TEXT NOT NULL,
+                  period_start TEXT NOT NULL,period_end TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE TABLE panels(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
+                CREATE TABLE datasets(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE TABLE models(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE TABLE predictions(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,model_id TEXT NOT NULL,
+                  as_of TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE INDEX predictions_listing ON predictions(listing_id,as_of DESC);
+                CREATE TABLE snapshots(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,kind TEXT NOT NULL,
+                  as_of TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE TABLE outbox(id TEXT PRIMARY KEY,opportunity_id TEXT NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE TABLE audit(id INTEGER PRIMARY KEY,at TEXT NOT NULL,event TEXT NOT NULL,payload TEXT NOT NULL);
+                PRAGMA user_version=1;
+                COMMIT;
+                ''')
+            if version < 2:
+                migrate(con, '''
+                BEGIN IMMEDIATE;
+                CREATE TABLE IF NOT EXISTS metadata_latest(listing_id TEXT PRIMARY KEY,id TEXT NOT NULL,
+                  captured_at TEXT NOT NULL,available_at TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS metadata_latest_time ON metadata_latest(captured_at DESC,listing_id);
+                CREATE INDEX IF NOT EXISTS metadata_capture ON metadata(listing_id,captured_at DESC,available_at DESC,id DESC);
+                INSERT OR REPLACE INTO metadata_latest SELECT m.listing_id,m.id,m.captured_at,m.available_at,m.payload FROM metadata m
+                  WHERE m.id=(SELECT n.id FROM metadata n WHERE n.listing_id=m.listing_id ORDER BY n.captured_at DESC,n.available_at DESC,n.id DESC LIMIT 1);
+                PRAGMA user_version=2;
+                COMMIT;
+                ''')
+            if version < 3:
+                migrate(con, '''
+                CREATE INDEX IF NOT EXISTS observations_metric_listing ON observations(metric,listing_id,captured_at);
+                ALTER TABLE metadata_latest ADD COLUMN search_text TEXT NOT NULL DEFAULT '';
+                UPDATE metadata_latest SET search_text=lower(listing_id||char(10)||coalesce(json_extract(payload,'$.title'),'')||char(10)||coalesce(json_extract(payload,'$.shop'),''));
+                PRAGMA user_version=3;
+                ''')
+            con.commit()
         if write:
             con.execute('BEGIN IMMEDIATE')
         yield con

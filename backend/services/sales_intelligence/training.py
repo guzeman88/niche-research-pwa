@@ -14,10 +14,18 @@ def active_key(model):
     return f"{prefix}{model['days']}:{model['unit']}"
 
 
+def persist_dataset(result):
+    identity = store.digest(result)
+    with store.database(True) as con:
+        con.execute('INSERT OR IGNORE INTO datasets VALUES(?,?,?)', (identity, store.now().isoformat(), store.encoded(result)))
+    return {'id': identity, **result}
+
+
 def outcome_dataset(days=30, unit='purchases'):
     if days not in (7, 30) or unit not in ('purchases', 'units'):
         raise ValueError('Choose a separate 7/30-day purchases or units target')
-    with store.database(True) as con:
+    with store.database() as con:
+        con.execute('BEGIN')
         samples = []
         for row in con.execute('SELECT id,payload FROM outcomes ORDER BY period_end LIMIT 10000'):
             item = json.loads(row['payload'])
@@ -27,7 +35,8 @@ def outcome_dataset(days=30, unit='purchases'):
             if abs((end - start).total_seconds() - days * 86400) > 1:
                 continue
             feature = features.snapshot(con, item['listing_id'], end.isoformat())
-            if not feature or feature['metadata'].get('shop_id') != item['shop_id']:
+            if (not feature or feature['metadata'].get('shop_id') != item['shop_id']
+                    or store.stamp(feature['metadata']['captured_at']) < end - timedelta(days=7)):
                 continue
             samples.append({'id': row['id'], 'listing_id': item['listing_id'], 'shop': item['shop_id'],
                 'start': start.isoformat(), 'end': end.isoformat(), 'label': item['actual'],
@@ -35,16 +44,15 @@ def outcome_dataset(days=30, unit='purchases'):
         result = {'feature_version': features.VERSION, 'days': days, 'unit': unit, 'objective': 'actual_sales',
             'samples': samples, 'policy_fingerprint': store.digest({}),
             'correction_epoch': store.get_control(con, 'outcome_epoch', 0)}
-        identity = store.digest(result)
-        con.execute('INSERT OR IGNORE INTO datasets VALUES(?,?,?)', (identity, store.now().isoformat(), store.encoded(result)))
-        return {'id': identity, **result}
+    return persist_dataset(result)
 
 
 def dataset(days=30, unit='purchases'):
     if days not in (7, 30) or unit not in ('purchases', 'units'):
         raise ValueError('Train a separate 7/30-day purchases or units model')
     samples = {}
-    with store.database(True) as con:
+    with store.database() as con:
+        con.execute('BEGIN')
         captures = con.execute("SELECT DISTINCT listing_id,available_at FROM observations WHERE metric='estimated_sales' AND basis='period' ORDER BY available_at DESC LIMIT 5000").fetchall()
         for item in captures:
             report = consensus.build(con, item['listing_id'], item['available_at'])
@@ -76,9 +84,7 @@ def dataset(days=30, unit='purchases'):
         policy_fingerprint = store.digest(result.pop('source_policy'))
         result['policy_fingerprint'] = policy_fingerprint
         result['correction_epoch'] = store.get_control(con, 'correction_epoch', 0)
-        identity = store.digest(result)
-        con.execute('INSERT OR IGNORE INTO datasets VALUES(?,?,?)', (identity, store.now().isoformat(), store.encoded(result)))
-        return {'id': identity, **result}
+    return persist_dataset(result)
 
 
 def split(samples, actual=False):
@@ -232,7 +238,8 @@ def prediction(listing_id, days=30, unit='purchases', as_of=None, lane='consensu
     at = store.stamp(as_of) if as_of else store.now()
     if at > store.now():
         raise ValueError('Predictions estimate completed historical periods, not future cutoffs')
-    with store.database(True) as con:
+    with store.database() as con:
+        con.execute('BEGIN')
         identity = store.get_control(con, active_key({'lane': lane, 'days': days, 'unit': unit}))
         row = con.execute('SELECT payload FROM models WHERE id=?', (identity,)).fetchone() if identity else None
         if not row:
@@ -255,6 +262,9 @@ def prediction(listing_id, days=30, unit='purchases', as_of=None, lane='consensu
                   'actual_accuracy': model.get('actual_accuracy'),
                   'feature_fingerprint': vector['fingerprint'], 'range': None}
         ident = store.digest(result)
+    with store.database(True) as con:
+        if store.get_control(con, active_key(model)) != identity or not eligible(model):
+            return {'status': 'model_changed_during_prediction', 'value': None}
         con.execute('INSERT OR IGNORE INTO predictions VALUES(?,?,?,?,?)',
                     (ident, listing_id, identity, at.isoformat(), store.encoded(result)))
         return result
@@ -262,7 +272,8 @@ def prediction(listing_id, days=30, unit='purchases', as_of=None, lane='consensu
 
 def evaluate_actual(identity):
     """Audit on later outcome windows; never fit or claim validation on training shops."""
-    with store.database(True) as con:
+    with store.database() as con:
+        con.execute('BEGIN')
         model_row = con.execute('SELECT payload FROM models WHERE id=?', (identity,)).fetchone()
         if not model_row:
             raise ValueError('Model not found')
@@ -287,5 +298,6 @@ def evaluate_actual(identity):
                   'mae': sum(abs(x['actual'] - x['prediction']) for x in results) / len(results) if results else None,
                   'baseline_mae': sum(abs(x['actual'] - model['baseline']) for x in results) / len(results) if results else None,
                   'actual_promotion_enabled': False}
+    with store.database(True) as con:
         store.set_control(con, 'actual_evaluation:' + identity, report)
-        return report
+    return report

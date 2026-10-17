@@ -187,9 +187,7 @@ def api_health():
     from pipeline import keyword_database as kdb
     db_ok = False
     try:
-        kdb.init_db()
-        stats = kdb.get_stats()
-        db_ok = stats.get("total_seeds", 0) > 0
+        db_ok = kdb.has_seeds()
     except Exception:
         pass
     return {

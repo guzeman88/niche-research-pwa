@@ -502,3 +502,26 @@ def test_concurrent_first_migration_and_newer_runtime_guard(archive, monkeypatch
         store.counts()
     with sqlite3.connect(store.root() / 'intelligence.sqlite') as con:
         assert con.execute('PRAGMA user_version').fetchone()[0] == 999
+
+
+def test_health_probe_does_not_migrate_or_scan_research(archive, monkeypatch):
+    from pipeline import keyword_database as kdb
+    from main import api_health
+    path = archive / 'health.sqlite'
+    monkeypatch.setattr(kdb, 'DB_PATH', path)
+    assert not kdb.has_seeds() and not path.exists()
+    with sqlite3.connect(path) as con:
+        con.execute('CREATE TABLE seeds(keyword TEXT)')
+        con.execute("INSERT INTO seeds VALUES('fixture')")
+    def forbidden():
+        raise AssertionError('Health must not initialize or run research analytics')
+    monkeypatch.setattr(kdb, 'init_db', forbidden)
+    monkeypatch.setattr(kdb, 'get_stats', forbidden)
+    assert api_health()['database'] == 'connected'
+
+
+def test_unknown_model_read_does_not_wait_for_archive_writer(archive):
+    from concurrent.futures import ThreadPoolExecutor
+    with store.database(True), ThreadPoolExecutor(max_workers=1) as pool:
+        result = pool.submit(training.prediction, '123').result(timeout=2)
+    assert result == {'status': 'no_active_model', 'value': None}
