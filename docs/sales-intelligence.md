@@ -120,6 +120,11 @@ other 7/30-day units/purchase targets can be queued explicitly. Active-model
 catalog prediction refreshes run daily in bounded 100-listing jobs. All work stays
 inside the app; no new Windows collection timer or Codex automation is used.
 
+The native supervisor gives due supported Etsy API discovery a bounded turn before
+starting another long native cycle. A busy/paused worker retry spends zero requests
+and retries after one minute; successful source passes retain the 15-minute gate.
+This prevents back-to-back long native runs from starving supplemental discovery.
+
 ## Consensus and features
 
 Only eligible point readings with compatible unit/basis/exact windows vote.

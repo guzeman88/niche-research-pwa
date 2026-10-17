@@ -78,10 +78,11 @@ async def collect(root, metadata):
 
 
 class AppKeywordFeed:
-    def __init__(self, root, runner=collect, clock=time.monotonic):
+    def __init__(self, root, runner=collect, clock=time.monotonic, between_cycles=None):
         self.root = Path(root).resolve()
         self.runner = runner
         self.clock = clock
+        self.between_cycles = between_cycles
         self.next_tick = 0.0
         self.task = None
         self.state = {'owner': 'etgen_backend', 'enabled': True, 'running': False,
@@ -99,6 +100,13 @@ class AppKeywordFeed:
             metadata, minutes = installation(self.root)
             self.next_tick = self.clock() + minutes * 60
             self.state['interval_minutes'] = minutes
+            if self.between_cycles:
+                try:
+                    await self.between_cycles()
+                    self.state['supplemental_outcome'] = 'checked'
+                except Exception as exc:
+                    # A failed supplemental pass cannot disable native collection.
+                    self.state['supplemental_outcome'] = type(exc).__name__
             result = await self.runner(self.root, metadata)
             self.state['last_outcome'] = result if result in {'completed', 'needs_attention', 'paused', 'already_running'} else 'needs_attention'
         except asyncio.CancelledError:
@@ -134,6 +142,14 @@ class AppKeywordFeed:
                 pass
 
 
+async def between_native_cycles():
+    """Give due API discovery a bounded turn before a long native cycle restarts."""
+    from services import selling_discovery
+    if selling_discovery.approval()['scopes']:
+        from services.selling_discovery_worker import cycle
+        await asyncio.to_thread(cycle)
+
+
 def configured_worker():
     # Default off prevents hosted or unrelated API installations from creating
     # a second collector. The local app installer explicitly enables this owner.
@@ -141,4 +157,5 @@ def configured_worker():
         return None
     if os.environ.get('AUTO_START_SCHEDULER', '0') == '1':
         raise ValueError('ChooseOneCollectionScheduler')
-    return AppKeywordFeed(Path(os.environ.get('APP_KEYWORD_FEED_ROOT') or Path.home() / 'EtGen/keyword-feed'))
+    return AppKeywordFeed(Path(os.environ.get('APP_KEYWORD_FEED_ROOT') or Path.home() / 'EtGen/keyword-feed'),
+        between_cycles=between_native_cycles)

@@ -178,6 +178,23 @@ def test_worker_restart_recovery_and_no_manual_sales(catalog):
         assert con.execute("SELECT count(*) FROM runs WHERE status='interrupted'").fetchone()[0] == 1
 
 
+def test_busy_native_retries_locally_without_shortening_successful_request_cadence(catalog, monkeypatch):
+    at = feed.now()
+    calls = []
+    def refresh(run_id):
+        calls.append(run_id)
+        return {'status': 'native_collector_running' if len(calls) == 1 else 'completed', 'requests': 0 if len(calls) == 1 else 1}
+    monkeypatch.setattr(source, 'refresh_sources', refresh)
+    worker.cycle()
+    with closing(feed.connect()) as con:
+        retry = feed._time(con.execute("SELECT value FROM control WHERE name='source_pass_after'").fetchone()[0])
+    assert at < retry <= at + timedelta(seconds=70)
+    monkeypatch.setattr(feed, 'now', lambda: at + timedelta(seconds=90))
+    assert worker.cycle()['requests'] == 1
+    assert worker.cycle()['requests'] == 0
+    assert len(calls) == 2
+
+
 def test_private_routes_and_conflict(catalog, monkeypatch):
     from main import app
     monkeypatch.setenv('PIPELINE_API_TOKEN', 'test-token')
