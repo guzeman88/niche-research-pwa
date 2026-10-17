@@ -1,3 +1,24 @@
+# October 17, 2026 sales intelligence successor
+
+Private `/selling` now adds a separate historical reference archive, all 24 source
+leads, protected capability/allowance checks, durable backend jobs, read-only native
+history, compatible group-weighted consensus, chart/data history, coverage,
+reference ranking, imports, frozen consensus/actual-outcome model lanes and guarded
+activation/rollback. See [sales-intelligence.md](sales-intelligence.md) for contracts,
+thresholds and acquisition limits. No external estimate provider is yet verified
+as an operational automated feed; no fitted live model or accuracy is invented.
+
+The developer mailbox contained Etsy's October 16 response: documented listing,
+image, review and shop APIs are permitted for the requested research within the
+existing limits; automated unsupported listing-page purchase messages are denied.
+Only `listing_api`, `shop_api`, `listing_reviews` are recorded in the protected
+proof. Its January 15 review date is an internal review gate, not an Etsy expiry.
+Private correspondence/account identities remain outside Git. This does not
+authorize unrelated providers' model reuse or prove recent listing orders.
+
+Exact installation, preservation and dated live results belong to the desktop
+canonical `docs/CURRENT_STATE.md`. Lower dated sections are historical.
+
 # October 16, 2026 sales model successor
 
 The private /selling workspace now includes the EtGen sales model: preserved

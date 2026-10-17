@@ -3,6 +3,16 @@
 October 16, 2026. Local private feature; source access and commercial accuracy
 remain separate from software validation.
 
+**October 17 update:** the documented developer mailbox now contains a response
+permitting the proposed documented listing/image/review/shop API research within
+existing quotas and denying automated unsupported listing-page purchase-message
+collection. Protected authorization records only API scopes; `listing_pages`
+stays absent. The proof's January 15, 2027 date is an internal operator review
+date, not a provider-stated expiry. Receipt is protected outside Git under the
+sales-intelligence operation. A successful source pass must still be observed;
+an approval file is not evidence that live collection has succeeded. The access
+investigation paragraphs below describe the October 16 starting state.
+
 The backend incrementally reads the installed native catalog in SQLite read-only
 mode. Its cursor and deduplicated working index live beside the validation ledger
 in `selling-discovery/discovery.sqlite`. The first pass starts at the latest

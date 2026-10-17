@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
 from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace, evidence, validation, product_validation
-from routers import production, selling_products
+from routers import production, selling_products, sales_intelligence
 
 _PROCESS_BOOT_ID = uuid.uuid4().hex
 _PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
@@ -66,6 +66,7 @@ app.include_router(evidence.router)
 app.include_router(validation.router)
 app.include_router(product_validation.router)
 app.include_router(selling_products.router)
+app.include_router(sales_intelligence.router)
 
 
 async def _scheduler_watchdog() -> None:
@@ -130,6 +131,10 @@ async def startup():
     app.state.selling_discovery_worker = discovery_worker()
     if app.state.selling_discovery_worker:
         app.state.selling_discovery_worker.start()
+    from services.sales_intelligence.worker import configured_worker as intelligence_worker
+    app.state.sales_intelligence_worker = intelligence_worker()
+    if app.state.sales_intelligence_worker:
+        app.state.sales_intelligence_worker.start()
     if os.environ.get('APP_PRODUCTION_ENABLED') == '1':
         from services.production import Worker
         app.state.production_worker = Worker()
@@ -142,6 +147,9 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     """Gracefully stop the scheduler if running."""
+    intelligence_worker = getattr(app.state, 'sales_intelligence_worker', None)
+    if intelligence_worker:
+        await intelligence_worker.stop()
     discovery_worker = getattr(app.state, 'selling_discovery_worker', None)
     if discovery_worker:
         await discovery_worker.stop()
@@ -190,6 +198,8 @@ def api_health():
         "boot_id": _PROCESS_BOOT_ID,
         "started_at": _PROCESS_STARTED_AT,
         "revision": os.environ.get("RENDER_GIT_COMMIT") or None,
+        "sales_intelligence": {"owner": "etgen_backend", "enabled": bool(getattr(app.state, 'sales_intelligence_worker', None)),
+            **getattr(getattr(app.state, 'sales_intelligence_worker', None), 'state', {})},
         "production_scheduler": {"owner":"etgen_backend", "enabled": bool(getattr(app.state,'production_worker',None)),
             "last_outcome": getattr(getattr(app.state,'production_worker',None),'last_outcome','disabled')},
         "collection_scheduler": dict(app.state.keyword_feed_worker.state)
