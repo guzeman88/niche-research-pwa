@@ -53,6 +53,7 @@ def connect():
         CREATE INDEX IF NOT EXISTS candidates_order ON candidates(observed_at DESC,listing_id);
         CREATE INDEX IF NOT EXISTS candidates_due ON candidates(next_check,observed_at DESC);
         CREATE INDEX IF NOT EXISTS candidates_purchase ON candidates(purchase_at DESC);
+        CREATE INDEX IF NOT EXISTS candidates_watchlist ON candidates(opportunity_id) WHERE opportunity_id IS NOT NULL;
         CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY,value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY,started_at TEXT NOT NULL,
           completed_at TEXT,status TEXT NOT NULL,scanned INTEGER NOT NULL DEFAULT 0,
@@ -277,7 +278,7 @@ def investigate(identity, expected):
 def sync_watchlist():
     """Feed updates append evidence; authored briefs become stale through existing hashes."""
     with closing(connect()) as con:
-        rows = con.execute('SELECT listing_id,packet,opportunity_id FROM candidates WHERE opportunity_id IS NOT NULL').fetchall()
+        rows = con.execute('SELECT listing_id,packet,opportunity_id FROM candidates INDEXED BY candidates_watchlist WHERE opportunity_id IS NOT NULL').fetchall()
     synced = 0
     for row in rows:
         item = selling.detail(row['opportunity_id'])

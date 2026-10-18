@@ -62,6 +62,15 @@ def _conn() -> sqlite3.Connection:
     return con
 
 
+def has_seeds() -> bool:
+    """Bounded read-only liveness probe; no migrations or full analytics scans."""
+    if not DB_PATH.is_file():
+        return False
+    with sqlite3.connect(DB_PATH.resolve().as_uri() + '?mode=ro', uri=True,
+                         timeout=1, factory=_ClosingConnection) as con:
+        return con.execute('SELECT 1 FROM seeds LIMIT 1').fetchone() is not None
+
+
 def _db_scan_count(path: Path) -> int:
     if not path.exists():
         return 0

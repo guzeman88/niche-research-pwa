@@ -164,7 +164,7 @@ async def authenticated_administrator(request: Request) -> bool:
 
 
 async def protect_operator_api(request: Request, call_next):
-    private_read = request.url.path.startswith(("/api/settings", "/api/scheduler", "/api/stream", "/api/stores", "/api/workspace", "/api/evidence", "/api/product-validation", "/api/production", "/api/selling-products"))
+    private_read = request.url.path.startswith(("/api/settings", "/api/scheduler", "/api/stream", "/api/stores", "/api/workspace", "/api/evidence", "/api/product-validation", "/api/production", "/api/selling-products", "/api/sales-intelligence"))
     protected = request.url.path.startswith("/api/") and (
         request.method not in {"GET", "HEAD", "OPTIONS"} or private_read
     )
@@ -174,7 +174,7 @@ async def protect_operator_api(request: Request, call_next):
         return JSONResponse({"detail": "Sign in with an active administrator account to use this action."},
                             status_code=401, headers={"WWW-Authenticate": "Bearer"})
     response = await call_next(request)
-    if request.url.path.startswith('/api/selling-products'):
+    if request.url.path.startswith(('/api/selling-products', '/api/sales-intelligence')):
         response.headers['Cache-Control'] = 'private, no-store'
     return response
 

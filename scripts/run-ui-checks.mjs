@@ -41,6 +41,7 @@ try {
     'scripts/test-keyword-rights-ui.mjs',
     'scripts/test-selling-products-ui.mjs',
     'scripts/test-selling-discovery-ui.mjs',
+    'scripts/test-sales-intelligence-ui.mjs',
     'scripts/test-production-ui.mjs',
   ]) {
     const result = spawnSync(process.execPath, [script], { env, stdio: 'inherit' })
