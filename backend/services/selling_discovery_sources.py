@@ -1,6 +1,7 @@
 """Scoped source adapters. No hidden endpoints, proxy rotation or anti-bot bypass."""
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
+import gzip
 import json
 import re
 import sqlite3
@@ -102,7 +103,7 @@ class Client:
         self.last_call = time.monotonic()
         url = ('https://www.etsy.com/listing/' + path.split('/')[2] if page
                else 'https://api.etsy.com/v3/application' + path)
-        status, body = 'transport_error', b''
+        status, body, saved_listing = 'transport_error', b'', None
         try:
             with self.client.stream('GET', url, headers=headers, params=params) as response:
                 status = str(response.status_code)
@@ -126,11 +127,24 @@ class Client:
                         quota['retry_after_until'] = time.time() + 3600
                         raise SourceUnavailable('access_challenge')
                     return text
-                return json.loads(body)
+                payload = json.loads(body)
+                # Retain only public listing feature fields for the existing
+                # read-only history bridge. Reviews, images, shops, HTML and
+                # authentication headers never enter this saved response.
+                if (scope == 'listing_api' and re.fullmatch(r'/listings/[0-9]+', path)
+                        and isinstance(payload, dict) and str(payload.get('listing_id')) == path.split('/')[2]):
+                    fields = ('listing_id', 'title', 'shop_id', 'taxonomy_id', 'listing_type',
+                              'original_creation_timestamp', 'views', 'num_favorers', 'quantity')
+                    public = {k: payload[k] for k in fields if k in payload and isinstance(payload[k], (str, int, float, type(None)))}
+                    if isinstance(payload.get('price'), dict):
+                        public['price'] = {k: v for k, v in payload['price'].items()
+                            if k in ('amount', 'divisor', 'currency_code') and isinstance(v, (str, int, float, type(None)))}
+                    saved_listing = gzip.compress(json.dumps(public, allow_nan=False).encode())
+                return payload
         finally:
             quota['captured_at'] = discovery.now().isoformat()
-            self.con.execute('UPDATE feed_etsy_requests SET status=?,quota_json=?,request_json=? WHERE id=?',
-                             (status, json.dumps(quota), json.dumps({'path': path, 'scope': scope, 'params': params}), identity))
+            self.con.execute('UPDATE feed_etsy_requests SET status=?,quota_json=?,request_json=?,response_gzip=? WHERE id=?',
+                             (status, json.dumps(quota), json.dumps({'path': path, 'scope': scope, 'params': params}), saved_listing, identity))
             self.con.commit()
 
 

@@ -35,6 +35,10 @@ def cycle():
                 result['source_status'] = source['status']
                 with closing(discovery.connect()) as con:
                     con.execute('INSERT OR REPLACE INTO control VALUES(?,?)', ('source_status', source['status']))
+                    if source['status'] in ('native_collector_running', 'collection_paused'):
+                        # No source request was made. Retry locally next minute so a
+                        # busy native worker cannot postpone every opportunity forever.
+                        con.execute('INSERT OR REPLACE INTO control VALUES(?,?)', ('source_pass_after', (discovery.now() + timedelta(minutes=1)).isoformat()))
                     con.commit()
             discovery.sync_watchlist()
         except Exception as exc:

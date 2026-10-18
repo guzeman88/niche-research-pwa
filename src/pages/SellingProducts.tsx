@@ -6,6 +6,7 @@ import { sellingRequest, text, families, values, type Overview, type Detail } fr
 import SellingOpportunity from '../components/selling/SellingOpportunity'
 import KeywordRightsFlag from '../components/KeywordRightsFlag'
 import SellingDiscovery from '../components/selling/SellingDiscovery'
+import SalesIntelligence from '../components/selling/SalesIntelligence'
 
 export default function SellingProducts() {
   const initial = readConnection()
@@ -35,6 +36,7 @@ export default function SellingProducts() {
     {query.isFetching && !query.data && <div className="space-y-4 py-6" aria-busy="true" aria-label="Loading selling-product research"><div className="h-8 max-w-sm animate-pulse rounded-sm bg-surface-700" /><div className="h-32 animate-pulse rounded-sm bg-surface-800" /></div>}
     {query.error && <div role="alert" className="my-6 space-y-3"><p>{query.error.message}</p><button className="btn-secondary" onClick={() => void refresh()}>Retry connection</button></div>}
     {query.data && <>
+      <SalesIntelligence key={`intelligence:${version}`} onInvestigate={id => {setSelected(id); void refresh()}} />
       <SellingDiscovery key={version} onInvestigate={id => {setSelected(id); void refresh()}} />
       <section id="opportunity-workspace" tabIndex={-1} aria-label="Opportunity workspace" className="outline-none">
       <div className="flex flex-wrap items-end justify-between gap-4">
