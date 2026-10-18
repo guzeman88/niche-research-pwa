@@ -1,6 +1,7 @@
 """Private pipeline integration, fresh evidence semantics and bounded access."""
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
+import gzip
 import json
 import sqlite3
 
@@ -164,6 +165,71 @@ def test_http_denial_persisted_and_html_never_sends_key(catalog):
         assert len(requests) == 1
         assert 'x-api-key' not in requests[0].headers
         assert budget.latest_quota(con)['retry_after_until'] > datetime.now().timestamp()
+
+
+def test_supported_listing_response_reaches_history_without_another_request(catalog, monkeypatch):
+    from services.sales_intelligence import features, store
+    from adapters.research import etsy_open_api
+    authorize(['listing_api'])
+    monkeypatch.setattr(etsy_open_api, '_api_key_header', lambda: 'isolated-secret')
+    calls = []
+    payload = {'listing_id': 101, 'title': 'Saved API fixture', 'shop_id': 7,
+        'price': {'amount': 800, 'divisor': 100, 'currency_code': 'USD', 'unknown_nested': 'must-not-retain'},
+        'listing_type': 'download', 'views': 23, 'num_favorers': 5, 'quantity': 9,
+        'buyer_user_id': 'must-not-retain', 'unrecognized_field': 'must-not-retain'}
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json=payload)
+    with sqlite3.connect(catalog) as con:
+        budget.schema(con)
+        client = source.Client(con, 'fixture-history', ['listing_api'], httpx.Client(transport=httpx.MockTransport(respond)))
+        try:
+            assert client.get('/listings/101', 'listing_api') == payload
+        finally:
+            client.close()
+        archived = json.loads(gzip.decompress(con.execute('SELECT response_gzip FROM feed_etsy_requests').fetchone()[0]))
+        assert archived['listing_id'] == 101 and archived['quantity'] == 9
+        assert 'buyer_user_id' not in archived and 'unrecognized_field' not in archived
+        assert 'unknown_nested' not in archived['price']
+        assert 'isolated-secret' not in json.dumps(archived)
+    original = catalog.read_bytes()
+    assert features.sync_raw_catalog()['inserted'] == 1
+    assert features.sync_raw_catalog()['inserted'] == 0
+    assert catalog.read_bytes() == original
+    assert len(calls) == 1
+    with store.database() as con:
+        value = json.loads(con.execute('SELECT payload FROM metadata_latest').fetchone()[0])
+        assert value['views'] == 23 and value['stock'] == 9 and value['shop_id'] == '7'
+        assert value['product_type'] == 'digital'
+    assert store.counts()['observations'] == 0 and store.counts()['outcomes'] == 0
+
+
+@pytest.mark.parametrize('scope,path,payload,status', [
+    ('listing_reviews', '/listings/101/reviews', {'results': [{'buyer_user_id': 'private-fixture'}]}, 200),
+    ('listing_api', '/listings/101/images', {'results': [{'url': 'fixture'}]}, 200),
+    ('shop_api', '/shops/7', {'shop_id': 7}, 200),
+    ('listing_api', '/listings/101', {'listing_id': 999, 'title': 'Wrong listing'}, 200),
+    ('listing_api', '/listings/101', {'error': 'forbidden'}, 403),
+    ('listing_api', '/listings/101', 'not JSON', 200),
+])
+def test_saved_response_excludes_other_sources_mismatch_errors_and_partial_data(catalog, monkeypatch, scope, path, payload, status):
+    from adapters.research import etsy_open_api
+    authorize([scope])
+    monkeypatch.setattr(etsy_open_api, '_api_key_header', lambda: 'isolated-secret')
+    response = httpx.Response(status, text=payload) if isinstance(payload, str) else httpx.Response(status, json=payload)
+    with sqlite3.connect(catalog) as con:
+        budget.schema(con)
+        client = source.Client(con, 'fixture-exclusion', [scope], httpx.Client(transport=httpx.MockTransport(lambda request: response)))
+        try:
+            if status == 403 or isinstance(payload, str):
+                with pytest.raises(ValueError):
+                    client.get(path, scope)
+            else:
+                client.get(path, scope)
+        finally:
+            client.close()
+        row = con.execute('SELECT status,response_gzip FROM feed_etsy_requests').fetchone()
+        assert row[0] == str(status) and row[1] is None
 
 
 def test_worker_restart_recovery_and_no_manual_sales(catalog):

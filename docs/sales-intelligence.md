@@ -29,7 +29,7 @@ method groups are not proven independence.
 Default archive: the existing validation ledger's sibling directory
 `sales-intelligence/intelligence.sqlite`. An isolated environment may override
 `SALES_INTELLIGENCE_ROOT`. Installed data inherits the protected runtime directory.
-Schema version 3 has transactional additive migrations, a newer-version refusal,
+Schema version 4 has transactional additive migrations, a newer-version refusal,
 WAL/full-sync transactions and indexed latest metadata. Back up SQLite through
 the existing snapshot API, including its WAL, rather than copying an open file.
 Concurrent first initialization is serialized within the API process; SQLite's
@@ -38,6 +38,12 @@ consistent read transactions and only hold a writer briefly to retain results.
 An unknown-model comparison can therefore return while an archive writer runs.
 App health now uses a bounded read-only seed check instead of rerunning catalog
 migrations and full analytics on each liveness request.
+
+At the larger retained catalog size, coverage must not parse every latest JSON
+payload or build temporary shop/type grouping trees on each request. Schema 4
+adds expression indexes over latest product type/canonical shop and a narrow
+history-count index. Coverage reads those indexes; latest-metadata replacements
+remain maintained by SQLite without a separate, possibly stale statistics cache.
 
 The operator-only `/api/sales-intelligence` routes reuse existing authentication,
 origin restrictions, response no-store rules and a 2 MB / 2,000-row import limit.
@@ -105,6 +111,12 @@ Catalog tail and historical backfill read native observations and bounded saved
 gzip API responses without changing that database or making HTTP requests.
 Tail/backfill cursors survive restart. Reviews/images cannot become blank listing
 metadata. Native request availability uses its recorded completion time.
+Supported discovery listing-detail calls now retain an allowlisted compressed
+public metadata response in the existing shared request ledger. The same bridge
+then archives it without another marketplace request. Other response types,
+HTML, wrong listing identities, errors, unknown fields and authentication headers
+are excluded from this path. Earlier discarded response bodies cannot be
+reconstructed; only subsequent normal successful calls gain this retention.
 
 A reference panel selects up to 30 saved IDs (operator maximum 500), stable ID
 hash within the first 10,000 saved IDs and at most three per shop. This is a bounded

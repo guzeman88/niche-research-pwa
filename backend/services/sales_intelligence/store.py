@@ -8,7 +8,7 @@ from pathlib import Path
 import sqlite3
 from threading import RLock
 
-SCHEMA = 3
+SCHEMA = 4
 INITIALIZE_LOCK = RLock()
 
 
@@ -119,6 +119,14 @@ def database(write=False):
                 UPDATE metadata_latest SET search_text=lower(listing_id||char(10)||coalesce(json_extract(payload,'$.title'),'')||char(10)||coalesce(json_extract(payload,'$.shop'),''));
                 PRAGMA user_version=3;
                 ''')
+            if version < 4:
+                migrate(con, '''
+                CREATE INDEX IF NOT EXISTS metadata_count ON metadata((1));
+                CREATE INDEX IF NOT EXISTS metadata_latest_type_shop ON metadata_latest(
+                  coalesce(json_extract(payload,'$.product_type'),'unknown'),json_extract(payload,'$.shop_id'));
+                CREATE INDEX IF NOT EXISTS metadata_latest_shop ON metadata_latest(json_extract(payload,'$.shop_id'));
+                PRAGMA user_version=4;
+                ''')
             con.commit()
         if write:
             con.execute('BEGIN IMMEDIATE')
@@ -160,7 +168,7 @@ def add_metadata(con, value):
 
 def counts():
     with database() as con:
-        result = {table: con.execute(f'SELECT count(*) FROM {table}').fetchone()[0]
+        result = {table: con.execute(f'SELECT count(*) FROM {table}' + (' INDEXED BY metadata_count' if table == 'metadata' else '')).fetchone()[0]
                   for table in ('observations', 'artifacts', 'metadata', 'jobs', 'outcomes', 'models', 'predictions')}
         result['listings'] = con.execute('SELECT count(*) FROM metadata_latest').fetchone()[0]
         result['reference_listings'] = con.execute("SELECT count(DISTINCT listing_id) FROM observations WHERE metric='estimated_sales'").fetchone()[0]

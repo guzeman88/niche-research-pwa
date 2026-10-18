@@ -26,8 +26,8 @@ def overview(q='', page=0, limit=20):
 def coverage():
     with store.database() as con:
         cohorts = [dict(r) for r in con.execute('SELECT source_id,basis,unit,count(*) readings,count(DISTINCT listing_id) listings,max(captured_at) latest_capture FROM observations GROUP BY source_id,basis,unit')]
-        metadata = [dict(r) for r in con.execute("SELECT coalesce(json_extract(payload,'$.product_type'),'unknown') product_type,count(*) listings,sum(json_extract(payload,'$.shop_id') IS NOT NULL) canonical_shops_known FROM metadata_latest GROUP BY product_type")]
-        shops = con.execute("SELECT count(DISTINCT json_extract(payload,'$.shop_id')) FROM metadata_latest").fetchone()[0]
+        metadata = [dict(r) for r in con.execute("SELECT coalesce(json_extract(payload,'$.product_type'),'unknown') product_type,count(*) listings,sum(json_extract(payload,'$.shop_id') IS NOT NULL) canonical_shops_known FROM metadata_latest INDEXED BY metadata_latest_type_shop GROUP BY product_type")]
+        shops = con.execute("SELECT count(DISTINCT json_extract(payload,'$.shop_id')) FROM metadata_latest INDEXED BY metadata_latest_shop").fetchone()[0]
         history = store.get_control(con, 'history', {})
     return {**store.counts(), 'cohorts': cohorts, 'catalog_types': metadata, 'canonical_shops': shops,
         'history': history, 'sample_scope': 'Saved catalog and acquired references, not a representative Etsy market census'}

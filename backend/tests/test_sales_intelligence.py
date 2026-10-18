@@ -525,3 +525,36 @@ def test_unknown_model_read_does_not_wait_for_archive_writer(archive):
     with store.database(True), ThreadPoolExecutor(max_workers=1) as pool:
         result = pool.submit(training.prediction, '123').result(timeout=2)
     assert result == {'status': 'no_active_model', 'value': None}
+
+
+def test_coverage_indexes_migrate_existing_archive_and_track_latest_metadata(archive):
+    at = store.now() - timedelta(days=1)
+    with store.database(True) as con:
+        for identity, product, shop in [('123', 'digital', '7'), ('124', 'physical', '7'), ('125', 'unknown', None)]:
+            store.add_metadata(con, {'listing_id': identity, 'product_type': product, 'shop_id': shop,
+                'captured_at': at.isoformat(), 'available_at': at.isoformat()})
+        before = con.execute('SELECT id,payload FROM metadata ORDER BY id').fetchall()
+        for index in ('metadata_count', 'metadata_latest_type_shop', 'metadata_latest_shop'):
+            con.execute('DROP INDEX ' + index)
+        con.execute('PRAGMA user_version=3')
+    report = service.coverage()
+    assert report['metadata'] == 3 and report['listings'] == 3 and report['canonical_shops'] == 1
+    assert {r['product_type']: (r['listings'], r['canonical_shops_known']) for r in report['catalog_types']} == {
+        'digital': (1, 1), 'physical': (1, 1), 'unknown': (1, 0)}
+    with store.database(True) as con:
+        assert con.execute('PRAGMA user_version').fetchone()[0] == 4
+        assert con.execute('SELECT id,payload FROM metadata ORDER BY id').fetchall() == before
+        queries = [
+            "SELECT count(*) FROM metadata INDEXED BY metadata_count",
+            "SELECT count(DISTINCT json_extract(payload,'$.shop_id')) FROM metadata_latest INDEXED BY metadata_latest_shop",
+            "SELECT coalesce(json_extract(payload,'$.product_type'),'unknown') product_type,count(*),sum(json_extract(payload,'$.shop_id') IS NOT NULL) FROM metadata_latest INDEXED BY metadata_latest_type_shop GROUP BY product_type",
+        ]
+        for query in queries:
+            plan = ' '.join(row[3] for row in con.execute('EXPLAIN QUERY PLAN ' + query))
+            assert 'USING' in plan and 'INDEX' in plan and 'USE TEMP B-TREE' not in plan
+        later = (at + timedelta(hours=1)).isoformat()
+        store.add_metadata(con, {'listing_id': '123', 'product_type': 'physical', 'shop_id': '8',
+            'captured_at': later, 'available_at': later})
+    report = service.coverage()
+    assert report['metadata'] == 4 and report['listings'] == 3 and report['canonical_shops'] == 2
+    assert {r['product_type']: r['listings'] for r in report['catalog_types']} == {'physical': 2, 'unknown': 1}
