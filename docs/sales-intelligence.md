@@ -44,6 +44,8 @@ payload or build temporary shop/type grouping trees on each request. Schema 4
 adds expression indexes over latest product type/canonical shop and a narrow
 history-count index. Coverage reads those indexes; latest-metadata replacements
 remain maintained by SQLite without a separate, possibly stale statistics cache.
+Discovery's watchlist refresh uses a partial index of selected opportunities;
+an empty watchlist no longer scans the full catalog's packet rows each minute.
 
 The operator-only `/api/sales-intelligence` routes reuse existing authentication,
 origin restrictions, response no-store rules and a 2 MB / 2,000-row import limit.

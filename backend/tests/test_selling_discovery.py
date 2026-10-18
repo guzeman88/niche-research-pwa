@@ -124,6 +124,19 @@ def test_investigate_idempotent_and_updates_stale_brief(catalog):
         feed.investigate('101', candidate['fingerprint'])
 
 
+def test_empty_and_selected_watchlists_use_only_the_partial_index(catalog):
+    feed.sync_catalog()
+    assert feed.sync_watchlist() == 0
+    with closing(feed.connect()) as con:
+        plan = con.execute('EXPLAIN QUERY PLAN SELECT listing_id,packet,opportunity_id FROM candidates INDEXED BY candidates_watchlist WHERE opportunity_id IS NOT NULL').fetchall()
+        assert any('candidates_watchlist' in row[3] for row in plan)
+    candidate = feed.browse('planner 1')['items'][0]
+    item = feed.investigate(candidate['listing_id'], candidate['fingerprint'])
+    assert feed.sync_watchlist() == 1
+    assert len(ledger.records(kind='selling_opportunity')) == 1
+    assert selling.detail(item['id'])['fingerprint'] == item['fingerprint']
+
+
 def test_scoped_html_parser_fails_unknown_for_recommendations():
     prefix = '<link rel="canonical" href="https://www.etsy.com/listing/101/planner">'
     assert source.purchase_message(prefix + '<aside>12 people bought this in the past 24 hours</aside>', '101') is None
