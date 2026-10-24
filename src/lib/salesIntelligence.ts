@@ -1,6 +1,8 @@
 import {operatorRequest} from './operatorConnection'
 
 export const intelligenceRequest = <T,>(path = '', body?: unknown) => operatorRequest<T>(`/api/sales-intelligence${path}`, body)
+export interface AutomaticEstimate {listing_id: string; status: string; value: number | null; captured_at?: string; listing?: {title: string; shop: string}; collection?: {title: string; shop: string; check_status: string}; review_evidence?: {complete: boolean; observed_reviews: number}; review_scenarios?: Record<string, {value: number | null; low: number | null; high: number | null; review_count: number}>}
+export interface ReferenceComparison {automatic_estimate?: AutomaticEstimate}
 export interface ReferenceSource {id: string; name: string; disposition: string; group: string; reason: string; url: string; reviewed_on: string; paused: boolean; automation: string; capabilities: Record<string, boolean>; access_review_at: string | null; health: {status: string; retry_at?: string; last_success?: string; last_failure?: string}; allowance: {remaining: number; used: number; limit: number; period: string; next_reset: string | null} | null}
 export interface ReferenceReading {id: string; listing_id: string; source_id: string; value: number | null; unit: string; basis: string; captured_at: string; available_at: string; period_start: string | null; period_end: string | null; source_ref: string; status: string; precision: string}
 export interface ReferenceCohort {fingerprint: string; center: number; mean: number; median: number; minimum: number; maximum: number; source_count: number; group_count: number; unit: string; basis: string; period_start: string | null; period_end: string | null; status: string; readings: ReferenceReading[]}

@@ -542,7 +542,7 @@ def test_coverage_indexes_migrate_existing_archive_and_track_latest_metadata(arc
     assert {r['product_type']: (r['listings'], r['canonical_shops_known']) for r in report['catalog_types']} == {
         'digital': (1, 1), 'physical': (1, 1), 'unknown': (1, 0)}
     with store.database(True) as con:
-        assert con.execute('PRAGMA user_version').fetchone()[0] == 4
+        assert con.execute('PRAGMA user_version').fetchone()[0] == store.SCHEMA
         assert con.execute('SELECT id,payload FROM metadata ORDER BY id').fetchall() == before
         queries = [
             "SELECT count(*) FROM metadata INDEXED BY metadata_count",

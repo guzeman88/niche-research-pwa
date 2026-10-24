@@ -1,3 +1,13 @@
+# October 24, 2026 automatic estimator connection
+
+The source now connects scheduled permitted Etsy evidence to the existing v1
+estimator through a persistent bounded product panel. Selling → Sales intelligence
+→ Estimates shows automatic 7/30-day review scenarios, capture/collection state,
+explicit uncalibrated assumptions and unknown results. External provider feeds
+are optional comparisons. See [automatic-sales-estimates.md](automatic-sales-estimates.md).
+Source changes do not establish installation or purchase accuracy; the desktop
+handoff records the exact runtime and dated live proof.
+
 # October 17, 2026 sales intelligence successor
 
 Private `/selling` now adds a separate historical reference archive, all 24 source

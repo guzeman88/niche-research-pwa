@@ -8,7 +8,7 @@ from pathlib import Path
 import sqlite3
 from threading import RLock
 
-SCHEMA = 4
+SCHEMA = 5
 INITIALIZE_LOCK = RLock()
 
 
@@ -127,6 +127,14 @@ def database(write=False):
                 CREATE INDEX IF NOT EXISTS metadata_latest_shop ON metadata_latest(json_extract(payload,'$.shop_id'));
                 PRAGMA user_version=4;
                 ''')
+            if version < 5:
+                migrate(con, '''
+                CREATE TABLE IF NOT EXISTS estimator_tracking(listing_id TEXT PRIMARY KEY,added_at TEXT NOT NULL,pinned INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS estimator_evidence(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,captured_at TEXT NOT NULL,available_at TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS estimator_evidence_listing ON estimator_evidence(listing_id,captured_at DESC,available_at DESC);
+                CREATE TABLE IF NOT EXISTS estimator_latest(listing_id TEXT PRIMARY KEY,as_of TEXT NOT NULL,payload TEXT NOT NULL);
+                PRAGMA user_version=5;
+                ''')
             con.commit()
         if write:
             con.execute('BEGIN IMMEDIATE')
@@ -175,4 +183,5 @@ def counts():
         result['worker'] = get_control(con, 'worker', {'status': 'not_started'})
         result['paused'] = get_control(con, 'paused', False)
         result['catalog'] = get_control(con, 'catalog', {})
+        result['automatic_estimator'] = get_control(con, 'estimator', {'tracked': 0, 'estimated': 0})
         return result

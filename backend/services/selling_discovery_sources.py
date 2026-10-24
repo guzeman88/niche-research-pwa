@@ -78,12 +78,12 @@ class Client:
         # Recheck the protected proof before each request, including expiry.
         if scope not in discovery.approval()['scopes'] or scope not in self.scopes:
             raise SourceUnavailable('authorization_unverified')
-        if not re.fullmatch(r'/listings/[0-9]+(?:/reviews|/images)?|/shops/[0-9]+', path):
+        if not re.fullmatch(r'/listings/[0-9]+(?:/reviews|/images)?|/shops/[0-9]+(?:/reviews)?', path):
             raise ValueError('Unsupported source path')
         page = scope == 'listing_pages'
         if page and not re.fullmatch(r'/listings/[0-9]+', path):
             raise ValueError('Unsupported page path')
-        if params and (scope != 'listing_reviews' or set(params) - {'limit', 'min_created'}):
+        if params and (scope != 'listing_reviews' or set(params) - {'limit', 'min_created', 'max_created'}):
             raise ValueError('Unsupported source parameters')
         headers = {'User-Agent': 'EtGen/1.0 (permitted product research)', 'Accept': 'text/html' if page else 'application/json'}
         if not page:
@@ -148,27 +148,32 @@ class Client:
             self.con.commit()
 
 
-def collect(client, row):
+def collect(client, row, retain_estimator=False):
     identity = row['listing_id']
     packet = json.loads(row['packet'])
     listing = dict(packet['listings'][0])
     observations, reviews = [], []
+    review_window = None
+    shop_id = ''
     at = discovery.now()
     ref = f'https://www.etsy.com/listing/{identity}'
     if 'listing_api' in client.scopes:
         data = client.get(f'/listings/{identity}', 'listing_api')
         if str(data.get('listing_id')) != identity:
             raise SourceUnavailable('listing_identity_mismatch')
+        shop_id = str(data.get('shop_id') or '')
         listing.update(title=data['title'], tags=data.get('tags') or [], source='etsy_public', source_ref=ref)
+        listing.update(category=str(data.get('taxonomy_id') or ''),
+                       product_type={'physical': 'physical', 'download': 'digital'}.get(data.get('listing_type'), 'unknown'))
         if data.get('original_creation_timestamp'):
             listing['created_on'] = datetime.fromtimestamp(data['original_creation_timestamp'], timezone.utc).date().isoformat()
         images = client.get(f'/listings/{identity}/images', 'listing_api').get('results', [])
         if images:
             listing['image_url'] = images[0].get('url_570xN') or images[0].get('url_fullxfull') or ''
-        for key, metric in [('num_favorers', 'favorites'), ('views', 'views')]:
+        for key, metric in [('num_favorers', 'favorites'), ('views', 'views'), ('quantity', 'stock')]:
             if data.get(key) is not None:
                 observations.append(Observation(listing_id=identity, metric=metric, value=data[key],
-                    basis='lifetime', observed_at=at, source='etsy_public', source_ref=ref))
+                    basis='point_in_time' if metric == 'stock' else 'lifetime', observed_at=at, source='etsy_public', source_ref=ref))
         price = data.get('price')
         if isinstance(price, dict) and price.get('divisor', 0) > 0:
             observations.append(Observation(listing_id=identity, metric='price', value=price['amount'] / price['divisor'],
@@ -184,19 +189,74 @@ def collect(client, row):
                         observed_at=at, source='etsy_public', source_ref='https://www.etsy.com/shop/' + listing['shop'],
                         note='Shop-wide counter. Never allocate this total as listing orders.'))
     if 'listing_reviews' in client.scopes:
-        data = client.get(f'/listings/{identity}/reviews', 'listing_reviews',
-                          {'limit': 25, 'min_created': int((at - timedelta(days=30)).timestamp())})
-        for review in data.get('results', [])[:25]:
-            if str(review.get('listing_id')) != identity:
+        start = at - timedelta(days=30)
+        review_path = f'/listings/{identity}/reviews'
+        review_params = {'limit': 100, 'min_created': int(start.timestamp()), 'max_created': int(at.timestamp())}
+        data = client.get(review_path, 'listing_reviews', review_params)
+        # Etsy can return an empty listing review set despite shop reviews.
+        # The documented shop-review endpoint retains each review's listing ID.
+        # Match that identity, never assign unrelated shop reviews to a product.
+        shop_fallback = False
+        if data.get('results') == [] and shop_id.isdecimal() and 'shop_api' in client.scopes:
+            review_path = f'/shops/{shop_id}/reviews'
+            data = client.get(review_path, 'listing_reviews', review_params)
+            shop_fallback = True
+        results = data.get('results')
+        if not isinstance(results, list) or len(results) > 100:
+            raise SourceUnavailable('unsupported_review_response')
+        times, event_ids, malformed = [], set(), False
+        for review in results:
+            if not isinstance(review, dict):
+                malformed = True
                 continue
+            if str(review.get('listing_id')) != identity:
+                if not shop_fallback or not str(review.get('listing_id', '')).isdecimal():
+                    malformed = True
+                continue
+            if shop_fallback and str(review.get('shop_id', shop_id)) != shop_id:
+                malformed = True
+                continue
+            from services.product_validation import digest
+            timestamp = review.get('create_timestamp', review.get('created_timestamp'))
+            if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+                malformed = True
+                continue
+            rating = review.get('rating')
+            if isinstance(rating, bool) or not isinstance(rating, int) or not 1 <= rating <= 5:
+                malformed = True
+                continue
+            try:
+                when = datetime.fromtimestamp(timestamp, timezone.utc)
+            except (ValueError, OverflowError, OSError):
+                malformed = True
+                continue
+            if not start < when <= at:
+                malformed = True
+                continue
+            # Transaction IDs are hashed locally solely to detect duplicate API
+            # rows; no buyer identities or raw transaction identifiers persist.
+            event_id = digest([identity, review.get('transaction_id'), timestamp, review.get('rating'), review.get('review')])
+            if event_id in event_ids:
+                malformed = True
+                continue
+            event_ids.add(event_id)
+            times.append(when.isoformat())
             # Retain no buyer identities. Review IDs derive from public content/time.
             text = review.get('review') or ''
             if len(text.strip()) < 3:
                 continue
-            from services.product_validation import digest
-            reviews.append(Review(review_id=digest([identity, review['create_timestamp'], review['rating'], text])[:40],
-                listing_id=identity, reviewed_on=datetime.fromtimestamp(review['create_timestamp'], timezone.utc).date(),
+            reviews.append(Review(review_id=digest([identity, timestamp, review['rating'], text])[:40],
+                listing_id=identity, reviewed_on=when.date(),
                 rating=review['rating'], text=text, source_ref=ref + '/reviews'))
+        reported = data.get('count')
+        complete = (not malformed and isinstance(reported, int) and not isinstance(reported, bool)
+                    and reported == len(results) and len(results) < 100)
+        review_window = {'start': start.isoformat(), 'end': at.isoformat(), 'review_times': sorted(times),
+                         'observed_reviews': len(times), 'reported_count': reported if isinstance(reported, int) and not isinstance(reported, bool) and reported >= 0 else None,
+                         'complete': complete, 'limit': 100,
+                         'source_ref': 'https://api.etsy.com/v3/application' + review_path,
+                         'response_scope': 'shop_reviews_matched_by_listing_id' if shop_fallback else 'listing_reviews',
+                         'completeness_basis': 'bounded_response_count_matches_rows' if complete else 'truncated_or_unverified_response'}
     page_status = 'api_updated'
     if 'listing_pages' in client.scopes:
         message = purchase_message(client.get(f'/listings/{identity}', 'listing_pages'), identity)
@@ -206,7 +266,13 @@ def collect(client, row):
             observations.append(Observation(listing_id=identity, metric='purchase_message', value=parsed['value'],
                 observed_at=at, source='etsy_public', source_ref=ref, raw_message=raw,
                 unit=parsed['unit'], precision=parsed['precision'], window_hours=parsed['window_hours']))
-    return Packet(listings=[Listing.model_validate(listing)], observations=observations, reviews=reviews).model_dump(mode='json'), page_status
+    packet = Packet(listings=[Listing.model_validate(listing)], observations=observations, reviews=reviews).model_dump(mode='json')
+    if retain_estimator:
+        from services.sales_intelligence import estimator
+        estimator.record_capture(packet, discovery.now(), review_window)
+        if review_window and review_window['complete'] and shop_fallback:
+            estimator.follow_reviewed_products(results, start, at, shop_id, identity, listing)
+    return packet, page_status
 
 
 def refresh_sources(run_id):
@@ -227,20 +293,30 @@ def refresh_sources(run_id):
             budget.schema(native)
             client = Client(native, 'selling-discovery-' + str(run_id), access['scopes'])
             try:
-                rows = target.execute('SELECT * FROM candidates WHERE next_check<=? ORDER BY (opportunity_id IS NOT NULL) DESC, observed_at DESC LIMIT 3', (discovery.now().isoformat(),)).fetchall()
+                from services.sales_intelligence import estimator
+                rows = estimator.due_rows(target, discovery.now().isoformat())
                 for row in rows:
                     status = 'source_unavailable'
                     try:
-                        packet, status = collect(client, row)
-                        discovery._upsert(target, packet, row['keyword'], discovery.now().isoformat())
+                        if isinstance(row, dict) and row.get('pending_metadata') and 'listing_api' not in client.scopes:
+                            continue
+                        packet, status = collect(client, row, retain_estimator=True)
+                        # A review-led product has no observed buyer keyword.
+                        # Use its actual seller tag/title only as a research seed,
+                        # never as measured search-demand evidence.
+                        listing = packet['listings'][0]
+                        seed = row['keyword'] or next((t for t in listing['tags'] if len(t)>=3), listing['title'])[:160]
+                        discovery._upsert(target, packet, seed, discovery.now().isoformat())
                     except budget.CollectionDeferred:
                         return {'status': 'budget_deferred', 'requests': client.requests}
                     except (SourceUnavailable, httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
                         status = str(exc) if isinstance(exc, SourceUnavailable) else 'unsupported_response'
                     delay = 6 if status in ('api_updated', 'purchase_message_observed', 'purchase_message_unavailable') else 24
+                    next_check = (discovery.now()+timedelta(hours=delay)).isoformat()
                     target.execute('UPDATE candidates SET checked_at=?,check_status=?,next_check=? WHERE listing_id=?',
-                        (discovery.now().isoformat(), status, (discovery.now() + timedelta(hours=delay)).isoformat(), row['listing_id']))
+                        (discovery.now().isoformat(), status, next_check, row['listing_id']))
                     target.commit()
+                    estimator.record_check(row['listing_id'], status, next_check)
                     if status in ('access_denied', 'rate_limited', 'access_challenge', 'authorization_unverified'):
                         break
                 return {'status': 'completed', 'requests': client.requests}
