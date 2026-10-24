@@ -12,9 +12,9 @@ const errorText = (cause: unknown) => cause instanceof Error ? cause.message : '
 export default function SalesIntelligence({onInvestigate}: {onInvestigate: (id: string) => void}) {
   const [open, setOpen] = useState(false)
   const [days, setDays] = useState(30), [unit, setUnit] = useState('purchases'), [objective, setObjective] = useState('consensus')
-  const [tab, setTab] = useState('compare'), [search, setSearch] = useState(''), [page, setPage] = useState(0)
+  const [tab, setTab] = useState('estimates'), [search, setSearch] = useState(''), [page, setPage] = useState(0)
   const [selected, setSelected] = useState(''), [message, setMessage] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false)
-  const overview = useQuery({queryKey: ['sales-intelligence', search, page], queryFn: () => request<ReferenceOverview>(`?${new URLSearchParams({q: search, page: String(page)})}`), retry: false, refetchInterval: 30000})
+  const overview = useQuery({queryKey: ['sales-intelligence', search, page], queryFn: () => request<ReferenceOverview>(`?${new URLSearchParams({q: search, page: String(page)})}`), enabled: open && tab !== 'estimates', retry: false, refetchInterval: 30000})
   const sources = useQuery({queryKey: ['intelligence-sources'], queryFn: () => request<{items: ReferenceSource[]}>('/sources'), enabled: open, retry: false})
   const comparison = useQuery({queryKey: ['intelligence-comparison', selected], queryFn: () => request<ReferenceComparison>(`/listings/${selected}/comparison`), enabled: open && Boolean(selected), retry: false})
   const jobs = useQuery({queryKey: ['intelligence-jobs'], queryFn: () => request<{items: ResearchJob[]}>('/jobs'), enabled: open && tab === 'learning', retry: false, refetchInterval: 15000})
@@ -37,7 +37,7 @@ export default function SalesIntelligence({onInvestigate}: {onInvestigate: (id: 
       {['estimates', 'compare', 'opportunities', 'coverage', 'sources', 'learning', 'import'].map(value => <button key={value} className={tab === value ? 'btn-primary' : 'btn-secondary'} aria-pressed={tab === value} onClick={() => setTab(value)}>{text(value)}</button>)}
     </nav>
     {message && <p role="status" className="my-4 text-sm text-surface-200">{message}</p>}
-    {(error || overview.error) && <div role="alert" className="my-4 text-sm text-accent-amber"><p>{error || overview.error?.message}</p><button className="btn-secondary mt-3" onClick={() => void overview.refetch()}>Retry research</button></div>}
+    {(error || (tab === 'compare' && overview.error)) && <div role="alert" className="my-4 text-sm text-accent-amber"><p>{error || overview.error?.message}</p><button className="btn-secondary mt-3" onClick={() => void overview.refetch()}>Retry research</button></div>}
     {tab === 'coverage' && <IntelligenceCoverage />}
     {tab === 'estimates' && <AutomaticEstimates onSelect={id => {setSelected(id); setTab('compare')}} />}
     {tab === 'opportunities' && <IntelligenceOpportunities onSelect={id => {setSelected(id); setTab('compare')}} />}

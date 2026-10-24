@@ -62,6 +62,8 @@ try {
   await page.getByRole('button', {name: 'Connect workspace', exact: true}).click()
   const intelligence = page.getByRole('region', {name: 'Sales intelligence', exact: true})
   await intelligence.getByRole('button', {name: 'Open sales intelligence', exact: true}).click()
+  await intelligence.getByRole('heading', {name: 'Our automatic sales estimates', exact: true}).waitFor()
+  await intelligence.getByRole('navigation', {name: 'Sales intelligence sections'}).getByRole('button', {name: 'compare', exact: true}).click()
   await intelligence.getByLabel('Compare Etsy listing ID').fill('123')
   await intelligence.getByLabel('Compare Etsy listing ID').press('Enter')
   await intelligence.getByText('Provider center 22', {exact: false}).waitFor()
