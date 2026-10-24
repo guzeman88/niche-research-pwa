@@ -78,11 +78,100 @@ def due_rows(target, at, limit=3):
     if ids:
         marks = ','.join('?' for _ in ids)
         candidates = target.execute(f'SELECT * FROM candidates WHERE listing_id IN ({marks}) AND next_check<=? ORDER BY next_check,listing_id', (*ids, at)).fetchall()
+        existing = {r[0] for r in target.execute(f'SELECT listing_id FROM candidates WHERE listing_id IN ({marks})', ids)}
+        # A review can identify a product before its public details are known.
+        # The placeholder is transient and cannot be saved without a listing API
+        # refresh. It is never used as a product title in estimation evidence.
+        from models.selling_products import Listing, Packet
+        with store.database() as con:
+            for identity in ids:
+                if identity in existing:
+                    continue
+                check = store.get_control(con, 'estimator_check:'+identity, {})
+                if check.get('next_check') and store.stamp(check['next_check'])>store.stamp(at):
+                    continue
+                evidence = con.execute('SELECT payload FROM estimator_evidence WHERE listing_id=? ORDER BY captured_at DESC LIMIT 1', (identity,)).fetchone()
+                if not evidence:
+                    continue
+                item = json.loads(evidence[0])
+                packet = Packet(listings=[Listing(listing_id=identity, title='Listing '+identity,
+                    shop=item['listing']['shop'], source='etsy_public', source_ref=item['listing']['source_ref'])]).model_dump(mode='json')
+                candidates.append({'listing_id':identity,'packet':store.encoded(packet),'keyword':'',
+                                   'next_check':'','opportunity_id':None,'pending_metadata':True})
+        with store.database() as con:
+            positive = {r[0] for r in con.execute('''SELECT t.listing_id FROM estimator_tracking t JOIN estimator_evidence e
+              ON e.id=(SELECT x.id FROM estimator_evidence x WHERE x.listing_id=t.listing_id ORDER BY x.captured_at DESC,x.available_at DESC LIMIT 1)
+              WHERE json_extract(e.payload,'$.review_window.complete')=1 AND json_extract(e.payload,'$.review_window.observed_reviews')>0
+              AND e.captured_at>=?''', ((store.now()-timedelta(days=7)).isoformat(),))}
+        candidates = sorted(candidates, key=lambda r: (r['next_check'], r['listing_id'] not in positive, r['listing_id']))
         chosen += [r for r in candidates if r['listing_id'] not in {c['listing_id'] for c in chosen}][:limit-len(chosen)]
     return chosen
 
 
-def record_capture(packet, captured_at, review_window=None):
+def record_check(listing_id, status, next_check):
+    with store.database(True) as con:
+        store.set_control(con,'estimator_check:'+listing_id,{'listing_id':listing_id,'check_status':status,
+                          'checked_at':store.now().isoformat(),'next_check':next_check})
+
+
+def follow_reviewed_products(results, start, end, shop_id, primary_id, parent_listing):
+    """Reuse a complete shop response for exact-ID recently reviewed products.
+
+    No invented title, buyer record, API request or shop-total allocation.
+    Unknown product details remain empty until the normal listing API refresh.
+    """
+    from services import selling_discovery as discovery
+    groups, seen = {}, set()
+    for raw in results:
+        if not isinstance(raw, dict):
+            return []
+        identity = str(raw.get('listing_id', ''))
+        timestamp = raw.get('created_timestamp', raw.get('create_timestamp'))
+        rating = raw.get('rating')
+        if (not identity.isdecimal() or len(identity)>30 or str(raw.get('shop_id', shop_id))!=shop_id
+                or isinstance(timestamp, bool) or not isinstance(timestamp, (int,float))
+                or isinstance(rating, bool) or not isinstance(rating,int) or not 1<=rating<=5):
+            return []
+        try:
+            from datetime import datetime, timezone
+            when = datetime.fromtimestamp(timestamp, timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            return []
+        key = store.digest([identity, timestamp, rating, raw.get('review')])
+        if not start < when <= end or key in seen:
+            return []
+        seen.add(key)
+        groups.setdefault(identity, []).append(when.isoformat())
+    followed = []
+    with closing(discovery.connect()) as target:
+        ensure_panel(target)
+        for identity, times in sorted(groups.items(), key=lambda x: (-len(x[1]), x[0])):
+            if identity == primary_id:
+                continue
+            row = target.execute('SELECT packet,observed_at FROM candidates WHERE listing_id=?', (identity,)).fetchone()
+            with store.database(True) as con:
+                known = con.execute('SELECT 1 FROM estimator_tracking WHERE listing_id=?', (identity,)).fetchone()
+                if not known and con.execute('SELECT count(*) FROM estimator_tracking').fetchone()[0]>=MAX_TRACKED:
+                    continue
+                con.execute('INSERT OR IGNORE INTO estimator_tracking VALUES(?,?,0)', (identity,store.now().isoformat()))
+            listing = dict(json.loads(row[0])['listings'][0]) if row else {'listing_id':identity,'title':''}
+            reference='https://api.etsy.com/v3/application/shops/'+shop_id+'/reviews'
+            listing.update(shop=parent_listing['shop'])
+            if not row:
+                listing.update(source='etsy_public',source_ref=reference)
+            window = {'start':start.isoformat(),'end':end.isoformat(),'review_times':sorted(times),
+                      'observed_reviews':len(times),'reported_count':len(results),'complete':True,'limit':100,
+                      'source_ref':reference,'response_scope':'shop_reviews_matched_by_listing_id',
+                      'completeness_basis':'bounded_complete_shop_response_matched_to_known_listing'}
+            record_capture({'listings':[listing],'observations':[]}, discovery.now(), window,
+                           metadata_at=row['observed_at'] if row else None, pending_details=not bool(row))
+            followed.append(identity)
+            if len(followed)>=3:
+                break
+    return followed
+
+
+def record_capture(packet, captured_at, review_window=None, metadata_at=None, pending_details=False):
     """Append allowlisted numeric evidence. No buyer IDs, review text or secrets."""
     captured = store.stamp(captured_at).isoformat()
     listing = packet['listings'][0]
@@ -90,7 +179,8 @@ def record_capture(packet, captured_at, review_window=None):
     allowed = {'reviews', 'views', 'favorites', 'stock', 'price', 'shop_sales', 'shop_reviews'}
     observations = [{k: r.get(k) for k in ('listing_id', 'metric', 'value', 'observed_at', 'basis', 'source', 'source_ref', 'currency', 'precision')}
                     for r in packet['observations'] if r['metric'] in allowed]
-    value = {'listing': public_listing, 'observations': observations, 'review_window': review_window, 'captured_at': captured}
+    value = {'listing': public_listing, 'observations': observations, 'review_window': review_window, 'captured_at': captured,
+             'listing_metadata_captured_at': None if pending_details else store.stamp(metadata_at or captured).isoformat()}
     ident = store.digest(value)
     with store.database(True) as con:
         con.execute('INSERT OR IGNORE INTO estimator_evidence VALUES(?,?,?,?,?)', (ident, listing['listing_id'], captured, captured, store.encoded(value)))
@@ -111,7 +201,7 @@ def calculate(listing_id, as_of=None):
         return base
     history = [json.loads(r['payload']) for r in rows]
     latest = history[0]
-    base.update(listing=latest['listing'], captured_at=latest['captured_at'])
+    base.update(listing=latest['listing'], captured_at=latest['captured_at'], listing_metadata_captured_at=latest.get('listing_metadata_captured_at'))
     if at - store.stamp(latest['captured_at']) > timedelta(days=7):
         base['status'] = 'stale_evidence'
         return base
@@ -182,6 +272,7 @@ def overview():
     with store.database() as con:
         rows = con.execute('SELECT t.listing_id,t.pinned,e.payload FROM estimator_tracking t LEFT JOIN estimator_latest e ON e.listing_id=t.listing_id ORDER BY t.pinned DESC,t.added_at,t.listing_id').fetchall()
         summary = store.get_control(con, 'estimator', {})
+        checks = {r['listing_id']:store.get_control(con,'estimator_check:'+r['listing_id'],{}) for r in rows}
     from services import selling_discovery as discovery
     with closing(discovery.connect()) as target:
         source = {row['listing_id']: dict(row) for r in rows for row in target.execute('SELECT listing_id,title,shop,checked_at,check_status,next_check FROM candidates WHERE listing_id=?', (r['listing_id'],))}
@@ -190,7 +281,7 @@ def overview():
         item = json.loads(row['payload']) if row['payload'] else {'listing_id': row['listing_id'], 'status': 'awaiting_api_evidence', 'value': None}
         if item.get('captured_at') and store.now() - store.stamp(item['captured_at']) > timedelta(days=7):
             item.update(value=None, status='stale_evidence', windows={}, review_scenarios={})
-        items.append({**item, 'collection': source.get(row['listing_id']), 'pinned': bool(row['pinned'])})
+        items.append({**item, 'collection': source.get(row['listing_id']) or checks[row['listing_id']], 'pinned': bool(row['pinned'])})
     summary.update(tracked=len(items), estimated=sum(r['value'] is not None for r in items))
     return {'items': items, 'summary': summary, 'assumptions': ASSUMPTION, 'panel_limit': MAX_TRACKED,
             'schedule': 'Backend tracking: normal 15-minute source gate, at most three due products per pass; each product rechecked after six hours, within the existing shared free allowance.'}

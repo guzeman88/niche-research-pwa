@@ -154,6 +154,34 @@ def test_empty_listing_response_uses_documented_shop_reviews_without_misattribut
     assert result['review_evidence']['response_scope'] == 'shop_reviews_matched_by_listing_id'
 
 
+def test_complete_shop_reviews_feed_known_related_products_without_extra_requests(isolated, monkeypatch):
+    at=store.now()-timedelta(seconds=1)
+    monkeypatch.setattr(discovery,'now',lambda:at)
+    related=Packet(listings=[Listing(listing_id='456',title='Known related planner',shop='Shop A',source_ref='Fixture')]).model_dump(mode='json')
+    with closing(discovery.connect()) as target,target:
+        discovery._upsert(target,related,'teacher planner',at.isoformat())
+    rows=[{'listing_id':456,'shop_id':7,'created_timestamp':int((at-timedelta(days=2)).timestamp()),'rating':5,'review':'Private fixture body','buyer_user_id':'must-not-retain'}]
+    assert estimator.follow_reviewed_products(rows,at-timedelta(days=30),at,'7','123',{'shop':'Shop A'})==['456']
+    value=estimator.calculate('456')
+    assert value['value']==10 and value['listing']['title']=='Known related planner'
+    assert estimator.calculate('123')['value'] is None
+    with store.database() as con:
+        assert 'must-not-retain' not in con.execute('SELECT payload FROM estimator_evidence').fetchone()[0]
+        assert 'Private fixture body' not in con.execute('SELECT payload FROM estimator_evidence').fetchone()[0]
+    with closing(discovery.connect()) as target:
+        assert estimator.due_rows(target,at.isoformat())[0]['listing_id']=='456'
+    assert estimator.follow_reviewed_products([{**rows[0],'listing_id':999}],at-timedelta(days=30),at,'7','123',{'shop':'Shop A'})==['999']
+    unknown=estimator.calculate('999')
+    assert unknown['value']==10 and unknown['listing']['title']==''
+    with closing(discovery.connect()) as target:
+        assert not target.execute("SELECT 1 FROM candidates WHERE listing_id='999'").fetchone()
+        pending=next(r for r in estimator.due_rows(target,at.isoformat()) if r['listing_id']=='999')
+        assert pending['pending_metadata'] and pending['keyword']==''
+        estimator.record_check('999','source_unavailable',(at+timedelta(hours=24)).isoformat())
+        assert '999' not in [r['listing_id'] for r in estimator.due_rows(target,at.isoformat())]
+    assert estimator.follow_reviewed_products([rows[0],rows[0]],at-timedelta(days=30),at,'7','123',{'shop':'Shop A'})==[]
+
+
 def test_duplicate_review_rows_and_full_page_never_claim_complete(isolated, monkeypatch):
     at = store.now() - timedelta(days=2)
     capture(monkeypatch, times=[at, at])

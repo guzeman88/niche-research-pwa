@@ -29,6 +29,16 @@ reviews, matching each review's exact listing ID. No unrelated shop reviews are
 assigned to the product. This stays within the same 15-request budget. Original
 API permission is checked for each request. No HTML purchase messages are read.
 
+A complete shop-review response can also supply exact-ID review windows for up
+to three other products. The panel adds these within its
+60-product cap and prioritizes their next due metadata check. Unknown products
+retain empty titles/keywords until public details are obtained on the regular
+API schedule; a real seller tag/title can then seed research without claiming
+measured buyer demand. Related reviews never become
+reviews or purchases of the original product, and primary listing prices/views
+are not copied onto related products. This reuses the same response without
+additional requests and helps find review activity beyond the initial panel.
+
 ## Calculation and limits
 
 Allowlisted numeric observations and review timestamps enter a separate private

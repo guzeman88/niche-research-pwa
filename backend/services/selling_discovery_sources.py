@@ -270,6 +270,8 @@ def collect(client, row, retain_estimator=False):
     if retain_estimator:
         from services.sales_intelligence import estimator
         estimator.record_capture(packet, discovery.now(), review_window)
+        if review_window and review_window['complete'] and shop_fallback:
+            estimator.follow_reviewed_products(results, start, at, shop_id, identity, listing)
     return packet, page_status
 
 
@@ -296,16 +298,25 @@ def refresh_sources(run_id):
                 for row in rows:
                     status = 'source_unavailable'
                     try:
+                        if isinstance(row, dict) and row.get('pending_metadata') and 'listing_api' not in client.scopes:
+                            continue
                         packet, status = collect(client, row, retain_estimator=True)
-                        discovery._upsert(target, packet, row['keyword'], discovery.now().isoformat())
+                        # A review-led product has no observed buyer keyword.
+                        # Use its actual seller tag/title only as a research seed,
+                        # never as measured search-demand evidence.
+                        listing = packet['listings'][0]
+                        seed = row['keyword'] or next((t for t in listing['tags'] if len(t)>=3), listing['title'])[:160]
+                        discovery._upsert(target, packet, seed, discovery.now().isoformat())
                     except budget.CollectionDeferred:
                         return {'status': 'budget_deferred', 'requests': client.requests}
                     except (SourceUnavailable, httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
                         status = str(exc) if isinstance(exc, SourceUnavailable) else 'unsupported_response'
                     delay = 6 if status in ('api_updated', 'purchase_message_observed', 'purchase_message_unavailable') else 24
+                    next_check = (discovery.now()+timedelta(hours=delay)).isoformat()
                     target.execute('UPDATE candidates SET checked_at=?,check_status=?,next_check=? WHERE listing_id=?',
-                        (discovery.now().isoformat(), status, (discovery.now() + timedelta(hours=delay)).isoformat(), row['listing_id']))
+                        (discovery.now().isoformat(), status, next_check, row['listing_id']))
                     target.commit()
+                    estimator.record_check(row['listing_id'], status, next_check)
                     if status in ('access_denied', 'rate_limited', 'access_challenge', 'authorization_unverified'):
                         break
                 return {'status': 'completed', 'requests': client.requests}
