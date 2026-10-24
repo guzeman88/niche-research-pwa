@@ -24,7 +24,7 @@ const fixture = spawnSync(python, ['-c', `
 from pathlib import Path
 from datetime import timedelta
 import json,os,sqlite3
-from services.sales_intelligence import store,registry,ingestion
+from services.sales_intelligence import store,registry,ingestion,estimator
 from services import selling_discovery
 store.counts(); at=store.now()-timedelta(hours=1)
 grants={s:{'reference':'Synthetic isolated test permission, not a provider grant','account_ref':'fixture','issued_at':(at-timedelta(days=90)).isoformat(),'expires_at':(at+timedelta(days=1)).isoformat(),'free_only':True,'capabilities':['storage','comparison','training','export']} for s in ('muadzo','hive')}
@@ -39,6 +39,10 @@ with sqlite3.connect(p) as c:
  c.execute('CREATE TABLE keyword_listing_snapshots(id INTEGER PRIMARY KEY,listing_id TEXT,title TEXT,keyword TEXT,shop_name TEXT,observed_at TEXT,price REAL,currency_code TEXT,favorites INTEGER,review_count INTEGER,collection_run_id TEXT)')
  c.execute('INSERT INTO keyword_listing_snapshots VALUES(1,?,?,?,?,?,?,?,?,?,?)',('123','Synthetic fixture planner','teacher planner','Synthetic shop',at.isoformat(),8,'USD',10,None,'synthetic-ui'))
 (native/'installation.json').write_text(json.dumps({'database':str(p)}));selling_discovery.sync_catalog()
+from models.selling_products import Listing,Packet
+fixture_packet=Packet(listings=[Listing(listing_id='123',title='Synthetic fixture planner',shop='Synthetic shop',source_ref='Isolated UI fixture')]).model_dump(mode='json')
+review_window={'start':(at-timedelta(days=30)).isoformat(),'end':at.isoformat(),'review_times':[(at-timedelta(days=2)).isoformat()], 'complete':True,'observed_reviews':1,'reported_count':1,'limit':100,'source_ref':'Synthetic review-window fixture','completeness_basis':'isolated_fixture'}
+estimator.record_capture(fixture_packet,at,review_window);estimator.refresh()
 `], {cwd: resolve('backend'), env, encoding: 'utf8'})
 assert.equal(fixture.status, 0, fixture.stderr)
 const backend = spawn(python, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)], {cwd: resolve('backend'), env, stdio: 'pipe'})
@@ -67,6 +71,22 @@ try {
   await intelligence.getByLabel('Compare Etsy listing ID').press('Enter')
   await intelligence.getByText('No eligible compatible sales estimates.', {exact: false}).waitFor()
   const tabs = intelligence.getByRole('navigation', {name: 'Sales intelligence sections'})
+  await tabs.getByRole('button', {name: 'estimates', exact: true}).click()
+  await intelligence.getByRole('heading', {name: 'Our automatic sales estimates', exact: true}).waitFor()
+  await intelligence.getByText('10 estimated purchases / 30 days', {exact: false}).waitFor()
+  await intelligence.getByLabel('With estimates only', {exact: true}).check()
+  await intelligence.getByRole('button', {name: 'Recalculate estimates', exact: true}).click()
+  await intelligence.getByText('Calculation queued.', {exact: false}).waitFor()
+  const automaticCaptures = []
+  for (const width of [1440, 320]) {
+    await page.setViewportSize({width, height: 1000})
+    await page.evaluate(() => window.scrollTo(0, 0))
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `estimate overflow at ${width}`)
+    await mkdir('.impeccable/review', {recursive: true})
+    const path = `.impeccable/review/automatic-estimates-${width}.png`
+    await page.screenshot({path, fullPage: true}); automaticCaptures.push(path)
+  }
+  await page.setViewportSize({width: 1440, height: 1000})
   await tabs.getByRole('button', {name: 'sources', exact: true}).click()
   await intelligence.getByRole('link', {name: 'MuaDzo', exact: true}).waitFor()
   assert.equal(await intelligence.getByRole('button', {name: /^Check /}).count(), 24)

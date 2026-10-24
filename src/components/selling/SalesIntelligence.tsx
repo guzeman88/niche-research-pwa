@@ -4,6 +4,7 @@ import {intelligenceRequest as request, type ReferenceSource, type ReferenceOver
 import {number, text} from '../../lib/sellingProducts'
 import {IntelligenceCoverage, IntelligenceOpportunities} from './IntelligenceCoverage'
 import ReferenceHistory from './ReferenceHistory'
+import AutomaticEstimates from './AutomaticEstimates'
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : 'Unknown'
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Research request failed. Try again.'
@@ -26,18 +27,19 @@ export default function SalesIntelligence({onInvestigate}: {onInvestigate: (id: 
   const data = overview.data
   return <section aria-label="Sales intelligence" className="my-8 border-b border-surface-600 pb-8">
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h2 className="text-lg font-semibold">Sales intelligence</h2><p className="mt-2 max-w-3xl text-sm leading-relaxed text-surface-200">Compare dated sales estimates, inspect disagreements and track what our model learns. Actual seller outcomes remain separate.</p></div>
+      <div><h2 className="text-lg font-semibold">Sales intelligence</h2><p className="mt-2 max-w-3xl text-sm leading-relaxed text-surface-200">Track our automatic estimates, compare external references and inspect the evidence behind each product. Actual seller outcomes remain separate.</p></div>
       <button className="btn-secondary" aria-expanded={open} aria-controls="sales-intelligence-workspace" onClick={() => setOpen(value => !value)}>{open ? 'Close sales intelligence' : 'Open sales intelligence'}</button>
     </div>
     {data && <p className="mt-4 text-sm tabular-nums text-surface-200">{number(data.coverage.reference_listings)} listings with provider references · {number(data.coverage.observations)} retained readings · {number(data.coverage.outcomes)} actual outcome records</p>}
     {data && data.automated_provider_feeds === 0 && <p className="mt-3 max-w-3xl text-sm leading-relaxed text-surface-200">Provider feeds need verified free access. Saved catalog history updates automatically; importing an export does not automate obtaining that export.</p>}
     {open && <div id="sales-intelligence-workspace">
     <nav aria-label="Sales intelligence sections" className="my-5 flex flex-wrap gap-2">
-      {['compare', 'opportunities', 'coverage', 'sources', 'learning', 'import'].map(value => <button key={value} className={tab === value ? 'btn-primary' : 'btn-secondary'} aria-pressed={tab === value} onClick={() => setTab(value)}>{text(value)}</button>)}
+      {['estimates', 'compare', 'opportunities', 'coverage', 'sources', 'learning', 'import'].map(value => <button key={value} className={tab === value ? 'btn-primary' : 'btn-secondary'} aria-pressed={tab === value} onClick={() => setTab(value)}>{text(value)}</button>)}
     </nav>
     {message && <p role="status" className="my-4 text-sm text-surface-200">{message}</p>}
     {(error || overview.error) && <div role="alert" className="my-4 text-sm text-accent-amber"><p>{error || overview.error?.message}</p><button className="btn-secondary mt-3" onClick={() => void overview.refetch()}>Retry research</button></div>}
     {tab === 'coverage' && <IntelligenceCoverage />}
+    {tab === 'estimates' && <AutomaticEstimates onSelect={id => {setSelected(id); setTab('compare')}} />}
     {tab === 'opportunities' && <IntelligenceOpportunities onSelect={id => {setSelected(id); setTab('compare')}} />}
     {tab === 'compare' && <>
       <div className="grid gap-4 sm:grid-cols-2"><label className="min-w-0 text-sm">Find a saved listing<input className="input mt-2 w-full" type="search" maxLength={200} value={search} onChange={event => {setSearch(event.target.value); setPage(0)}} /></label>
@@ -51,6 +53,7 @@ export default function SalesIntelligence({onInvestigate}: {onInvestigate: (id: 
         <div className="mt-4 flex flex-wrap items-center gap-4 text-sm"><button className="btn-secondary" disabled={page === 0} onClick={() => setPage(value => value - 1)}>Previous history</button><span>{number(data.total)} saved listings · page {page + 1}</span><button className="btn-secondary" disabled={(page + 1) * data.limit >= data.total} onClick={() => setPage(value => value + 1)}>Next history</button></div>
       </>}
       {selected && <div className="mt-8 border-t border-surface-600 pt-6" aria-label="Selected listing comparison">
+        <button className="btn-secondary mb-4" disabled={busy} onClick={() => void action(`/listings/${selected}/track`)}>Track for automatic estimates</button>
         <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-base font-semibold">Listing {selected}</h3><button className="btn-secondary" disabled={busy} onClick={async () => {setBusy(true); setError(''); try {const item = await request<{id: string}>(`/listings/${selected}/investigate`, {}); onInvestigate(item.id); document.getElementById('opportunity-workspace')?.scrollIntoView({behavior: 'instant', block: 'start'}); document.getElementById('opportunity-workspace')?.focus({preventScroll: true})} catch (cause) {setError(errorText(cause))} finally {setBusy(false)}}}>Investigate this product</button></div>
         {comparison.isPending && <p role="status" className="mt-3 text-sm">Loading compatible references…</p>}
         {comparison.error && <p role="alert" className="mt-3 text-sm text-accent-amber">{comparison.error.message}</p>}
@@ -94,10 +97,11 @@ export default function SalesIntelligence({onInvestigate}: {onInvestigate: (id: 
 function ListingComparison({value}: {value: ReferenceComparison}) {
   return <div className="mt-3 space-y-5">
     {value.metadata && <p className="break-words text-sm text-surface-200">{value.metadata.title}</p>}
-    {value.consensus.cohorts.length === 0 && <p className="max-w-3xl text-sm leading-relaxed text-surface-200">No eligible compatible sales estimates. Sales remain unknown; catalog favorites and prices do not establish purchases.</p>}
+    {value.consensus.cohorts.length === 0 && <p className="max-w-3xl text-sm leading-relaxed text-surface-200">No eligible compatible sales estimates. External comparisons are unavailable; our automatic estimator is separate.</p>}
     {value.consensus.cohorts.map(cohort => <div key={cohort.fingerprint} className="border-y border-surface-700 py-4"><h4 className="text-sm font-semibold">{text(cohort.basis)} · {cohort.unit} · {text(cohort.status)}</h4>{cohort.period_start && <p className="mt-2 text-xs text-surface-300">{date(cohort.period_start)} to {date(cohort.period_end)} · end exclusive</p>}<p className="mt-3 text-base font-semibold">Provider center {number(cohort.center)} <span className="text-sm font-normal text-surface-200">· mean {number(cohort.mean)} · source spread {number(cohort.minimum)}–{number(cohort.maximum)}</span></p><p className="mt-2 text-sm text-surface-200">{cohort.source_count} providers / {cohort.group_count} method groups. Spread describes disagreement, not a confidence interval.</p>
       <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><caption className="sr-only">Compatible provider estimates</caption><thead><tr className="border-b border-surface-600"><th className="py-2 pr-4 font-semibold" scope="col">Source</th><th className="py-2 pr-4 font-semibold" scope="col">Estimate</th><th className="py-2 font-semibold" scope="col">Captured</th></tr></thead><tbody>{cohort.readings.map(reading => <tr key={reading.id} className="border-b border-surface-700"><td className="py-3 pr-4">{reading.source_id}</td><td className="py-3 pr-4 tabular-nums">{number(reading.value)}</td><td className="py-3">{date(reading.captured_at)}</td></tr>)}</tbody></table></div></div>)}
     <p className="text-sm">EtGen independent model: {value.independent_model.value == null ? text(value.independent_model.status) : `${number(value.independent_model.value)} purchases / 30 days · provisional`}</p>
+    {value.automatic_estimate && <p className="max-w-3xl text-sm leading-relaxed text-surface-200">EtGen automatic estimate: {value.automatic_estimate.value == null ? text(value.automatic_estimate.status) : `${number(value.automatic_estimate.value)} estimated purchases / 30 days · ${text(value.automatic_estimate.status)} · unvalidated. Review scenarios use review dates with an assumed zero purchase-to-review delay.`}</p>}
     <p className="text-sm">EtGen student: {value.student.value == null ? text(value.student.status) : `${number(value.student.value)} ${value.student.unit} / ${value.student.days} days · experimental consensus estimate`}</p>
     <p className="text-sm">EtGen outcome model: {value.outcome_model.value == null ? text(value.outcome_model.status) : `${number(value.outcome_model.value)} ${value.outcome_model.unit} / ${value.outcome_model.days} days · estimate from an outcome-tested model`}</p>
     {value.consensus.excluded.length > 0 && <details><summary className="cursor-pointer text-sm">Excluded references · {value.consensus.excluded.length}</summary><ul className="mt-3 space-y-2 text-sm text-surface-200">{value.consensus.excluded.map(row => <li key={row.id}>{row.source_id} · {text(row.reason)}</li>)}</ul></details>}

@@ -6,13 +6,13 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
-from . import features, ingestion, quotas, registry, store, training
+from . import estimator, features, ingestion, quotas, registry, store, training
 
 LEASE_SECONDS = 900
 
 
 def enqueue(kind, payload=None, identity=None):
-    if kind not in ('catalog', 'backfill', 'import', 'train', 'predict', 'evaluate_actual', 'promote', 'fetch'):
+    if kind not in ('catalog', 'backfill', 'import', 'train', 'predict', 'evaluate_actual', 'promote', 'fetch', 'estimate'):
         raise ValueError('Unsupported research job')
     payload = payload or {}
     source = payload.get('source_id', 'local')
@@ -111,6 +111,8 @@ def dispatch_collection(source_id=None):
 
 def execute(payload):
     kind = payload['kind']
+    if kind == 'estimate':
+        return estimator.refresh()
     if kind == 'fetch':
         from .adapters import fetch
         return fetch(payload['source_id'], payload['listing_id'], payload['reservation_id'])
@@ -165,7 +167,7 @@ def cycle():
             con.execute("UPDATE jobs SET status='interrupted',lease_until=NULL WHERE status='running' AND lease_until<?", (at.isoformat(),))
             con.execute("UPDATE jobs SET status='failed' WHERE status='interrupted' AND attempts>=3")
             reservations_before = con.execute('SELECT count(*) FROM quota_events').fetchone()[0]
-        for kind in ('catalog', 'backfill', 'import', 'promote'):
+        for kind in ('catalog', 'backfill', 'import', 'promote', 'estimate'):
             enqueue(kind, identity=at.strftime('%Y-%m-%dT%H:%M'))
         with store.database() as con:
             has_panel = con.execute('SELECT 1 FROM panels LIMIT 1').fetchone()
@@ -189,7 +191,7 @@ def cycle():
         for model in active:
             enqueue('predict', {'days': model['days'], 'unit': model['unit'], 'lane': model['lane']}, identity=at.date().isoformat())
         completed = []
-        for _ in range(5):
+        for _ in range(8):
             with store.database(True) as con:
                 if store.get_control(con, 'paused', False):
                     break
