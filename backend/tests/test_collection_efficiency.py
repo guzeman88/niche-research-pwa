@@ -72,16 +72,18 @@ def test_pagination_resumes_after_four_pages_without_restarting_window(isolated)
     at=store.now(); calls=[]
     rows=[review(101,at-timedelta(seconds=n+10),n) for n in range(550)]
     class Client:
+        def __init__(self):self.review_windows={}
         def get(self,path,scope,params):
             calls.append(dict(params)); start=params['offset']
             return {'count':len(rows),'results':rows[start:start+100]}
     client=Client(); first=cache.reviews(client,'/shops/7/reviews',at)
     assert first['status']=='pending' and len(first['rows'])==400
-    second=cache.reviews(client,'/shops/7/reviews',at+timedelta(minutes=15))
+    assert cache.reviews(client,'/shops/7/reviews',at)['status']=='pending' and len(calls)==4
+    second=cache.reviews(Client(),'/shops/7/reviews',at+timedelta(minutes=15))
     assert second['status']=='complete' and len(second['rows'])==550
     assert [p['offset'] for p in calls]==[0,100,200,300,400,500]
     assert len({p['max_created'] for p in calls})==1
-    cache.reviews(client,'/shops/7/reviews',at+timedelta(hours=1))
+    cache.reviews(Client(),'/shops/7/reviews',at+timedelta(hours=1))
     assert len(calls)==6
 
 

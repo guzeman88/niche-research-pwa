@@ -74,6 +74,7 @@ class Client:
         self.last_call = 0.0
         self.optimized = True
         self.prefetched = {}
+        self.review_windows = {}
         self.cache_hits = 0
         self.batch_limit = 40
 
@@ -112,6 +113,9 @@ class Client:
             identity = str(value.get('listing_id','')) if isinstance(value,dict) else ''
             if identity not in identities or identity in seen:
                 raise SourceUnavailable('listing_identity_mismatch')
+            shop=value.get('shop',value.get('Shop'))
+            if isinstance(shop,dict) and shop.get('shop_id') is not None and str(shop['shop_id'])!=str(value.get('shop_id')):
+                raise SourceUnavailable('shop_identity_mismatch')
             seen.add(identity)
         for value in values:
             identity = str(value['listing_id'])
@@ -199,6 +203,8 @@ class Client:
                 if not isinstance(payload,dict):
                     raise SourceUnavailable('unsupported_response')
                 if scope=='shop_api' and re.fullmatch(r'/shops/[0-9]+',path):
+                    if payload.get('shop_id') is not None and str(payload['shop_id'])!=path.split('/')[2]:
+                        raise SourceUnavailable('shop_identity_mismatch')
                     cache.save('shop:'+path.split('/')[2],cache.public_shop(payload))
                 # Retain only public listing feature fields for the existing
                 # read-only history bridge. Reviews, images, shops, HTML and
@@ -342,7 +348,9 @@ def collect(client, row, retain_estimator=False):
             times.append(when.isoformat())
             # Retain no buyer identities. Review IDs derive from public content/time.
             text = review.get('review') or ''
-            if len(text.strip()) < 3:
+            # The research packet is deliberately small; the resumable job and
+            # estimator retain every validated numeric review event separately.
+            if len(text.strip()) < 3 or len(reviews)>=50:
                 continue
             reviews.append(Review(review_id=digest([identity, timestamp, review['rating'], text])[:40],
                 listing_id=identity, reviewed_on=when.date(),

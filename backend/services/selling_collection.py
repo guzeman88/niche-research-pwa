@@ -90,6 +90,16 @@ def _persist(job):
 
 
 def reviews(client, path, at):
+    memo = getattr(client,'review_windows',None)
+    if memo is not None and path in memo:
+        return memo[path]
+    result = _review_window(client,path,at)
+    if memo is not None:
+        memo[path] = result
+    return result
+
+
+def _review_window(client, path, at):
     """Resume pages at a fixed cutoff; split busy date ranges before offset limits.
 
     Complete/invalid results are cached six hours. Pending work resumes on the
