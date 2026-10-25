@@ -1,5 +1,11 @@
 # Automatic EtGen estimates
 
+**October 25 successor:** collection now uses batched details, shared shop caches,
+resumable review windows, reserved lane budgets and a rotating 200-product target
+(600 maximum). See [collection efficiency](collection-efficiency.md) for the
+current collection contract. The October 24 collection limits below describe the
+predecessor; the numerical assumptions and accuracy limits still apply.
+
 Implemented October 24, 2026. This closes the connection between permitted
 scheduled Etsy collection and the existing `etgen-sales-v1` engine. It does not
 claim measured purchase accuracy or change the actual-outcome training gates.

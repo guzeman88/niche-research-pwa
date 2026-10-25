@@ -11,11 +11,13 @@ from html.parser import HTMLParser
 import httpx
 from models.selling_products import Listing, Observation, Review, Packet
 from services.sales_model import parse_message
-from services import selling_discovery as discovery, feed_request_budget as budget
+from services import selling_discovery as discovery, feed_request_budget as budget, selling_collection as cache
 
 
 class SourceUnavailable(ValueError):
-    pass
+    def __init__(self, reason, status=None):
+        super().__init__(reason)
+        self.status = status
 
 
 def purchase_message(document, listing_id):
@@ -70,6 +72,58 @@ class Client:
         self.client = client or httpx.Client(timeout=20, follow_redirects=False)
         self.requests = 0
         self.last_call = 0.0
+        self.optimized = True
+        self.prefetched = {}
+        self.review_windows = {}
+        self.cache_hits = 0
+        self.batch_limit = 40
+
+    def prefetch(self, rows):
+        if 'listing_api' not in self.scopes:
+            return
+        identities = [r['listing_id'] for r in rows][:25]
+        missing=[]
+        for identity in identities:
+            item=cache.cached('listing:'+identity)
+            if item:
+                self.prefetched[identity]=item
+                self.cache_hits+=1
+            else:
+                missing.append(identity)
+        identities=missing
+        if not identities:
+            return
+        disabled = cache.control('batch_disabled_until')
+        if disabled and discovery._time(disabled)>discovery.now():
+            return
+        includes = 'Images,Shop' if 'shop_api' in self.scopes else 'Images'
+        try:
+            payload = self.get('/listings/batch','listing_api',{'listing_ids':','.join(identities),'includes':includes})
+        except SourceUnavailable as exc:
+            if exc.status in (400,404):
+                if exc.status == 400:
+                    cache.control('batch_disabled_until',value=(discovery.now()+timedelta(hours=6)).isoformat())
+                return  # Counted, bounded individual fallback; never retry 403/429.
+            raise
+        values = payload.get('results')
+        if not isinstance(values,list) or len(values)>len(identities):
+            raise SourceUnavailable('unsupported_batch_response')
+        seen = set()
+        for value in values:
+            identity = str(value.get('listing_id','')) if isinstance(value,dict) else ''
+            if identity not in identities or identity in seen:
+                raise SourceUnavailable('listing_identity_mismatch')
+            shop=value.get('shop',value.get('Shop'))
+            if isinstance(shop,dict) and shop.get('shop_id') is not None and str(shop['shop_id'])!=str(value.get('shop_id')):
+                raise SourceUnavailable('shop_identity_mismatch')
+            seen.add(identity)
+        for value in values:
+            identity = str(value['listing_id'])
+            public = {**cache.public_listing(value),'_captured_at':discovery.now().isoformat()}
+            self.prefetched[identity] = public
+            cache.save('listing:'+identity,public,hours=1)
+            if isinstance(public.get('shop'),dict) and str(public.get('shop_id','')).isdecimal():
+                cache.save('shop:'+str(public['shop_id']),public['shop'])
 
     def close(self):
         self.client.close()
@@ -78,13 +132,31 @@ class Client:
         # Recheck the protected proof before each request, including expiry.
         if scope not in discovery.approval()['scopes'] or scope not in self.scopes:
             raise SourceUnavailable('authorization_unverified')
-        if not re.fullmatch(r'/listings/[0-9]+(?:/reviews|/images)?|/shops/[0-9]+(?:/reviews)?', path):
+        if not re.fullmatch(r'/listings/(?:batch|[0-9]+(?:/reviews|/images)?)|/shops/[0-9]+(?:/reviews)?', path):
             raise ValueError('Unsupported source path')
         page = scope == 'listing_pages'
         if page and not re.fullmatch(r'/listings/[0-9]+', path):
             raise ValueError('Unsupported page path')
-        if params and (scope != 'listing_reviews' or set(params) - {'limit', 'min_created', 'max_created'}):
-            raise ValueError('Unsupported source parameters')
+        if params:
+            allowed = ({'limit','offset','min_created','max_created'} if scope=='listing_reviews' else
+                       {'listing_ids','includes'} if scope=='listing_api' and path=='/listings/batch' else set())
+            if set(params)-allowed:
+                raise ValueError('Unsupported source parameters')
+            if path=='/listings/batch' and (not re.fullmatch(r'[0-9]+(?:,[0-9]+){0,24}',str(params.get('listing_ids','')))
+                    or params.get('includes') not in ('Images','Images,Shop') or ('Shop' in params['includes'] and 'shop_api' not in self.scopes)):
+                raise ValueError('Unsupported batch parameters')
+        if scope=='listing_api' and re.fullmatch(r'/listings/[0-9]+(?:/images)?',path):
+            identity = path.split('/')[2]
+            if identity in self.prefetched:
+                item = self.prefetched[identity]
+                if not path.endswith('/images') or 'images' in item:
+                    self.cache_hits += 1
+                    return {'results':item['images']} if path.endswith('/images') else item
+        if scope=='shop_api' and re.fullmatch(r'/shops/[0-9]+',path):
+            item = cache.cached('shop:'+path.split('/')[2])
+            if item:
+                self.cache_hits += 1
+                return item
         headers = {'User-Agent': 'EtGen/1.0 (permitted product research)', 'Accept': 'text/html' if page else 'application/json'}
         if not page:
             from adapters.research.etsy_open_api import _api_key_header
@@ -92,7 +164,7 @@ class Client:
             if not key:
                 raise SourceUnavailable('credential_unavailable')
             headers['x-api-key'] = key
-        identity = budget.claim(self.con, {}, self.batch_id, 15)
+        identity = budget.claim(self.con, {}, self.batch_id, self.batch_limit)
         self.requests += 1
         quota = budget.latest_quota(self.con)
         # One request/second at most, and slower if provider reports a lower QPS.
@@ -114,7 +186,7 @@ class Client:
                     retry = response.headers.get('retry-after', '')
                     quota['retry_after_until'] = time.time() + (max(3600, min(int(retry), 86400)) if retry.isdigit() else 3600)
                 if response.status_code != 200:
-                    raise SourceUnavailable('access_denied' if response.status_code in (401, 403) else 'rate_limited' if response.status_code == 429 else 'source_unavailable')
+                    raise SourceUnavailable('access_denied' if response.status_code in (401, 403) else 'rate_limited' if response.status_code == 429 else 'source_unavailable',response.status_code)
                 for chunk in response.iter_bytes():
                     body += chunk
                     if len(body) > 3_000_000:
@@ -128,11 +200,18 @@ class Client:
                         raise SourceUnavailable('access_challenge')
                     return text
                 payload = json.loads(body)
+                if not isinstance(payload,dict):
+                    raise SourceUnavailable('unsupported_response')
+                if scope=='shop_api' and re.fullmatch(r'/shops/[0-9]+',path):
+                    if payload.get('shop_id') is not None and str(payload['shop_id'])!=path.split('/')[2]:
+                        raise SourceUnavailable('shop_identity_mismatch')
+                    cache.save('shop:'+path.split('/')[2],cache.public_shop(payload))
                 # Retain only public listing feature fields for the existing
                 # read-only history bridge. Reviews, images, shops, HTML and
                 # authentication headers never enter this saved response.
                 if (scope == 'listing_api' and re.fullmatch(r'/listings/[0-9]+', path)
                         and isinstance(payload, dict) and str(payload.get('listing_id')) == path.split('/')[2]):
+                    cache.save('listing:'+str(payload['listing_id']),cache.public_listing(payload),hours=1)
                     fields = ('listing_id', 'title', 'shop_id', 'taxonomy_id', 'listing_type',
                               'original_creation_timestamp', 'views', 'num_favorers', 'quantity')
                     public = {k: payload[k] for k in fields if k in payload and isinstance(payload[k], (str, int, float, type(None)))}
@@ -140,6 +219,19 @@ class Client:
                         public['price'] = {k: v for k, v in payload['price'].items()
                             if k in ('amount', 'divisor', 'currency_code') and isinstance(v, (str, int, float, type(None)))}
                     saved_listing = gzip.compress(json.dumps(public, allow_nan=False).encode())
+                if scope=='listing_api' and path=='/listings/batch':
+                    values=payload.get('results')
+                    wanted=set(str(params['listing_ids']).split(','))
+                    if isinstance(values,list) and len(values)<=len(wanted) and all(isinstance(v,dict) and str(v.get('listing_id')) in wanted for v in values):
+                        fields=('listing_id','title','shop_id','taxonomy_id','listing_type','original_creation_timestamp',
+                                'views','num_favorers','quantity')
+                        clean=[]
+                        for value in values:
+                            public={k:value[k] for k in fields if k in value and isinstance(value[k],(str,int,float,type(None)))}
+                            if isinstance(value.get('price'),dict):
+                                public['price']={k:v for k,v in value['price'].items() if k in ('amount','divisor','currency_code') and isinstance(v,(str,int,float,type(None)))}
+                            clean.append(public)
+                        saved_listing=gzip.compress(json.dumps({'results':clean},allow_nan=False).encode())
                 return payload
         finally:
             quota['captured_at'] = discovery.now().isoformat()
@@ -156,9 +248,12 @@ def collect(client, row, retain_estimator=False):
     review_window = None
     shop_id = ''
     at = discovery.now()
+    metadata_at, attributes = at.isoformat(), {}
     ref = f'https://www.etsy.com/listing/{identity}'
     if 'listing_api' in client.scopes:
         data = client.get(f'/listings/{identity}', 'listing_api')
+        metadata_at = data.get('_captured_at') or at.isoformat()
+        attributes = {k:data[k] for k in ('state','materials','is_personalizable','description','updated_timestamp') if k in data}
         if str(data.get('listing_id')) != identity:
             raise SourceUnavailable('listing_identity_mismatch')
         shop_id = str(data.get('shop_id') or '')
@@ -173,11 +268,11 @@ def collect(client, row, retain_estimator=False):
         for key, metric in [('num_favorers', 'favorites'), ('views', 'views'), ('quantity', 'stock')]:
             if data.get(key) is not None:
                 observations.append(Observation(listing_id=identity, metric=metric, value=data[key],
-                    basis='point_in_time' if metric == 'stock' else 'lifetime', observed_at=at, source='etsy_public', source_ref=ref))
+                    basis='point_in_time' if metric == 'stock' else 'lifetime', observed_at=metadata_at, source='etsy_public', source_ref=ref))
         price = data.get('price')
         if isinstance(price, dict) and price.get('divisor', 0) > 0:
             observations.append(Observation(listing_id=identity, metric='price', value=price['amount'] / price['divisor'],
-                currency=price['currency_code'], observed_at=at, source='etsy_public', source_ref=ref))
+                currency=price['currency_code'], observed_at=metadata_at, source='etsy_public', source_ref=ref))
         if 'shop_api' in client.scopes and str(data.get('shop_id', '')).isdecimal():
             shop = client.get('/shops/' + str(data['shop_id']), 'shop_api')
             listing['shop'] = shop.get('shop_name') or listing['shop']
@@ -186,23 +281,33 @@ def collect(client, row, retain_estimator=False):
             for key, metric in [('transaction_sold_count', 'shop_sales')]:
                 if shop.get(key) is not None:
                     observations.append(Observation(listing_id=identity, metric=metric, value=shop[key], basis='lifetime',
-                        observed_at=at, source='etsy_public', source_ref='https://www.etsy.com/shop/' + listing['shop'],
+                        observed_at=shop.get('_captured_at') or at, source='etsy_public', source_ref='https://www.etsy.com/shop/' + listing['shop'],
                         note='Shop-wide counter. Never allocate this total as listing orders.'))
     if 'listing_reviews' in client.scopes:
         start = at - timedelta(days=30)
         review_path = f'/listings/{identity}/reviews'
         review_params = {'limit': 100, 'min_created': int(start.timestamp()), 'max_created': int(at.timestamp())}
-        data = client.get(review_path, 'listing_reviews', review_params)
+        review_job = None
+        optimized = getattr(client,'optimized',False)
+        if optimized:
+            # One dated shop window supplies every exact listing ID in it.
+            review_path = f'/shops/{shop_id}/reviews' if shop_id.isdecimal() and 'shop_api' in client.scopes else review_path
+            review_job = cache.reviews(client,review_path,at)
+            start = datetime.fromtimestamp(review_job['start'],timezone.utc)
+            at = datetime.fromtimestamp(review_job['end'],timezone.utc)
+            data = {'results':review_job['rows'],'count':len(review_job['rows'])}
+        else:
+            data = client.get(review_path, 'listing_reviews', review_params)
         # Etsy can return an empty listing review set despite shop reviews.
         # The documented shop-review endpoint retains each review's listing ID.
         # Match that identity, never assign unrelated shop reviews to a product.
-        shop_fallback = False
-        if data.get('results') == [] and shop_id.isdecimal() and 'shop_api' in client.scopes:
+        shop_fallback = optimized and review_path.startswith('/shops/')
+        if not optimized and data.get('results') == [] and shop_id.isdecimal() and 'shop_api' in client.scopes:
             review_path = f'/shops/{shop_id}/reviews'
             data = client.get(review_path, 'listing_reviews', review_params)
             shop_fallback = True
         results = data.get('results')
-        if not isinstance(results, list) or len(results) > 100:
+        if not isinstance(results, list) or len(results) > (cache.MAX_REVIEW_ROWS if optimized else 100):
             raise SourceUnavailable('unsupported_review_response')
         times, event_ids, malformed = [], set(), False
         for review in results:
@@ -243,7 +348,9 @@ def collect(client, row, retain_estimator=False):
             times.append(when.isoformat())
             # Retain no buyer identities. Review IDs derive from public content/time.
             text = review.get('review') or ''
-            if len(text.strip()) < 3:
+            # The research packet is deliberately small; the resumable job and
+            # estimator retain every validated numeric review event separately.
+            if len(text.strip()) < 3 or len(reviews)>=50:
                 continue
             reviews.append(Review(review_id=digest([identity, timestamp, review['rating'], text])[:40],
                 listing_id=identity, reviewed_on=when.date(),
@@ -251,12 +358,15 @@ def collect(client, row, retain_estimator=False):
         reported = data.get('count')
         complete = (not malformed and isinstance(reported, int) and not isinstance(reported, bool)
                     and reported == len(results) and len(results) < 100)
+        if review_job:
+            complete = not malformed and review_job['status']=='complete'
         review_window = {'start': start.isoformat(), 'end': at.isoformat(), 'review_times': sorted(times),
                          'observed_reviews': len(times), 'reported_count': reported if isinstance(reported, int) and not isinstance(reported, bool) and reported >= 0 else None,
                          'complete': complete, 'limit': 100,
                          'source_ref': 'https://api.etsy.com/v3/application' + review_path,
                          'response_scope': 'shop_reviews_matched_by_listing_id' if shop_fallback else 'listing_reviews',
-                         'completeness_basis': 'bounded_response_count_matches_rows' if complete else 'truncated_or_unverified_response'}
+                         'completeness_basis': review_job['reason'] if review_job else 'bounded_response_count_matches_rows' if complete else 'truncated_or_unverified_response',
+                         **({'pages':review_job['pages'],'pending':review_job['status']=='pending'} if review_job else {})}
     page_status = 'api_updated'
     if 'listing_pages' in client.scopes:
         message = purchase_message(client.get(f'/listings/{identity}', 'listing_pages'), identity)
@@ -269,7 +379,7 @@ def collect(client, row, retain_estimator=False):
     packet = Packet(listings=[Listing.model_validate(listing)], observations=observations, reviews=reviews).model_dump(mode='json')
     if retain_estimator:
         from services.sales_intelligence import estimator
-        estimator.record_capture(packet, discovery.now(), review_window)
+        estimator.record_capture(packet, discovery.now(), review_window, metadata_at=metadata_at, attributes=attributes)
         if review_window and review_window['complete'] and shop_fallback:
             estimator.follow_reviewed_products(results, start, at, shop_id, identity, listing)
     return packet, page_status
@@ -294,7 +404,10 @@ def refresh_sources(run_id):
             client = Client(native, 'selling-discovery-' + str(run_id), access['scopes'])
             try:
                 from services.sales_intelligence import estimator
-                rows = estimator.due_rows(target, discovery.now().isoformat())
+                estimator.expand_panel(target)
+                rows = estimator.due_rows(target, discovery.now().isoformat(),limit=20)
+                client.prefetch(rows)
+                captures = 0
                 for row in rows:
                     status = 'source_unavailable'
                     try:
@@ -307,11 +420,12 @@ def refresh_sources(run_id):
                         listing = packet['listings'][0]
                         seed = row['keyword'] or next((t for t in listing['tags'] if len(t)>=3), listing['title'])[:160]
                         discovery._upsert(target, packet, seed, discovery.now().isoformat())
+                        captures += 1
                     except budget.CollectionDeferred:
                         return {'status': 'budget_deferred', 'requests': client.requests}
                     except (SourceUnavailable, httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
                         status = str(exc) if isinstance(exc, SourceUnavailable) else 'unsupported_response'
-                    delay = 6 if status in ('api_updated', 'purchase_message_observed', 'purchase_message_unavailable') else 24
+                    delay = estimator.check_delay(row['listing_id'],status)
                     next_check = (discovery.now()+timedelta(hours=delay)).isoformat()
                     target.execute('UPDATE candidates SET checked_at=?,check_status=?,next_check=? WHERE listing_id=?',
                         (discovery.now().isoformat(), status, next_check, row['listing_id']))
@@ -319,6 +433,13 @@ def refresh_sources(run_id):
                     estimator.record_check(row['listing_id'], status, next_check)
                     if status in ('access_denied', 'rate_limited', 'access_challenge', 'authorization_unverified'):
                         break
-                return {'status': 'completed', 'requests': client.requests}
+                result = {'status': 'completed', 'requests': client.requests,'products_checked':captures,'cache_hits':client.cache_hits,
+                          'allocation':budget.allocation(native,client.batch_id)}
+                cache.control('last_pass',value={**result,'at':discovery.now().isoformat()})
+                return result
+            except budget.CollectionDeferred:
+                return {'status':'budget_deferred','requests':client.requests}
+            except (SourceUnavailable, httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                return {'status':str(exc) if isinstance(exc,SourceUnavailable) else 'unsupported_response','requests':client.requests}
             finally:
                 client.close()
