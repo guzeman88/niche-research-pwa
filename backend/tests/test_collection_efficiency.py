@@ -63,6 +63,10 @@ def test_batch_and_shop_window_supply_three_products_in_two_calls(isolated):
         assert again.requests==0 and len(calls)==2
         again.close()
     assert all(estimator.calculate(str(i))['value']==10 for i in (101,102,103))
+    estimator.refresh()
+    assert 'review_times' not in estimator.overview()['items'][0]['review_evidence']
+    with store.database() as con:
+        assert 'review_times' in con.execute('SELECT payload FROM estimator_latest LIMIT 1').fetchone()[0]
     with cache.database() as con:
         serialized=''.join(r[0] for r in con.execute('SELECT payload FROM cache UNION ALL SELECT payload FROM review_jobs'))
         assert 'private-buyer' not in serialized and 'private-seller' not in serialized and 'fixture-key-never-persist' not in serialized

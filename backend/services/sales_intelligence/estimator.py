@@ -379,6 +379,10 @@ def overview():
     items = []
     for row in rows:
         item = json.loads(row['payload']) if row['payload'] else {'listing_id': row['listing_id'], 'status': 'awaiting_api_evidence', 'value': None}
+        # A complete busy-shop window can contain thousands of dated events.
+        # Keep the history intact while the polling list returns its summary.
+        if item.get('review_evidence'):
+            item['review_evidence']={k:v for k,v in item['review_evidence'].items() if k!='review_times'}
         if item.get('captured_at') and store.now() - store.stamp(item['captured_at']) > timedelta(days=7):
             item.update(value=None, status='stale_evidence', windows={}, review_scenarios={})
         items.append({**item, 'collection': source.get(row['listing_id']) or checks[row['listing_id']], 'pinned': bool(row['pinned'])})
