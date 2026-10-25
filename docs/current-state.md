@@ -1,3 +1,13 @@
+# October 25, 2026 collection efficiency successor
+
+The user's free-only maximization request adds batch listing details, cached
+shops, exact-ID shop review reuse, resumable paginated date windows, shared quota
+guarantees and a rotating panel. Existing keyword data, source gates, daily
+reserve, native worker ownership and unknown/unvalidated sales semantics remain.
+See [collection efficiency](collection-efficiency.md). Source alone does not
+confirm installation; the desktop CURRENT_STATE records matched app/native
+revisions, backups and dated live proof.
+
 # October 24, 2026 automatic estimator connection
 
 The source now connects scheduled permitted Etsy evidence to the existing v1

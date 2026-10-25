@@ -23,6 +23,28 @@ def latest_quota(con):
     return json.loads(row[0]) if row else {}
 
 
+def allocation(con, batch_id, daily_limit=4000, at=None, quota=None):
+    """Reserve both research lanes a turn; the remaining 12.5% is shared.
+
+    Counts include failed/uncertain attempts. Existing rows need no migration:
+    selling-discovery batches are product research; other batches are keywords.
+    """
+    at = at or datetime.now(timezone.utc)
+    quota = quota or latest_quota(con)
+    ceiling = min(daily_limit, int(quota['limit_per_day'] * .8)) if quota.get('limit_per_day') else daily_limit
+    rows = con.execute('SELECT batch_id,count(*) FROM feed_etsy_requests WHERE attempted_at>=? GROUP BY batch_id',
+                       ((at-timedelta(hours=24)).isoformat(),)).fetchall()
+    used = {'products': 0, 'keywords': 0}
+    for identity, count in rows:
+        used['products' if identity.startswith('selling-discovery-') else 'keywords'] += count
+    lane = 'products' if batch_id.startswith('selling-discovery-') else 'keywords'
+    guaranteed = {'products': int(ceiling * .5), 'keywords': int(ceiling * .375)}
+    other = 'keywords' if lane == 'products' else 'products'
+    remaining = max(0, ceiling-sum(used.values())-max(0, guaranteed[other]-used[other]))
+    return {'lane': lane, 'ceiling': ceiling, 'used': used, 'guaranteed': guaranteed,
+            'shared': ceiling-sum(guaranteed.values()), 'remaining': remaining}
+
+
 def claim(con, quota, batch_id, batch_limit, daily_limit=4000, at=None):
     at = at or datetime.now(timezone.utc)
     con.execute('BEGIN IMMEDIATE')
@@ -43,6 +65,8 @@ def claim(con, quota, batch_id, batch_limit, daily_limit=4000, at=None):
     batch_used = con.execute('SELECT count(*) FROM feed_etsy_requests WHERE batch_id=?', (batch_id,)).fetchone()[0]
     if used >= ceiling or batch_used >= batch_limit:
         raise CollectionDeferred('Native request budget')
+    if not allocation(con, batch_id, daily_limit, at, {**stored, **quota})['remaining']:
+        raise CollectionDeferred('Research lane reserve')
     recent = con.execute('SELECT status FROM feed_etsy_requests WHERE batch_id=? ORDER BY id DESC LIMIT 5', (batch_id,)).fetchall()
     if len(recent) == 5 and all(r[0] not in {'200', '201'} for r in recent):
         raise CollectionDeferred('Repeated request failures')
