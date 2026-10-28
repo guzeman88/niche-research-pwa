@@ -77,7 +77,9 @@ def track(listing_id):
 def due_rows(target, at, limit=3):
     with store.database() as con:
         paused = store.get_control(con, 'paused', False)
-    panel = [] if paused else ensure_panel(target)
+    if paused or limit <= 0:
+        return []
+    panel = ensure_panel(target)
     ids = [r['listing_id'] for r in panel]
     # Preserve user-authored opportunity priority, but reserve panel turns.
     chosen = target.execute('SELECT * FROM candidates INDEXED BY candidates_watchlist WHERE opportunity_id IS NOT NULL AND next_check<=? ORDER BY next_check,listing_id LIMIT 1', (at,)).fetchall()
@@ -110,7 +112,19 @@ def due_rows(target, at, limit=3):
               WHERE json_extract(e.payload,'$.review_window.complete')=1 AND json_extract(e.payload,'$.review_window.observed_reviews')>0
               AND e.captured_at>=?''', ((store.now()-timedelta(days=7)).isoformat(),))}
         candidates = sorted(candidates, key=lambda r: (r['next_check'], r['listing_id'] not in positive, r['listing_id']))
-        chosen += [r for r in candidates if r['listing_id'] not in {c['listing_id'] for c in chosen}][:limit-len(chosen)]
+        candidates = [r for r in candidates if r['listing_id'] not in {c['listing_id'] for c in chosen}]
+        slots = max(0, limit - len(chosen))
+        # Reserve at least half the remaining turns for the oldest due products.
+        # Adaptive uncertainty turns cannot starve quiet or unpinned products.
+        fair_slots = min(slots, (slots + 1) // 2)
+        fair = candidates[:fair_slots]
+        from . import anchored
+        priorities = anchored.priorities()
+        pinned = {r['listing_id'] for r in panel if r['pinned']}
+        remaining = sorted(candidates[fair_slots:], key=lambda r: (
+            -priorities.get(r['listing_id'], {}).get('score', 0), r['listing_id'] not in pinned,
+            r['next_check'], r['listing_id'])) if priorities else candidates[fair_slots:]
+        chosen += fair + remaining[:slots-fair_slots]
     return chosen
 
 
@@ -196,7 +210,9 @@ def check_delay(listing_id, status):
     window = value.get('review_window') or {}
     if window.get('pending'):
         return .25
-    return 6 if window.get('observed_reviews',0)>0 else 24
+    from . import anchored
+    priority = anchored.priorities().get(listing_id, {})
+    return 6 if window.get('observed_reviews',0)>0 or priority.get('score',0)>=.5 else 24
 
 
 def record_check(listing_id, status, next_check):
@@ -234,6 +250,13 @@ def follow_reviewed_products(results, start, end, shop_id, primary_id, parent_li
         seen.add(key)
         groups.setdefault(identity, []).append(when.isoformat())
     followed, newly_added = [], 0
+    # Public pilot catalog members get complete exact-ID review windows even
+    # when the tracking panel is full. Zero matched reviews is coverage, never
+    # a zero-sales label. This does not evict authored tracking pins.
+    from services import selling_collection as cache
+    catalog_members = set((cache.control('anchored_catalog:'+str(shop_id)) or {}).get('listing_ids', []))
+    for identity in catalog_members:
+        groups.setdefault(identity, [])
     with closing(discovery.connect()) as target:
         ensure_panel(target)
         for identity, times in sorted(groups.items(), key=lambda x: (-len(x[1]), x[0])):
@@ -242,12 +265,15 @@ def follow_reviewed_products(results, start, end, shop_id, primary_id, parent_li
             row = target.execute('SELECT packet,observed_at FROM candidates WHERE listing_id=?', (identity,)).fetchone()
             with store.database(True) as con:
                 known = con.execute('SELECT 1 FROM estimator_tracking WHERE listing_id=?', (identity,)).fetchone()
-                if not known and newly_added>=20:
+                catalog_member = identity in catalog_members
+                if not known and newly_added>=20 and not catalog_member:
                     continue
-                if not known and con.execute('SELECT count(*) FROM estimator_tracking').fetchone()[0]>=MAX_TRACKED:
+                full = con.execute('SELECT count(*) FROM estimator_tracking').fetchone()[0]>=MAX_TRACKED
+                if not known and full and not catalog_member:
                     continue
-                con.execute('INSERT OR IGNORE INTO estimator_tracking VALUES(?,?,0)', (identity,store.now().isoformat()))
-                newly_added += int(not bool(known))
+                if known or (not full and newly_added<20):
+                    con.execute('INSERT OR IGNORE INTO estimator_tracking VALUES(?,?,0)', (identity,store.now().isoformat()))
+                    newly_added += int(not bool(known))
                 prior = con.execute('SELECT payload FROM estimator_evidence WHERE listing_id=? ORDER BY captured_at DESC LIMIT 1',(identity,)).fetchone()
                 attributes = json.loads(prior[0]).get('attributes') if prior else None
             listing = dict(json.loads(row[0])['listings'][0]) if row else {'listing_id':identity,'title':''}
@@ -365,6 +391,10 @@ def refresh():
         summary = {'at': store.now().isoformat(), 'tracked': len(panel), 'estimated': sum(r['value'] is not None for r in results),
                    'statuses': dict(Counter(r['status'] for r in results)), 'owner': 'etgen_backend'}
         store.set_control(con, 'estimator', summary)
+    # Separate experimental lane: preserve the original value/status and source
+    # assumptions while rebuilding constrained shop-counter allocations locally.
+    from . import anchored
+    summary['shop_allocation'] = anchored.rebuild()
     return summary
 
 
@@ -376,6 +406,9 @@ def overview():
     from services import selling_discovery as discovery
     with closing(discovery.connect()) as target:
         source = {row['listing_id']: dict(row) for r in rows for row in target.execute('SELECT listing_id,title,shop,checked_at,check_status,next_check FROM candidates WHERE listing_id=?', (r['listing_id'],))}
+    from . import anchored
+    shop_report = anchored.overview()
+    allocations = {r['listing_id']: r for r in shop_report['items']}
     items = []
     for row in rows:
         item = json.loads(row['payload']) if row['payload'] else {'listing_id': row['listing_id'], 'status': 'awaiting_api_evidence', 'value': None}
@@ -385,8 +418,10 @@ def overview():
             item['review_evidence']={k:v for k,v in item['review_evidence'].items() if k!='review_times'}
         if item.get('captured_at') and store.now() - store.stamp(item['captured_at']) > timedelta(days=7):
             item.update(value=None, status='stale_evidence', windows={}, review_scenarios={})
-        items.append({**item, 'collection': source.get(row['listing_id']) or checks[row['listing_id']], 'pinned': bool(row['pinned'])})
+        items.append({**item, 'collection': source.get(row['listing_id']) or checks[row['listing_id']], 'pinned': bool(row['pinned']),
+                      'shop_allocation': allocations.get(row['listing_id'])})
     summary.update(tracked=len(items), estimated=sum(r['value'] is not None for r in items))
     from services import selling_collection as cache
     return {'items': items, 'summary': summary, 'assumptions': ASSUMPTION, 'panel_limit': MAX_TRACKED,'collection_metrics':cache.metrics(),
+            'shop_allocation_summary': shop_report['summary'],
             'schedule': 'Backend tracking: normal 15-minute source gate, up to 20 direct products and 40 counted requests per pass. Batched details and cached shop review windows share a 4,000-call rolling daily ceiling with keyword research. Active review products are eligible after six hours, quiet products after 24 hours, partial review jobs after 15 minutes, and inactive products after seven days. The rotating panel targets 200 products, with up to 600 including user pins and review-led discoveries.'}

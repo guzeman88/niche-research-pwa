@@ -93,7 +93,7 @@ def test_capture_idempotence_and_asof_no_future_evidence(isolated, monkeypatch):
     with store.database() as con:
         raw = json.loads(con.execute('SELECT payload FROM estimator_evidence').fetchone()[0])
     packet = {'listings': [raw['listing']], 'observations': raw['observations']}
-    estimator.record_capture(packet, at, raw['review_window'])
+    estimator.record_capture(packet, at, raw['review_window'], attributes=raw.get('attributes'))
     with store.database() as con:
         assert con.execute('SELECT count(*) FROM estimator_evidence').fetchone()[0] == before
 

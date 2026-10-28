@@ -132,16 +132,21 @@ class Client:
         # Recheck the protected proof before each request, including expiry.
         if scope not in discovery.approval()['scopes'] or scope not in self.scopes:
             raise SourceUnavailable('authorization_unverified')
-        if not re.fullmatch(r'/listings/(?:batch|[0-9]+(?:/reviews|/images)?)|/shops/[0-9]+(?:/reviews)?', path):
+        if not re.fullmatch(r'/listings/(?:batch|[0-9]+(?:/reviews|/images)?)|/shops/[0-9]+(?:/reviews|/listings/active)?', path):
             raise ValueError('Unsupported source path')
+        if path.endswith('/listings/active') and (scope != 'listing_api' or 'shop_api' not in self.scopes):
+            raise ValueError('Public shop catalogs require listing and shop API approval')
         page = scope == 'listing_pages'
         if page and not re.fullmatch(r'/listings/[0-9]+', path):
             raise ValueError('Unsupported page path')
         if params:
-            allowed = ({'limit','offset','min_created','max_created'} if scope=='listing_reviews' else
+            allowed = ({'limit','offset'} if path.endswith('/listings/active') else
+                       {'limit','offset','min_created','max_created'} if scope=='listing_reviews' else
                        {'listing_ids','includes'} if scope=='listing_api' and path=='/listings/batch' else set())
             if set(params)-allowed:
                 raise ValueError('Unsupported source parameters')
+            if path.endswith('/listings/active') and params != {'limit':100,'offset':0}:
+                raise ValueError('Only one bounded public catalog page is supported')
             if path=='/listings/batch' and (not re.fullmatch(r'[0-9]+(?:,[0-9]+){0,24}',str(params.get('listing_ids','')))
                     or params.get('includes') not in ('Images','Images,Shop') or ('Shop' in params['includes'] and 'shop_api' not in self.scopes)):
                 raise ValueError('Unsupported batch parameters')
@@ -257,6 +262,8 @@ def collect(client, row, retain_estimator=False):
         if str(data.get('listing_id')) != identity:
             raise SourceUnavailable('listing_identity_mismatch')
         shop_id = str(data.get('shop_id') or '')
+        if shop_id.isdecimal():
+            attributes['shop_id'] = shop_id
         listing.update(title=data['title'], tags=data.get('tags') or [], source='etsy_public', source_ref=ref)
         listing.update(category=str(data.get('taxonomy_id') or ''),
                        product_type={'physical': 'physical', 'download': 'digital'}.get(data.get('listing_type'), 'unknown'))
@@ -276,13 +283,19 @@ def collect(client, row, retain_estimator=False):
         if 'shop_api' in client.scopes and str(data.get('shop_id', '')).isdecimal():
             shop = client.get('/shops/' + str(data['shop_id']), 'shop_api')
             listing['shop'] = shop.get('shop_name') or listing['shop']
+            if isinstance(shop.get('listing_active_count'),int) and not isinstance(shop['listing_active_count'],bool):
+                attributes['shop_active_count'] = shop['listing_active_count']
             # Shop review_count can cover the past year. Do not mislabel it as
             # lifetime reviews or use a mismatched review/sales conversion ratio.
             for key, metric in [('transaction_sold_count', 'shop_sales')]:
                 if shop.get(key) is not None:
                     observations.append(Observation(listing_id=identity, metric=metric, value=shop[key], basis='lifetime',
                         observed_at=shop.get('_captured_at') or at, source='etsy_public', source_ref='https://www.etsy.com/shop/' + listing['shop'],
-                        note='Shop-wide counter. Never allocate this total as listing orders.'))
+                        note='Shop-wide counter; counter units are not verified listing purchases.'))
+            if retain_estimator and getattr(client,'optimized',False):
+                catalog = cache.anchored_catalog(client,shop_id,shop)
+                if catalog:
+                    capture_catalog(catalog, listing['shop'])
     if 'listing_reviews' in client.scopes:
         start = at - timedelta(days=30)
         review_path = f'/listings/{identity}/reviews'
@@ -383,6 +396,32 @@ def collect(client, row, retain_estimator=False):
         if review_window and review_window['complete'] and shop_fallback:
             estimator.follow_reviewed_products(results, start, at, shop_id, identity, listing)
     return packet, page_status
+
+
+def capture_catalog(catalog, shop_name):
+    """Keep inactive/removed historical captures; append current numeric metadata.
+
+    Catalog membership does not consume or replace the user's tracking pins.
+    Reviews still come from complete exact-ID shop responses on the normal path.
+    """
+    from services.sales_intelligence import estimator
+    at = catalog['captured_at']
+    for data in catalog['products']:
+        identity = str(data['listing_id'])
+        listing = Listing(listing_id=identity,title=data['title'],shop=shop_name,
+                          source='etsy_public',source_ref='https://www.etsy.com/listing/'+identity,
+                          category=str(data.get('taxonomy_id') or ''),
+                          product_type={'physical':'physical','download':'digital'}.get(data.get('listing_type'),'unknown'))
+        observations = []
+        for field, metric in [('views','views'),('num_favorers','favorites'),('quantity','stock')]:
+            value = data.get(field)
+            if isinstance(value,(int,float)) and not isinstance(value,bool) and value >= 0:
+                observations.append(Observation(listing_id=identity,metric=metric,value=value,
+                    basis='point_in_time' if metric=='stock' else 'lifetime',observed_at=at,
+                    source='etsy_public',source_ref=listing.source_ref))
+        packet=Packet(listings=[listing],observations=observations).model_dump(mode='json')
+        estimator.record_capture(packet,at,metadata_at=at,attributes={'shop_id':catalog['shop_id'],
+            'state':'active','catalog_seen':True,'shop_active_count':catalog['active_count']})
 
 
 def refresh_sources(run_id):

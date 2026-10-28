@@ -1,3 +1,14 @@
+# October 27, 2026 shop-counter anchored allocation
+
+The private estimate workspace now includes an experimental joint allocation lane
+anchored to actual observed shop-counter intervals, with delayed-review scenarios,
+an unobserved-product bucket, frozen estimates and guarded independent-outcome
+evaluation. A bounded twenty-small-shop public catalog pilot reuses the normal
+backend collection pass and quota. See [method and operations](shop-anchored-estimates.md).
+This is unvalidated counter allocation, not verified product purchases or ±5%
+sales accuracy. Existing review scenarios remain separate. The desktop canonical
+handoff records installation and live verification; source alone is not rollout.
+
 # October 25, 2026 collection efficiency successor
 
 The user's free-only maximization request adds batch listing details, cached

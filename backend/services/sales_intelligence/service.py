@@ -73,7 +73,9 @@ def comparison(listing_id, as_of=None):
         feature = features.snapshot(con, listing_id, at)
         rows = con.execute('SELECT id,payload FROM observations WHERE listing_id=? AND available_at<=? ORDER BY available_at DESC LIMIT 200', (listing_id, at)).fetchall()
         history = [{'id': r['id'], **json.loads(r['payload'])} for r in rows]
+    from . import anchored
     return {'listing_id': listing_id, 'metadata': feature['metadata'] if feature else None, 'automatic_estimate': estimator.calculate(listing_id, at),
+            'shop_allocation': anchored.listing(listing_id, at),
             'consensus': report, 'student': training.prediction(listing_id, as_of=at), 'history': history,
             'outcome_model': training.prediction(listing_id, as_of=at, lane='actual_outcome'),
             'independent_model': independent(listing_id, at),

@@ -80,7 +80,56 @@ def public_listing(raw):
 
 
 def public_shop(raw):
-    return {k:raw[k] for k in ('shop_id','shop_name','transaction_sold_count') if k in raw}
+    return {k:raw[k] for k in ('shop_id','shop_name','transaction_sold_count','listing_active_count') if k in raw}
+
+
+def anchored_catalog(client, shop_id, shop):
+    """One small public catalog per normal pass; never request private states.
+
+    An active catalog is only a point-in-time supply snapshot. Even a complete
+    response cannot establish that every historical/custom product is observed.
+    All calls use Client.get's existing approval, lease and shared quota ledger.
+    """
+    if not str(shop_id).isdecimal() or not {'listing_api','shop_api'} <= set(client.scopes):
+        return None
+    count = shop.get('listing_active_count')
+    if isinstance(count,bool) or not isinstance(count,int) or not 1 <= count <= 30:
+        return None
+    key = 'anchored_catalog:' + str(shop_id)
+    previous = control(key)
+    if previous and discovery.now() - discovery._time(previous['captured_at']) < timedelta(hours=24):
+        return previous
+    if getattr(client,'anchored_catalog_attempted',False):
+        return previous
+    pilot = control('anchored_pilot', {'shop_ids':[]})
+    if shop_id not in pilot['shop_ids'] and len(pilot['shop_ids']) >= 20:
+        return None
+    # Reserve the turn before dispatch, including a failed response. No retry
+    # loop can consume the rest of the normal forty-request allowance.
+    client.anchored_catalog_attempted = True
+    data = client.get('/shops/'+str(shop_id)+'/listings/active','listing_api',{'limit':100,'offset':0})
+    rows, reported = data.get('results'), data.get('count')
+    if (not isinstance(rows,list) or isinstance(reported,bool) or not isinstance(reported,int)
+            or not 0 <= reported <= 30 or len(rows) != reported):
+        return None
+    seen = set()
+    for row in rows:
+        identity = str(row.get('listing_id','')) if isinstance(row,dict) else ''
+        if (not identity.isdecimal() or identity in seen or str(row.get('shop_id')) != str(shop_id)
+                or row.get('state','active') != 'active' or not isinstance(row.get('title'),str)):
+            return None
+        seen.add(identity)
+    at = discovery.now().isoformat()
+    known = set((previous or {}).get('known_listing_ids',(previous or {}).get('listing_ids',[]))) | seen
+    result = {'shop_id':str(shop_id),'captured_at':at,'listing_ids':sorted(seen),'known_listing_ids':sorted(known),
+              'active_count':reported,'public_complete':True,'complete_catalog':False,
+              'products':[public_listing(row) for row in rows],
+              'scope':'public_active_catalog_at_capture_not_historical_or_private'}
+    control(key,value=result)
+    if str(shop_id) not in pilot['shop_ids']:
+        pilot['shop_ids'].append(str(shop_id))
+        control('anchored_pilot',value=pilot)
+    return result
 
 
 def _persist(job):
