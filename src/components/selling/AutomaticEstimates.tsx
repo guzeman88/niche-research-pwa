@@ -2,11 +2,13 @@ import {useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import {intelligenceRequest as request, type AutomaticEstimate} from '../../lib/salesIntelligence'
 import {number, text} from '../../lib/sellingProducts'
+import ShopAllocations from './ShopAllocations'
 
 interface Result {items: AutomaticEstimate[]; summary: {tracked?: number; estimated?: number; at?: string}; assumptions: string; schedule: string; panel_limit: number}
 const date = (value?: string) => value ? new Date(value).toLocaleString() : 'Not yet captured'
 
 export default function AutomaticEstimates({onSelect}: {onSelect: (id: string) => void}) {
+  const [method, setMethod] = useState('reviews')
   const [onlyEstimates, setOnlyEstimates] = useState(false)
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState('')
   const query = useQuery({queryKey: ['automatic-sales-estimates'], queryFn: () => request<Result>('/estimates'), retry: false, refetchInterval: 30000})
@@ -20,17 +22,23 @@ export default function AutomaticEstimates({onSelect}: {onSelect: (id: string) =
   return <section aria-label="Automatic EtGen estimates">
     <h3 className="text-base font-semibold">Our automatic sales estimates</h3>
     <p className="mt-2 max-w-3xl text-sm leading-relaxed text-surface-200">EtGen tracks a focused panel and runs its own estimator. Provider feeds are optional comparisons. Estimates are unvalidated; review scenarios use review dates, so purchases may have happened earlier.</p>
-    {data && <p className="mt-3 text-sm tabular-nums text-surface-200">{number(data.summary.estimated)} products with estimates · {number(data.summary.tracked)} tracked · calculated {date(data.summary.at)}</p>}
+    <div role="group" aria-label="Estimation method" className="mt-4 flex flex-wrap gap-3">
+      <button className={method === 'reviews' ? 'btn-primary' : 'btn-secondary'} aria-pressed={method === 'reviews'} aria-controls="review-estimates" onClick={() => setMethod('reviews')}>Review scenarios</button>
+      <button className={method === 'shop' ? 'btn-primary' : 'btn-secondary'} aria-pressed={method === 'shop'} aria-controls="shop-allocation-estimates" onClick={() => setMethod('shop')}>Shop-anchored allocations</button>
+    </div>
+    {method === 'reviews' && data && <p className="mt-3 text-sm tabular-nums text-surface-200">{number(data.summary.estimated)} products with estimates · {number(data.summary.tracked)} tracked · calculated {date(data.summary.at)}</p>}
     <div className="my-5 flex flex-wrap items-end gap-4">
       <form className="flex min-w-0 flex-wrap items-end gap-3" onSubmit={event => {event.preventDefault(); const id = String(new FormData(event.currentTarget).get('listing_id') || ''); void action(`/listings/${id}/track`)}}>
         <label className="text-sm">Track a discovered Etsy listing<input className="input mt-2 block w-full" name="listing_id" required inputMode="numeric" pattern="[0-9]{1,30}" /></label>
         <button className="btn-secondary" disabled={busy}>Track product</button>
       </form>
       <button className="btn-secondary" disabled={busy} onClick={() => void action('/estimates/refresh')}>Recalculate estimates</button>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={onlyEstimates} onChange={event => setOnlyEstimates(event.target.checked)} />With estimates only</label>
+      {method === 'reviews' && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={onlyEstimates} onChange={event => setOnlyEstimates(event.target.checked)} />With estimates only</label>}
     </div>
     {message && <p role="status" className="my-4 text-sm text-surface-200">{message}</p>}
     {(error || query.error) && <div role="alert" className="my-4 text-sm text-accent-amber"><p>{error || query.error?.message}</p><button className="btn-secondary mt-3" onClick={() => void query.refetch()}>Retry estimates</button></div>}
+    <div id="shop-allocation-estimates" hidden={method !== 'shop'}>{method === 'shop' && <ShopAllocations onSelect={onSelect} />}</div>
+    <div id="review-estimates" hidden={method !== 'reviews'}>
     {query.isPending && <p role="status" className="py-4 text-sm">Loading our estimates…</p>}
     {data && items.length === 0 && <p className="py-4 text-sm text-surface-200">{onlyEstimates ? 'No tracked product has enough usable evidence yet. Show all products to inspect collection status.' : 'The backend will select a 30-product panel from discovery. You can also track a discovered product above. Collection uses the existing free allowance.'}</p>}
     <ul className="divide-y divide-surface-700">{items.map(item => <li key={item.listing_id} className="py-5">
@@ -46,5 +54,6 @@ export default function AutomaticEstimates({onSelect}: {onSelect: (id: string) =
       <p className="mt-2 text-xs text-surface-300">{item.listing?.shop || item.collection?.shop || 'Shop unknown'} · captured {date(item.captured_at)} · {text(item.collection?.check_status || 'not_checked')}</p>
     </li>)}</ul>
     {data && <details className="mt-5"><summary className="cursor-pointer text-sm font-semibold">How these estimates work</summary><p className="mt-3 max-w-3xl text-sm leading-relaxed text-surface-200">{data.assumptions} A missing review response or no recent reviews does not establish zero purchases. The panel includes popular and quieter products from a bounded saved-catalog sample; its rankings do not represent the whole market.</p><p className="mt-3 max-w-3xl text-sm leading-relaxed text-surface-200">{data.schedule} Up to {data.panel_limit} products can be tracked. Errors, quota limits and pauses can delay refreshes.</p></details>}
+    </div>
   </section>
 }

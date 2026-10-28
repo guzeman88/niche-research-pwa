@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import ValidationError
-from services.sales_intelligence import consensus, estimator, features, ingestion, registry, service, store, training, worker
+from services.sales_intelligence import anchored, consensus, estimator, features, ingestion, registry, service, store, training, worker
 
 router = APIRouter(prefix='/api/sales-intelligence', tags=['private sales intelligence'])
 
@@ -59,6 +59,11 @@ def coverage():
 @router.get('/estimates')
 def estimates():
     return estimator.overview()
+
+
+@router.get('/anchored')
+def anchored_estimates():
+    return anchored.overview()
 
 
 @router.post('/estimates/refresh', status_code=202)
