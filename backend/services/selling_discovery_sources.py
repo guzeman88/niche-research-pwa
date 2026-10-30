@@ -287,6 +287,17 @@ def collect(client, row, retain_estimator=False):
                 attributes['shop_active_count'] = shop['listing_active_count']
             # Shop review_count can cover the past year. Do not mislabel it as
             # lifetime reviews or use a mismatched review/sales conversion ratio.
+            yearly_reviews = shop.get('review_count')
+            if isinstance(yearly_reviews,int) and not isinstance(yearly_reviews,bool) and 0 <= yearly_reviews <= 1_000_000_000:
+                attributes['shop_reviews_past_year'] = yearly_reviews
+                attributes['shop_reviews_basis'] = 'past_year'
+                attributes['shop_reviews_observed_at'] = shop.get('_captured_at') or at.isoformat()
+            shop_created = shop.get('create_date') or shop.get('created_timestamp')
+            if isinstance(shop_created,int) and not isinstance(shop_created,bool) and 0 < shop_created <= 4_102_444_800:
+                attributes['shop_created_at'] = datetime.fromtimestamp(shop_created,timezone.utc).isoformat()
+            shop_average = shop.get('review_average')
+            if isinstance(shop_average,(int,float)) and not isinstance(shop_average,bool) and 0 <= shop_average <= 5:
+                attributes['shop_review_average_past_year'] = shop_average
             for key, metric in [('transaction_sold_count', 'shop_sales')]:
                 if shop.get(key) is not None:
                     observations.append(Observation(listing_id=identity, metric=metric, value=shop[key], basis='lifetime',

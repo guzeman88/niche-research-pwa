@@ -1,3 +1,11 @@
+# October 29, 2026 dated shop-review input retention
+
+Approved collection now retains returned past-year shop review counts, ratings
+and creation timestamps in explicitly dated estimator attributes. No new request,
+source scope, schedule, model activation or lifetime review-rate assumption is
+added. [Input contract](review-rate-inputs.md). The desktop canonical handoff
+records installation and live verification; this source entry alone is not rollout.
+
 # October 27, 2026 shop-counter anchored allocation
 
 The private estimate workspace now includes an experimental joint allocation lane

@@ -39,7 +39,7 @@ def test_batch_and_shop_window_supply_three_products_in_two_calls(isolated):
                 {'listing_id':i,'title':f'Planner {i}','shop_id':7,'state':'active','quantity':5,
                  'listing_type':'download','views':50,'num_favorers':3,'tags':['planner'],
                  'images':[{'url_570xN':'https://i.etsystatic.com/fixture/image.jpg'}],
-                 'shop':{'shop_id':7,'shop_name':'Fixture shop','transaction_sold_count':40,'user_id':'private-seller'}} for i in (101,102,103)]})
+                 'shop':{'shop_id':7,'shop_name':'Fixture shop','transaction_sold_count':40,'review_count':20,'user_id':'private-seller'}} for i in (101,102,103)]})
         assert request.url.path.endswith('/shops/7/reviews')
         return httpx.Response(200,headers={'x-limit-per-day':'5000','x-remaining-today':'4998'},json={'count':3,'results':[review(i,at-timedelta(days=1),i) for i in (101,102,103)]})
     with closing(discovery.connect()) as target,target:
@@ -67,9 +67,37 @@ def test_batch_and_shop_window_supply_three_products_in_two_calls(isolated):
     assert 'review_times' not in estimator.overview()['items'][0]['review_evidence']
     with store.database() as con:
         assert 'review_times' in con.execute('SELECT payload FROM estimator_latest LIMIT 1').fetchone()[0]
+        captures = [json.loads(r[0]) for r in con.execute('SELECT payload FROM estimator_evidence')]
+        dated = [c for c in captures if 'shop_reviews_past_year' in c.get('attributes',{})]
+        assert {c['listing']['listing_id'] for c in dated} == {'101','102','103'}
+        assert all(c['attributes']['shop_reviews_past_year']==20 for c in dated)
+        assert all(c['attributes']['shop_reviews_basis']=='past_year' for c in dated)
+        assert all(c['attributes']['shop_reviews_observed_at'] for c in dated)
+        assert all(not any(o['metric']=='shop_reviews' for o in c['observations']) for c in dated)
     with cache.database() as con:
         serialized=''.join(r[0] for r in con.execute('SELECT payload FROM cache UNION ALL SELECT payload FROM review_jobs'))
         assert 'private-buyer' not in serialized and 'private-seller' not in serialized and 'fixture-key-never-persist' not in serialized
+
+
+@pytest.mark.parametrize('reviews',[None,True,-1,1.5,'12',{'private':'must not persist'}])
+def test_bad_or_missing_shop_review_count_stays_unknown(reviews):
+    value = cache.public_shop({'shop_id':7,'review_count':reviews,'buyer_user_id':'private'})
+    assert value == {'shop_id':7}
+
+
+def test_zero_shop_reviews_is_retained_as_public_counter_not_zero_sales():
+    assert cache.public_shop({'shop_id':7,'review_count':0}) == {'shop_id':7,'review_count':0}
+
+
+def test_public_shop_keeps_dated_numeric_context_without_account_fields():
+    raw = {'shop_id':7,'review_count':20,'review_average':4.8,'create_date':1_234_567_890,
+           'user_id':'private','email':'private','announcement':'private'}
+    assert cache.public_shop(raw) == {'shop_id':7,'review_count':20,'review_average':4.8,'create_date':1_234_567_890}
+
+
+@pytest.mark.parametrize('created,average',[(True,True),(-1,-1),(9_999_999_999,6),('123','4.8'),(None,float('nan'))])
+def test_malformed_shop_context_does_not_become_numeric_evidence(created,average):
+    assert cache.public_shop({'shop_id':7,'create_date':created,'review_average':average}) == {'shop_id':7}
 
 
 def test_pagination_resumes_after_four_pages_without_restarting_window(isolated):
