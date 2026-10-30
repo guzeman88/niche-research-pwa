@@ -80,7 +80,19 @@ def public_listing(raw):
 
 
 def public_shop(raw):
-    return {k:raw[k] for k in ('shop_id','shop_name','transaction_sold_count','listing_active_count') if k in raw}
+    result = {k:raw[k] for k in ('shop_id','shop_name','transaction_sold_count','listing_active_count') if k in raw}
+    # Etsy defines this counter as reviews during the past year. Retain the
+    # public numeric input for dated research without inventing a lifetime rate.
+    reviews = raw.get('review_count')
+    if isinstance(reviews, int) and not isinstance(reviews, bool) and 0 <= reviews <= 1_000_000_000:
+        result['review_count'] = reviews
+    created = raw.get('create_date') or raw.get('created_timestamp')
+    if isinstance(created, int) and not isinstance(created, bool) and 0 < created <= 4_102_444_800:
+        result['create_date'] = created
+    average = raw.get('review_average')
+    if isinstance(average, (int,float)) and not isinstance(average, bool) and 0 <= average <= 5:
+        result['review_average'] = average
+    return result
 
 
 def anchored_catalog(client, shop_id, shop):
