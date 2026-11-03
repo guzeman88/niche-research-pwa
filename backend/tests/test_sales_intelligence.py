@@ -292,6 +292,195 @@ def test_raw_saved_api_bridge_retains_views_and_does_not_import_reviews_as_produ
     assert path.read_bytes() == original
 
 
+def saved_request_fixture(archive, records):
+    """An isolated raw journal; no native installation or provider is contacted."""
+    import gzip
+    native = archive / 'native'
+    (native / 'data').mkdir(parents=True)
+    path = native / 'data/catalog.sqlite'
+    (native / 'installation.json').write_text(json.dumps({'database': str(path)}))
+    attempted = (store.now() - timedelta(days=9)).isoformat()
+    captured = (store.now() - timedelta(hours=1)).isoformat()
+    with sqlite3.connect(path) as con:
+        con.execute('CREATE TABLE feed_etsy_requests(id INTEGER PRIMARY KEY,attempted_at TEXT,status TEXT,quota_json TEXT,response_gzip BLOB)')
+        for ident, status in records:
+            payload = {'results': [{'listing_id': ident, 'title': 'Saved fixture listing', 'shop_id': 700,
+                'views': ident * 10, 'price': {'amount': 500, 'divisor': 100, 'currency_code': 'USD'}}]}
+            con.execute('INSERT INTO feed_etsy_requests VALUES(?,?,?,?,?)', (ident, attempted, status,
+                json.dumps({'captured_at': captured}) if status == '200' else '{}',
+                gzip.compress(json.dumps(payload).encode()) if status == '200' else None))
+    return path, captured
+
+
+def complete_saved_request(path, ident, captured):
+    import gzip
+    payload = {'results': [{'listing_id': ident, 'title': 'Late fixture listing', 'shop_id': 700,
+        'views': ident * 10, 'price': {'amount': 500, 'divisor': 100, 'currency_code': 'USD'}}]}
+    with sqlite3.connect(path) as con:
+        con.execute('UPDATE feed_etsy_requests SET status=?,quota_json=?,response_gzip=? WHERE id=?',
+            ('200', json.dumps({'captured_at': captured}) if captured else '{}', gzip.compress(json.dumps(payload).encode()), ident))
+
+
+def test_saved_bridge_progresses_past_stale_request_without_changing_source(archive):
+    path, captured = saved_request_fixture(archive, [(1, 'in_flight'), (2, '200')])
+    original = path.read_bytes()
+    result = features.sync_raw_catalog()
+    assert result['cursor'] == 2 and result['pending'] == 1 and result['inserted'] == 1
+    assert result['status'] == 'waiting_on_saved_responses'
+    with store.database() as con:
+        assert store.get_control(con, 'raw_cursor:pending') == [1]
+        assert features.snapshot(con, '1', store.now().isoformat()) is None
+        assert features.snapshot(con, '2', captured)['metadata']['views'] == 20
+    assert original == path.read_bytes()
+
+
+@pytest.mark.parametrize('backfill', [False, True])
+def test_saved_bridge_late_completion_survives_reopen_without_backdating(archive, backfill):
+    path, _ = saved_request_fixture(archive, [(1, 'in_flight'), (2, '200')])
+    assert features.sync_raw_catalog(backfill=backfill)['pending'] == 1
+    captured = (store.now() - timedelta(minutes=10)).isoformat()
+    complete_saved_request(path, 1, captured)
+    result = features.sync_raw_catalog(backfill=backfill)
+    assert result['inserted'] == 1 and result['pending'] == 0 and result['status'] == 'caught_up'
+    key = 'raw_history_cursor' if backfill else 'raw_cursor'
+    with store.database() as con:
+        assert store.get_control(con, key) == 2
+        assert store.get_control(con, key + ':pending') == []
+        assert features.snapshot(con, '1', (store.stamp(captured) - timedelta(seconds=1)).isoformat()) is None
+        metadata = features.snapshot(con, '1', captured)['metadata']
+        assert metadata['available_at'] == metadata['captured_at'] == captured
+        assert metadata['views'] == 10
+    assert features.sync_raw_catalog(backfill=backfill)['inserted'] == 0
+
+
+def test_saved_bridge_forward_and_history_pending_queues_are_independent(archive):
+    path, _ = saved_request_fixture(archive, [(1, 'in_flight'), (2, '200')])
+    assert features.sync_raw_catalog(limit=1)['cursor'] == 1
+    assert features.sync_raw_catalog(limit=2, backfill=True)['cursor'] == 2
+    with store.database() as con:
+        assert store.get_control(con, 'raw_cursor') == 1
+        assert store.get_control(con, 'raw_history_cursor') == 2
+        assert store.get_control(con, 'raw_cursor:pending') == [1]
+        assert store.get_control(con, 'raw_history_cursor:pending') == [1]
+    complete_saved_request(path, 1, store.now().isoformat())
+    forward = features.sync_raw_catalog(limit=1)
+    history = features.sync_raw_catalog(limit=1, backfill=True)
+    assert forward['cursor'] == history['cursor'] == 2
+    assert forward['pending'] == history['pending'] == 0
+    assert forward['inserted'] == 1 and history['inserted'] == 0
+    assert store.counts()['metadata'] == 2
+
+
+def test_saved_bridge_retries_rotate_without_starving_new_rows(archive, monkeypatch):
+    monkeypatch.setattr(features, 'RAW_RETRY_LIMIT', 2)
+    path, _ = saved_request_fixture(archive, [(i, 'in_flight') for i in range(1, 7)] + [(7, '200'), (8, '200')])
+    assert features.sync_raw_catalog(limit=100)['pending'] == 6
+    complete_saved_request(path, 6, store.now().isoformat())
+    with sqlite3.connect(path) as con:
+        con.execute('INSERT INTO feed_etsy_requests VALUES(9,?,?,?,?)', (store.now().isoformat(), '500', '{}', None))
+        con.execute('INSERT INTO feed_etsy_requests VALUES(10,?,?,?,?)', (store.now().isoformat(), '500', '{}', None))
+    first = features.sync_raw_catalog(limit=2)
+    second = features.sync_raw_catalog(limit=2)
+    third = features.sync_raw_catalog(limit=2)
+    assert first['scanned'] == 2 and first['cursor'] == 10
+    assert all(r['retried'] == 2 and r['scanned'] <= 2 for r in (first, second, third))
+    assert first['inserted'] == second['inserted'] == 0 and third['inserted'] == 1
+    with store.database() as con:
+        assert features.snapshot(con, '6', store.now().isoformat())['metadata']['views'] == 60
+        assert features.snapshot(con, '9', store.now().isoformat()) is None
+
+
+def test_saved_bridge_enforces_real_batch_and_retry_bounds(archive):
+    saved_request_fixture(archive, [(i, 'in_flight') for i in range(1, 131)])
+    first = features.sync_raw_catalog(limit=1000, backfill=True)
+    assert first['scanned'] == 100 and first['retried'] == 0 and first['cursor'] == 100
+    second = features.sync_raw_catalog(limit=1000, backfill=True)
+    assert second['scanned'] == 30 and second['retried'] == 25 and second['cursor'] == 130
+    assert second['pending'] == 130 and second['inserted'] == 0
+
+
+def test_saved_bridge_pending_capacity_cannot_drop_an_unrecorded_hole(archive, monkeypatch):
+    monkeypatch.setattr(features, 'RAW_PENDING_LIMIT', 2)
+    path, _ = saved_request_fixture(archive, [(1, 'in_flight'), (2, 'in_flight'), (3, 'in_flight'), (4, '200')])
+    first = features.sync_raw_catalog(limit=100)
+    assert first['status'] == 'pending_capacity' and first['cursor'] == 2 and first['pending'] == 2
+    with sqlite3.connect(path) as con:
+        con.execute("UPDATE feed_etsy_requests SET status='500' WHERE id=1")
+    second = features.sync_raw_catalog(limit=100)
+    assert second['cursor'] == 4 and second['pending'] == 2 and second['inserted'] == 1
+    with store.database() as con:
+        assert store.get_control(con, 'raw_cursor:pending') == [2, 3]
+        assert features.snapshot(con, '1', store.now().isoformat()) is None
+    complete_saved_request(path, 3, store.now().isoformat())
+    assert features.sync_raw_catalog()['inserted'] == 1
+
+
+def test_saved_bridge_missing_request_stays_unknown_without_blocking_forward_scan(archive):
+    path, _ = saved_request_fixture(archive, [(1, 'in_flight'), (2, '200'), (3, '500')])
+    features.sync_raw_catalog(limit=2)
+    with sqlite3.connect(path) as con:
+        con.execute('DELETE FROM feed_etsy_requests WHERE id=1')
+    result = features.sync_raw_catalog()
+    assert result['missing_pending'] == 1 and result['pending'] == 1 and result['cursor'] == 3
+    assert result['status'] == 'waiting_on_saved_responses'
+    with store.database() as con:
+        assert features.snapshot(con, '1', store.now().isoformat()) is None
+        assert features.snapshot(con, '3', store.now().isoformat()) is None
+        assert store.get_control(con, 'raw_cursor:pending') == [1]
+
+
+def test_saved_bridge_late_response_without_capture_time_is_not_backdated(archive):
+    path, _ = saved_request_fixture(archive, [(1, 'in_flight'), (2, '500')])
+    features.sync_raw_catalog()
+    complete_saved_request(path, 1, None)
+    unknown = features.sync_raw_catalog()
+    assert unknown['pending_without_capture_time'] == 1 and unknown['pending'] == 1 and unknown['inserted'] == 0
+    with store.database() as con:
+        assert features.snapshot(con, '1', store.now().isoformat()) is None
+    complete_saved_request(path, 1, store.now().isoformat())
+    assert features.sync_raw_catalog()['inserted'] == 1
+
+
+def test_saved_bridge_metadata_cursor_and_queue_roll_back_together(archive, monkeypatch):
+    path, _ = saved_request_fixture(archive, [(1, 'in_flight'), (2, '200')])
+    original = path.read_bytes()
+    normal_set_control = store.set_control
+    def fail_pending_write(con, key, value):
+        if key == 'raw_cursor:pending':
+            raise sqlite3.OperationalError('Isolated transaction failure')
+        return normal_set_control(con, key, value)
+    monkeypatch.setattr(store, 'set_control', fail_pending_write)
+    with pytest.raises(sqlite3.OperationalError, match='transaction failure'):
+        features.sync_raw_catalog()
+    with store.database() as con:
+        assert con.execute('SELECT count(*) FROM metadata').fetchone()[0] == 0
+        assert store.get_control(con, 'raw_cursor') is None
+        assert store.get_control(con, 'raw_cursor:pending') is None
+    assert original == path.read_bytes()
+    monkeypatch.setattr(store, 'set_control', normal_set_control)
+    result = features.sync_raw_catalog()
+    assert result['inserted'] == 1 and result['cursor'] == 2 and result['pending'] == 1
+
+
+@pytest.mark.parametrize('limit', [-1, 0, True, 1.5, '2'])
+def test_saved_bridge_rejects_unbounded_or_ambiguous_limits(archive, limit):
+    with pytest.raises(ValueError, match='positive integer'):
+        features.sync_raw_catalog(limit=limit)
+
+
+def test_saved_bridge_preserves_invalid_pending_state_for_inspection(archive):
+    saved_request_fixture(archive, [(1, 'in_flight'), (2, '200')])
+    with store.database(True) as con:
+        store.set_control(con, 'raw_cursor', 1)
+        store.set_control(con, 'raw_cursor:pending', [1, 1])
+    with pytest.raises(ValueError, match='pending queue'):
+        features.sync_raw_catalog()
+    with store.database() as con:
+        assert store.get_control(con, 'raw_cursor') == 1
+        assert store.get_control(con, 'raw_cursor:pending') == [1, 1]
+        assert con.execute('SELECT count(*) FROM metadata').fetchone()[0] == 0
+
+
 def test_supported_api_contract_is_host_scoped_and_quota_reserved(archive, monkeypatch):
     import httpx
     from services.sales_intelligence import adapters
