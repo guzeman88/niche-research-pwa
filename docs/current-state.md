@@ -1,3 +1,23 @@
+# October 30, 2026 neutral shop-review counter basis
+
+New estimator captures retain API-reported shop review counts and averages under
+neutral names with `api_reported_period_unverified` basis and capture time. A
+bounded endpoint-count probe disagreed with the documented annual interpretation;
+it does not establish universal lifetime semantics. Raw caches, earlier captures
+and frozen model inputs keep their original values and legacy names. No extra
+request, model activation or runtime installation is added. See the dated
+[input-contract correction](review-rate-inputs.md). The desktop canonical handoff
+records installation and live verification; source alone is not rollout.
+
+# October 29, 2026 dated shop-review input retention
+
+This historical revision named returned shop-review context as past-year based
+on the API documentation; October 30 supersedes that unverified period label.
+It retained counts, ratings and creation timestamps; no new request, source
+scope, schedule, model activation or lifetime review-rate assumption was added.
+[Input contract](review-rate-inputs.md). The desktop canonical handoff
+records installation and live verification; this source entry alone is not rollout.
+
 # October 27, 2026 shop-counter anchored allocation
 
 The private estimate workspace now includes an experimental joint allocation lane
