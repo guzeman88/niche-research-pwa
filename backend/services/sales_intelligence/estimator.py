@@ -7,7 +7,7 @@ from collections import Counter
 from contextlib import closing
 from datetime import timedelta
 import json
-from models.selling_products import SalesConfig
+from models.selling_products import Observation, SalesConfig
 from services import sales_model
 from . import store
 
@@ -297,8 +297,26 @@ def record_capture(packet, captured_at, review_window=None, metadata_at=None, pe
     listing = packet['listings'][0]
     public_listing = {k: listing.get(k) for k in ('listing_id', 'title', 'shop', 'created_on', 'category', 'product_type', 'source', 'source_ref')}
     allowed = {'reviews', 'views', 'favorites', 'stock', 'price', 'shop_sales', 'shop_reviews'}
-    observations = [{k: r.get(k) for k in ('listing_id', 'metric', 'value', 'observed_at', 'basis', 'source', 'source_ref', 'currency', 'precision')}
-                    for r in packet['observations'] if r['metric'] in allowed]
+    fields = ('listing_id', 'metric', 'value', 'observed_at', 'basis', 'source', 'source_ref', 'currency', 'precision')
+    message_fields = (*fields, 'unit', 'window_hours', 'raw_message')
+    observations = []
+    for row in packet['observations']:
+        if row['metric'] in allowed:
+            observations.append({k: row.get(k) for k in fields})
+        elif row['metric'] == 'purchase_message':
+            # Revalidate the original public wording before retaining only its
+            # numeric/source fields. Buyers/bounds remain their declared units.
+            message = Observation.model_validate({k: row[k] for k in message_fields if k in row})
+            if (message.source != 'etsy_public' or message.listing_id != listing['listing_id']
+                    or message.value is None or message.observed_at > store.stamp(captured)):
+                raise ValueError('Retain only a dated numeric public listing purchase message')
+            normalized = message.model_dump(mode='json')
+            observations.append({k: normalized[k] for k in message_fields})
+    if attributes and 'purchase_message_status' in attributes:
+        status = attributes['purchase_message_status']
+        message_at = store.stamp(attributes['purchase_message_captured_at'])
+        if status not in ('purchase_message_observed', 'purchase_message_unavailable') or message_at > store.stamp(captured):
+            raise ValueError('Purchase-message source status needs its actual completed capture time')
     value = {'listing': public_listing, 'observations': observations, 'review_window': review_window, 'captured_at': captured,
              'listing_metadata_captured_at': None if pending_details else store.stamp(metadata_at or captured).isoformat()}
     if attributes:
@@ -330,10 +348,20 @@ def calculate(listing_id, as_of=None):
         base['status'] = 'stale_evidence'
         return base
     observations = [o for r in history for o in r['observations']]
+    for capture in history:
+        attrs = capture.get('attributes') or {}
+        if attrs.get('purchase_message_status') == 'purchase_message_unavailable':
+            # A fetched page with no recognized line supersedes overlapping old
+            # messages. No dummy wording or absent-page zero enters the archive.
+            message_at = store.stamp(attrs['purchase_message_captured_at'])
+            if message_at <= at and message_at <= store.stamp(capture['captured_at']):
+                observations.append({'listing_id': listing_id, 'metric': 'purchase_message',
+                                     'value': None, 'observed_at': message_at.isoformat()})
     listing = latest['listing']
     config = SalesConfig().model_dump(mode='json')
     independent = sales_model.estimate_listing(listing, observations, [listing], config, None, at)
     base.update(windows=independent['windows'], issues=independent['issues'], value=independent['windows']['30']['estimate'],
+                purchase_evidence=independent['purchase_evidence'],
                 review_rate_basis=independent['review_rate_basis'])
     base['status'] = 'provisional_independent_estimate' if base['value'] is not None else 'needs_conversion_evidence'
     window = latest.get('review_window')

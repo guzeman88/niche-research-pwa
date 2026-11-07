@@ -395,12 +395,15 @@ def collect(client, row, retain_estimator=False):
                          **({'pages':review_job['pages'],'pending':review_job['status']=='pending'} if review_job else {})}
     page_status = 'api_updated'
     if 'listing_pages' in client.scopes:
-        message = purchase_message(client.get(f'/listings/{identity}', 'listing_pages'), identity)
+        document = client.get(f'/listings/{identity}', 'listing_pages')
+        page_at = discovery.now()
+        message = purchase_message(document, identity)
         page_status = 'purchase_message_observed' if message else 'purchase_message_unavailable'
+        attributes.update(purchase_message_status=page_status, purchase_message_captured_at=page_at.isoformat())
         if message:
             raw, parsed = message
             observations.append(Observation(listing_id=identity, metric='purchase_message', value=parsed['value'],
-                observed_at=at, source='etsy_public', source_ref=ref, raw_message=raw,
+                observed_at=page_at, source='etsy_public', source_ref=ref, raw_message=raw,
                 unit=parsed['unit'], precision=parsed['precision'], window_hours=parsed['window_hours']))
     packet = Packet(listings=[Listing.model_validate(listing)], observations=observations, reviews=reviews).model_dump(mode='json')
     if retain_estimator:
