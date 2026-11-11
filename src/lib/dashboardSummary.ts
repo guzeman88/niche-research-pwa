@@ -4,6 +4,7 @@ import { accountRequest } from './accountApi'
 interface StaticRelease {
   generated_at?: string
   commit?: string
+  source_data_as_of?: string | null
 }
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
@@ -20,7 +21,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     return {
       schema_version: 1,
       snapshot_version: release.commit || 'static',
-      generated_at: release.generated_at || new Date(0).toISOString(),
+      generated_at: release.source_data_as_of || release.generated_at || new Date(0).toISOString(),
       data_status: 'degraded',
       input_fingerprint: release.commit || 'static-fallback',
       source_watermarks: {},

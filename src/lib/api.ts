@@ -7,7 +7,7 @@ import type {
   StatsResponse, HealthResponse, KeywordItem,
 } from '../types/api'
 import type { GapReport } from '../types/gaps'
-import { readConnection, operatorHeaders } from './operatorConnection'
+import { readConnection, operatorHeaders, operatorFetch, accountConnectionAvailable } from './operatorConnection'
 import {accountStorage} from './accountWorkspace'
 import {accountRequest} from './accountApi'
 import type { StoreIdea } from './storeIdeas'
@@ -48,11 +48,12 @@ const STATIC_MAP: Record<string, string> = {
 const LIVE_ONLY_GET_PATHS = new Set<string>();
 
 function shouldUseStaticReads(): boolean {
-  return USE_STATIC_DATA && !LIVE_API_FIRST;
+  return USE_STATIC_DATA && !LIVE_API_FIRST && !accountConnectionAvailable();
 }
 
 // Try loading from static CDN JSON first (instant), fall back to API
 async function fetchStatic(path: string): Promise<any | null> {
+  if (accountConnectionAvailable()) return null;
   if (!USE_STATIC_DATA) return null;
   const staticPath = STATIC_MAP[path] || (path.startsWith('/api/keywords?') ? '/data/keywords.json' : null);
   if (!staticPath) return null;
@@ -99,6 +100,7 @@ function tunnelBypassHeaders(baseUrl: string): Record<string, string> {
 }
 
 async function fetchApi(path: string, options?: RequestInit, timeoutMs = 8000): Promise<Response | null> {
+  if (accountConnectionAvailable()) return operatorFetch(path, options);
   const isGet = !options?.method || options.method === 'GET';
   if (!isGet || /^\/api\/(evidence|settings|scheduler|stores|workspace|stream)(\/|\?|$)/.test(path)) {
     try {

@@ -7,6 +7,7 @@ import PullToRefresh from '../components/PullToRefresh'
 import { KeywordsSkeleton } from '../components/Skeleton'
 import { fmtDate } from '../lib/utils'
 import type { KeywordItem } from '../types/api'
+import {accountConnectionAvailable,operatorRequest} from '../lib/operatorConnection'
 import { useAppMode } from '../lib/appMode'
 import {
   clearUserKeywordData,
@@ -41,33 +42,41 @@ export default function Keywords() {
   const [sortBy, setSortBy] = useState<SortKey>('status')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [page, setPage] = useState(1)
+  const live=accountConnectionAvailable() && !isUserMode
 
   const { data: apiDomains } = useQuery<string[]>({
     queryKey: ['domains', mode, userDataVersion],
     queryFn: () => isUserMode ? getUserDomains() : getDomains(),
   })
-  const { data: keywords, isLoading } = useQuery<KeywordItem[]>({
+  const local=useQuery<KeywordItem[]>({
     queryKey: ['keywords', mode, userDataVersion],
     queryFn: () => isUserMode ? listUserKeywords(15000) : listKeywords(undefined, 15000),
+    enabled:!live,
   })
+  const remote=useQuery({queryKey:['keyword-page',search,domain,sortBy,sortDir,page],enabled:live,retry:false,
+    queryFn:()=>operatorRequest<{items:KeywordItem[];total:number}>(`/api/dashboard/keywords?${new URLSearchParams({q:search,domain,sort:sortBy,direction:sortDir,offset:String((page-1)*PAGE_SIZE),limit:String(PAGE_SIZE)})}`)})
+  const keywords=live?remote.data?.items:local.data
+  const isLoading=live?remote.isPending:local.isLoading
   const scanBatches = isUserMode ? getUserScanBatches() : []
 
   const domains = useMemo(() => {
     const fromKeywords = Array.from(new Set((keywords || []).map(kw => kw.domain).filter(Boolean))).sort()
-    return fromKeywords.length ? fromKeywords : (apiDomains || [])
-  }, [apiDomains, keywords])
+    return live ? (apiDomains || []) : fromKeywords.length ? fromKeywords : (apiDomains || [])
+  }, [apiDomains, keywords,live])
 
   const filtered = useMemo(() => {
     if (!keywords) return []
+    if(live)return keywords
     const q = search.trim().toLowerCase()
     return keywords.filter(kw => {
       const matchesSearch = !q || kw.keyword.toLowerCase().includes(q)
       const matchesDomain = !domain || kw.domain === domain
       return matchesSearch && matchesDomain
     })
-  }, [keywords, search, domain])
+  }, [keywords, search, domain,live])
 
   const sorted = useMemo(() => {
+    if(live)return filtered
     const list = [...filtered]
     list.sort((a, b) => {
       let va: string | number
@@ -91,15 +100,16 @@ export default function Keywords() {
       return 0
     })
     return list
-  }, [filtered, sortBy, sortDir])
+  }, [filtered, sortBy, sortDir,live])
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const totalMatches=live?remote.data?.total || 0:sorted.length
+  const totalPages = Math.max(1, Math.ceil(totalMatches / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
-  const pageStart = sorted.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0
-  const pageEnd = Math.min(sorted.length, currentPage * PAGE_SIZE)
+  const pageStart = totalMatches ? (currentPage - 1) * PAGE_SIZE + 1 : 0
+  const pageEnd = Math.min(totalMatches, currentPage * PAGE_SIZE)
   const visibleKeywords = useMemo(
-    () => sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [currentPage, sorted],
+    () => live?sorted:sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [currentPage, sorted,live],
   )
 
   useEffect(() => {
@@ -132,6 +142,7 @@ export default function Keywords() {
     queryClient.invalidateQueries({ queryKey: ['profitable-store-ideas'] })
   }
 
+  if ((remote.error && live) || local.error && !live) return <div className="page"><h1 className="text-2xl font-semibold">Keywords</h1><p role="alert" className="mt-4 text-sm text-surface-200">{(live?remote.error:local.error)?.message}</p><button className="btn-secondary mt-4" onClick={()=>void refresh()}>Retry current data</button></div>
   if (!keywords && !isLoading) return <KeywordsSkeleton />
   if (isLoading && !keywords) return <KeywordsSkeleton />
 
@@ -142,7 +153,7 @@ export default function Keywords() {
           <div>
             <h2 className="text-xl font-extrabold text-surface-50 tracking-tight">Keywords</h2>
             <p className="text-[13px] text-surface-200 mt-0.5">
-              {keywords ? `${sorted.length} ${isUserMode ? 'user keywords' : 'keywords'}` : 'Loading...'}
+              {keywords ? `${totalMatches.toLocaleString()} ${isUserMode ? 'user keywords' : live?'keywords in the active library':'keywords'}` : 'Loading...'}
             </p>
           </div>
           {isUserMode ? (
@@ -218,15 +229,14 @@ export default function Keywords() {
                   {COLUMNS.map(({ key, label, align }) => (
                     <th
                       key={key}
-                      onClick={() => handleSort(key)}
                       className={`px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-surface-200 cursor-pointer select-none hover:text-surface-50 transition-colors ${align === 'right' ? 'text-right' : 'text-left'}`}
                     >
-                      <span className="inline-flex items-center gap-1">
+                      <button type="button" onClick={() => handleSort(key)} className="inline-flex min-h-11 items-center gap-1">
                         {label}
                         <span className={`text-[8px] ${sortBy === key ? 'text-primary-200' : 'text-surface-400'}`}>
                           {sortBy === key ? (sortDir === 'asc' ? 'up' : 'down') : 'down'}
                         </span>
-                      </span>
+                      </button>
                     </th>
                   ))}
                 </tr>
@@ -273,7 +283,7 @@ export default function Keywords() {
           {sorted.length > PAGE_SIZE && (
             <div className="flex flex-col gap-3 border-t border-surface-600/60 bg-surface-900/45 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[12px] font-medium text-surface-300">
-                Showing {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} of {sorted.length.toLocaleString()}
+                Showing {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} of {totalMatches.toLocaleString()}
               </p>
               <div className="flex items-center gap-2">
                 <button

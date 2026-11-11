@@ -14,6 +14,7 @@ import type { ReportListItem } from '../types/research'
 import { useAppMode } from '../lib/appMode'
 import { getUserOpportunities, getUserStats } from '../lib/userData'
 import { dashboardFreshness, getDashboardSummary, refreshDashboardSummary } from '../lib/dashboardSummary'
+import OperationalDashboard from '../components/OperationalDashboard'
 
 interface DashboardOpportunity {
   id: string
@@ -23,6 +24,11 @@ interface DashboardOpportunity {
 }
 
 export default function Dashboard() {
+  const {isUserMode}=useAppMode()
+  return isUserMode ? <ImportedDashboard/> : <OperationalDashboard/>
+}
+
+function ImportedDashboard() {
   const qc = useQueryClient()
   const { mode, isUserMode, userDataVersion } = useAppMode()
   const [isRefreshing, setIsRefreshing] = useState(false)

@@ -1,4 +1,4 @@
-import { operatorRequest, operatorHeaders, readConnection } from './operatorConnection'
+import { operatorRequest, operatorFetch } from './operatorConnection'
 import type { StoreProductIdea } from './storeWorkspace'
 import { accountStorage } from './accountWorkspace'
 
@@ -36,8 +36,7 @@ export interface ProductionOverview {
 export const productionRequest = <T,>(path = '', body?: unknown) => operatorRequest<T>(`/api/production${path}`, body)
 
 export async function artifactBlob(job: string, name: string) {
-  const {url} = readConnection()
-  const response = await fetch(`${url}/api/production/jobs/${encodeURIComponent(job)}/files/${encodeURIComponent(name)}`, {headers: operatorHeaders(url)})
+  const response = await operatorFetch(`/api/production/jobs/${encodeURIComponent(job)}/files/${encodeURIComponent(name)}`)
   if (!response.ok) throw new Error('This artifact is unavailable or failed integrity verification.')
   return response.blob()
 }

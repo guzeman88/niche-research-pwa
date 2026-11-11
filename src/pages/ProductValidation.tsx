@@ -5,7 +5,7 @@ import ValidationForms, { CreateValidation } from '../components/ValidationForms
 import ValidationEvidence from '../components/ValidationEvidence'
 import KeywordFeedStatus from '../components/KeywordFeedStatus'
 import SupportedKeywordPipeline from '../components/SupportedKeywordPipeline'
-import { readConnection, saveConnection } from '../lib/operatorConnection'
+import { readConnection, saveConnection, accountConnectionAvailable } from '../lib/operatorConnection'
 import { display, download, label, validationRequest } from '../lib/productValidation'
 import type { ValidationOverview } from '../lib/productValidation'
 
@@ -20,12 +20,12 @@ export default function ProductValidation() {
   return <main className="page min-h-screen bg-surface-950 text-surface-50">
     <div className="flex flex-wrap items-baseline justify-between gap-4"><h1 className="text-2xl font-semibold">Product validation</h1><nav className="flex flex-wrap gap-4" aria-label="Research workspaces"><Link className="text-sm text-surface-200 underline" to="/selling">Selling products</Link><Link className="text-sm text-surface-200 underline" to="/evidence">Research tools</Link></nav></div>
     <p className="mt-3 max-w-2xl text-base leading-relaxed text-surface-200">Build evidence for a profitable product: buyer demand, comparable listings, complete costs, and your own sales results.</p>
-    <details className="my-6 border-y border-surface-600 py-4" open={!connected || Boolean(query.error)}><summary className="cursor-pointer text-sm font-semibold">Research workspace connection</summary>
+    {!accountConnectionAvailable() && <details className="my-6 border-y border-surface-600 py-4" open={!connected || Boolean(query.error)}><summary className="cursor-pointer text-sm font-semibold">Research workspace connection</summary>
       <form className="mt-4 grid max-w-3xl gap-4 sm:grid-cols-2" onSubmit={event => {
         event.preventDefault(); try {saveConnection({url, token}); setConnected(true); setVersion(v => v + 1); setMessage('')} catch (error) {setMessage(error instanceof Error ? error.message : 'Invalid connection.')}
       }}><label className="text-sm">Research server address<input className="input mt-2 w-full" type="url" value={url} onChange={event => setUrl(event.target.value)} required /></label>
         <label className="text-sm">Operator token · remote access only<input className="input mt-2 w-full" type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} /></label><button className="btn-secondary w-fit">Connect workspace</button></form>
-    </details>
+    </details>}
     {query.isLoading && connected && <p role="status">Loading validation records…</p>}
     {query.error && <div role="alert" className="my-4 space-y-3"><p>{query.error.message}</p><button className="btn-secondary" onClick={() => void refresh()}>Retry connection</button></div>}
     {message && <p className="my-4 text-sm" role="status">{message}</p>}

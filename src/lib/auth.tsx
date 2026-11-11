@@ -4,7 +4,7 @@ import {Navigate, useLocation} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {accountRequest, AccountError} from './accountApi'
 import {activateWorkspace, clearAccountWorkspace, flushAccountWorkspace, hasInterruptedEdits, subscribeWorkspace, workspaceStatus} from './accountWorkspace'
-import {clearConnection} from './operatorConnection'
+import {clearConnection, setAccountConnectionAvailable} from './operatorConnection'
 
 export interface Profile {id:string; display_name:string; business_name:string; timezone:string; currency:string; role:'admin'|'member'; created_at:string}
 export interface AccountSession {user:{id:string;email:string}|null;profile?:Profile|null;mfa_required?:boolean;recovery?:boolean;factors?:Array<{id:string;friendly_name?:string}>}
@@ -17,7 +17,7 @@ export function AuthProvider({children}:{children:ReactNode}) {
   const [session,setSession] = useState<AccountSession>({user:null})
   const [loading,setLoading] = useState(true), [error,setError] = useState('')
   const accountId = useRef('')
-  const clear = useCallback(() => {accountId.current=''; clearAccountWorkspace(); client.clear(); setSession({user:null}); clearConnection()},[client])
+  const clear = useCallback(() => {accountId.current=''; clearAccountWorkspace(); client.clear(); setSession({user:null}); clearConnection(); setAccountConnectionAvailable(false)},[client])
   const refresh = useCallback(async () => {
     try {
       const next = await accountRequest<AccountSession>('/session')
@@ -29,6 +29,9 @@ export function AuthProvider({children}:{children:ReactNode}) {
           activateWorkspace(next.user.id,workspace.payload,workspace.revision)
           client.clear()
         }
+        // Installed loopback tools retain their direct operator connection.
+        // The hosted app obtains scoped permissions through its account service.
+        setAccountConnectionAvailable(next.profile?.role==='admin' && !next.mfa_required && !next.recovery && !['localhost','127.0.0.1','[::1]'].includes(location.hostname))
         setSession(next)
       }
       setError('')

@@ -2,9 +2,12 @@ const KEY = 'etgen:operator-connection'
 const LOCAL_KEY = 'etgen:local-validation-address'
 const DISCONNECTED_KEY = 'etgen:operator-disconnected'
 export interface OperatorConnection { url: string; token: string }
+let accountAccess = false
+export const setAccountConnectionAvailable = (value: boolean) => {accountAccess=value}
+export const accountConnectionAvailable = () => accountAccess
 
 function localValidationPage() {
-  return ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) && ['/validation', '/selling'].includes(location.pathname)
+  return ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) && ['/validation', '/selling', '/production'].includes(location.pathname)
 }
 
 function loopbackOrigin(value: string) {
@@ -20,7 +23,7 @@ export function readConnection(): OperatorConnection {
     // loopback address for the standalone local validation page, never credentials.
     const local = sessionStorage.getItem(LOCAL_KEY) || ''
     const installed = localValidationPage() && location.port === '5175' && sessionStorage.getItem(DISCONNECTED_KEY) !== '1'
-    return {url: localValidationPage() && loopbackOrigin(local) ? local : installed ? 'http://127.0.0.1:18020' : '', token: ''}
+    return {url: localValidationPage() && loopbackOrigin(local) ? local : installed ? 'http://127.0.0.1:18020' : accountAccess ? location.origin : '', token: ''}
   }
   catch { return {url: '', token: ''} }
 }
@@ -49,13 +52,19 @@ export function operatorHeaders(url: string): Record<string, string> {
   return connection.url === url && connection.token ? {Authorization: `Bearer ${connection.token}`} : {}
 }
 
-export async function operatorRequest<T>(path: string, body?: unknown): Promise<T> {
+export async function operatorFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const {url} = readConnection()
   if (!url) throw new Error('Connect to your backend first.')
-  const response = await fetch(`${url}${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
-    headers: {'Content-Type': 'application/json', ...operatorHeaders(url)},
-    body: body === undefined ? undefined : JSON.stringify(body),
+  if(accountAccess && url===location.origin){
+    const permission=await fetch('/api/account/backend/access',{method:'POST',credentials:'same-origin',cache:'no-store',
+      headers:{'Content-Type':'application/json','X-Etgen-Request':'1'},body:JSON.stringify({path,method:options.method || 'GET'}),signal:AbortSignal.timeout(30000)})
+    const ticket=await permission.json() as {url?:string;token?:string;error?:string}
+    if(!permission.ok || !ticket.url || !ticket.token)throw new Error(ticket.error || 'The private research connection is unavailable.')
+    return fetch(ticket.url,{...options,headers:{...options.headers,Authorization:`Bearer ${ticket.token}`},cache:'no-store',signal:options.signal || AbortSignal.timeout(120000)})
+  }
+  return fetch(`${url}${path}`, {
+    ...options,
+    headers: {...operatorHeaders(url),...options.headers},
     signal: AbortSignal.timeout(path.startsWith('/api/production') ? 120000 : 20000),
   }).catch((error: unknown) => {
     if (localValidationPage() && location.port === '5175' && loopbackOrigin(url)) {
@@ -63,6 +72,10 @@ export async function operatorRequest<T>(path: string, body?: unknown): Promise<
     }
     throw error
   })
+}
+
+export async function operatorRequest<T>(path: string, body?: unknown): Promise<T> {
+  const response=await operatorFetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)})
   if (!response.ok) {
     const detail = await response.json().catch(() => ({})) as {detail?: unknown}
     throw new Error(response.status === 401 ? 'The backend rejected the connection. Check your operator token.'

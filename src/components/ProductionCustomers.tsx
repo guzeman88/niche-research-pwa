@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { productionRequest, type ProductionJob } from '../lib/production'
-import { operatorHeaders, readConnection } from '../lib/operatorConnection'
+import { operatorFetch } from '../lib/operatorConnection'
 
 interface CustomerInstance {
   id: string; status: string; product_id?: string; revision?: string
@@ -27,8 +27,7 @@ export default function ProductionCustomers({jobs}: {jobs: ProductionJob[]}) {
   const manifest=detail.data?.result?.manifest || detail.data?.manifest
   async function download(name:string) {
     try {
-      const {url}=readConnection()
-      const response=await fetch(`${url}/api/production/customers/${encodeURIComponent(selected)}/files/${encodeURIComponent(name)}`,{headers:operatorHeaders(url)})
+      const response=await operatorFetch(`/api/production/customers/${encodeURIComponent(selected)}/files/${encodeURIComponent(name)}`)
       if (!response.ok) throw new Error('Private file is unavailable or failed verification.')
       const link=document.createElement('a');const href=URL.createObjectURL(await response.blob());link.href=href;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(href),1000)
     } catch (error) {setNotice(error instanceof Error ? error.message : 'Private download failed.')}

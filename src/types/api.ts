@@ -12,7 +12,7 @@ export interface StatsResponse {
   coverage_pct: number | null;
   avg_opportunity: number | null;
   avg_gap_score: number | null;
-  breakout_count: number;
+  breakout_count: number | null;
   expansion_edges: number;
   top_gap_keyword: { keyword: string; gap_score: number } | null;
   domains: { domain: string; cnt: number }[];
@@ -26,6 +26,18 @@ export interface DashboardSummary {
   input_fingerprint: string;
   source_watermarks: Record<string, string | null>;
   duration_ms: number;
+  scope?: string;
+  connection?: {private_actions_available: boolean; status: string};
+  sources?: Array<{source: string; rows: number; keywords: number; latest: string | null}>;
+  score_distribution?: Array<{label: string; count: number}>;
+  research_leads?: Array<{keyword: string; score: number}>;
+  breakouts?: {status: string; reason: string; items: unknown[]};
+  feed?: {status?: string; last_attempt?: string; last_completed?: string; errors?: string[]};
+  coverage?: {as_of?: string; active_keywords?: number; active_current_competition?: number; active_google_monthly_direct?: number; active_paired_keywords?: number; providers?: Array<{provider: string; attempts: number; useful_attempts: number; failed_attempts: number; entries: number}>};
+  intelligence?: {status: string; listings?: number; observations?: number; outcomes?: number; models?: number; reference_listings?: number; automatic_estimator?: {at?: string; tracked?: number; estimated?: number; statuses?: Record<string,number>}};
+  production?: {status: string; jobs: number | null; review_queue: number | null; starting_recipes: number};
+  validation?: {records: number; projects: number};
+  supported?: {status: string; qualified_this_month?: number; target?: number; available_supported_groups?: number; etsy_demand_backed_groups?: number};
   stats: StatsResponse;
   evidence: {
     versioned_scores: number;
@@ -48,6 +60,8 @@ export interface DashboardSummary {
     refresh_interval_seconds: number;
     fallback_generated_at?: string;
     reason?: string;
+    stale?: boolean;
+    scope?: string;
   };
 }
 

@@ -4,12 +4,16 @@ import type { IconName } from './Icon'
 import { useAppMode, type AppMode } from '../lib/appMode'
 import BrandLogo from './BrandLogo'
 import {useAuth} from '../lib/auth'
+import {useQuery} from '@tanstack/react-query'
+import {getDashboardSummary} from '../lib/dashboardSummary'
+import useClock from '../hooks/useClock'
 
 const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconName; adminOnly?: boolean }[] = [
-  { to: '/validation', label: 'Product validation', shortLabel: 'Validate', icon: 'search', adminOnly: true },
-  { to: '/selling', label: 'Selling products', shortLabel: 'Selling', icon: 'trending-up', adminOnly: true },
   { to: '/', label: 'Dashboard', icon: 'home' },
   { to: '/keywords', label: 'Keywords', icon: 'search' },
+  { to: '/selling', label: 'Selling products', shortLabel: 'Selling', icon: 'trending-up', adminOnly: true },
+  { to: '/validation', label: 'Product validation', shortLabel: 'Validate', icon: 'search', adminOnly: true },
+  { to: '/production', label: 'Production', icon: 'package', adminOnly: true },
   { to: '/store-generator', label: 'Store Generator', shortLabel: 'Generator', icon: 'layers' },
   { to: '/launch', label: 'Launch Lab', shortLabel: 'Launch', icon: 'target', adminOnly: true },
   { to: '/stores', label: 'My Stores', icon: 'package' },
@@ -18,8 +22,10 @@ const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconNam
 export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
   const { mode, setMode } = useAppMode()
   const auth = useAuth()
-  const fastDataReady = !import.meta.env.DEV && import.meta.env.VITE_ALLOW_STATIC_DATA !== '0'
-  const statusOk = fastDataReady || import.meta.env.DEV
+  const currentTime=useClock()
+  const report=useQuery({queryKey:['dashboard-summary'],queryFn:getDashboardSummary,enabled:auth.profile?.role==='admin' && mode==='developer',staleTime:30000,refetchInterval:60000})
+  const statusOk=report.data?.schema_version===2 && currentTime-Date.parse(report.data.generated_at)<150000
+  const statusText=mode==='user'?'Account workspace':statusOk?'Research sync connected':report.data?'Research sync delayed':'Checking research sync'
   const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || auth.profile?.role === 'admin')
 
   if (mobile) {
@@ -102,7 +108,7 @@ export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
         <div className="flex items-center gap-2 rounded-lg border border-surface-600/55 bg-surface-800/55 px-3 py-2 text-[11px]">
           <span className={`w-2 h-2 rounded-full ${statusOk ? 'bg-emerald-400 shadow-[0_0_6px_#a3be8c]' : 'bg-red-400'}`} />
           <span className="text-surface-300 font-medium">
-            {statusOk ? 'Fast data ready' : 'Offline'}
+            {statusText}
           </span>
         </div>
       </div>

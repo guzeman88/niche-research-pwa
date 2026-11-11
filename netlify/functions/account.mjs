@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import {createEmailFlow, readEmailFlow, emailFlowCookie, emailRecipientAllowed, authEmailRequest} from './lib/account-email.mjs';
 import { ValidationError, hash, seal, unseal, trustedMutation, validatePassword, validateProfile, validateWorkspace, sessionCookie, readSessionCookie } from './lib/account-security.mjs';
 import { dashboardEtag, normalizeDashboardSnapshot } from './lib/dashboard-summary.mjs';
+import {activeBackend, accessTicket, backendPath} from './lib/backend-access.mjs';
 
 const options = {global:{fetch:(input, init = {}) => fetch(input, {...init, signal: init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000)})},auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}};
 class Failure extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -39,7 +40,7 @@ export default async function handler(request, context = {}) {
       const allowed = check(await service.rpc('app_consume_auth_limit', {bucket_key:hash(key), max_attempts:max, window_seconds:window}));
       if (!allowed) throw new Failure(429, 'Too many attempts. Please wait before trying again.');
     };
-    if (request.method === 'POST') await limit(`ip:${context.ip || 'local'}:${route}`, route === '/workspace' || route === '/backend' ? 1200 : 40);
+    if (request.method === 'POST') await limit(`ip:${context.ip || 'local'}:${route}`, ['/workspace','/backend','/backend/access'].includes(route) ? 1200 : 40);
 
     async function startSession(tokens, recovery = false) {
       const user = check(await auth.auth.getUser(tokens.access_token)).user;
@@ -170,6 +171,15 @@ export default async function handler(request, context = {}) {
     if (saved.recovery && route !== '/password') throw new Failure(403, 'Set your password to finish account recovery.');
     async function readDashboardSnapshot(refresh = false) {
       if (profile.role !== 'admin') throw new Failure(403,'Administrator access required.');
+      const operational = await service.from('app_dashboard_state').select('*').eq('id','active').maybeSingle();
+      if (!operational.error && operational.data?.payload?.schema_version === 2) {
+        const row=operational.data;
+        const stale=Date.now()-Date.parse(row.generated_at)>150000;
+        headers.ETag=dashboardEtag(row);
+        return {...row.payload,snapshot_version:row.snapshot_version,generated_at:row.generated_at,
+          data_status:stale?'degraded':row.payload.data_status,
+          delivery:{mode:'live',refresh_interval_seconds:60,stale,scope:'native_collection_library'}};
+      }
       let row;
       if (refresh) {
         const refreshed = check(await service.rpc('refresh_research_dashboard_snapshot',{force_refresh:false}));
@@ -259,6 +269,14 @@ export default async function handler(request, context = {}) {
       check(await service.from('app_invites').upsert({email,role:'member',expires_at:new Date(Date.now()+14*86400000).toISOString()}));
       // Invitation membership and verified-email signup are separate: no password or bearer link is shared.
       await audit(user.id,'member_invited'); return response({message:'Access granted for 14 days. Share the registration link with this person.',url:`${origin}/signin?mode=signup`});
+    }
+    if (route === '/backend/access' && request.method === 'POST') {
+      if (profile.role !== 'admin') throw new Failure(403,'Administrator access required.');
+      try {
+        const resource=backendPath(body.path,body.method || 'GET');
+        const backend=await activeBackend(service,process.env.DASHBOARD_BRIDGE_SECRET);
+        return response(accessTicket(backend,resource,user.id));
+      } catch(error) { throw new Failure(503,error.message); }
     }
     if (route === '/backend' && request.method === 'POST') {
       if (profile.role !== 'admin') throw new Failure(403,'Administrator access required.');

@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
 from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace, evidence, validation, product_validation
-from routers import production, selling_products, sales_intelligence
+from routers import production, selling_products, sales_intelligence, dashboard
 
 _PROCESS_BOOT_ID = uuid.uuid4().hex
 _PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
@@ -67,6 +67,7 @@ app.include_router(validation.router)
 app.include_router(product_validation.router)
 app.include_router(selling_products.router)
 app.include_router(sales_intelligence.router)
+app.include_router(dashboard.router)
 
 
 async def _scheduler_watchdog() -> None:
@@ -142,11 +143,18 @@ async def startup():
     if worker:
         worker.start()
         safe_log('[startup] App-owned keyword collection started')
+    from services.dashboard_integration import configured_worker as dashboard_worker
+    app.state.dashboard_worker = dashboard_worker()
+    if app.state.dashboard_worker:
+        app.state.dashboard_worker.start()
 
 
 @app.on_event("shutdown")
 async def shutdown():
     """Gracefully stop the scheduler if running."""
+    dashboard_worker = getattr(app.state, 'dashboard_worker', None)
+    if dashboard_worker:
+        await dashboard_worker.stop()
     intelligence_worker = getattr(app.state, 'sales_intelligence_worker', None)
     if intelligence_worker:
         await intelligence_worker.stop()
@@ -193,6 +201,7 @@ def api_health():
     return {
         "status": "ok",
         "database": "connected" if db_ok else "empty",
+        "dashboard_reporting": getattr(getattr(app.state, 'dashboard_worker', None), 'state', {'enabled': False}),
         "boot_id": _PROCESS_BOOT_ID,
         "started_at": _PROCESS_STARTED_AT,
         "revision": os.environ.get("RENDER_GIT_COMMIT") or None,

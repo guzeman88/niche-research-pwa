@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { readConnection, saveConnection } from '../lib/operatorConnection'
+import { readConnection, saveConnection, accountConnectionAvailable } from '../lib/operatorConnection'
 import { sellingRequest, text, families, values, type Overview, type Detail } from '../lib/sellingProducts'
 import SellingOpportunity from '../components/selling/SellingOpportunity'
 import KeywordRightsFlag from '../components/KeywordRightsFlag'
@@ -24,14 +24,14 @@ export default function SellingProducts() {
       <div><h1 className="text-2xl font-semibold">Selling products</h1><p className="mt-3 max-w-2xl text-base leading-relaxed text-surface-200">Find commercial activity, understand what buyers need, and plan an original product that improves the offer.</p></div>
       <Link className="btn-secondary" to="/validation">Product validation</Link>
     </header>
-    <details className="my-6 border-y border-surface-600 py-4" open={!connected}>
+    {!accountConnectionAvailable() && <details className="my-6 border-y border-surface-600 py-4" open={!connected}>
       <summary className="cursor-pointer text-sm font-semibold">Private research connection</summary>
       <form className="mt-4 grid max-w-3xl gap-4 sm:grid-cols-2" onSubmit={event => {
         event.preventDefault(); try { saveConnection({ url, token }); setConnected(true); setVersion(v => v + 1); setError('') } catch (cause) { setError(String(cause)) }
       }}><label className="text-sm">Research server address<input className="input mt-2 w-full" type="url" required value={url} onChange={event => setUrl(event.target.value)} /></label>
         <label className="text-sm">Operator token · remote access only<input className="input mt-2 w-full" type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} /></label>
         <button className="btn-secondary w-fit">Connect workspace</button></form>
-    </details>
+    </details>}
     {error && <p role="alert" className="my-4 text-sm text-accent-amber">{error}</p>}
     {query.isFetching && !query.data && <div className="space-y-4 py-6" aria-busy="true" aria-label="Loading selling-product research"><div className="h-8 max-w-sm animate-pulse rounded-sm bg-surface-700" /><div className="h-32 animate-pulse rounded-sm bg-surface-800" /></div>}
     {query.error && <div role="alert" className="my-6 space-y-3"><p>{query.error.message}</p><button className="btn-secondary" onClick={() => void refresh()}>Retry connection</button></div>}
