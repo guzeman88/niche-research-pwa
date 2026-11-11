@@ -111,6 +111,10 @@ def customer_revise(instance_id:str,data:dict=Body(...)):return customer_invoke(
 def customer_produce(instance_id:str):return customer_invoke('produce',instance_id)
 
 
+@router.post('/customers/{instance_id}/cancel')
+def customer_cancel(instance_id:str):return customer_invoke('cancel',instance_id)
+
+
 @router.post('/customers/{instance_id}/review')
 def customer_review(instance_id:str,data:dict=Body(...)):return customer_invoke('review_proof',instance_id,data)
 

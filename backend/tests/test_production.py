@@ -121,6 +121,8 @@ def test_customer_routes_retain_operator_security(setup):
     assert setup.get('/api/production/customers',headers={'Origin':'https://untrusted.example'}).status_code==401
     assert setup.post('/api/production/customers',json={},headers={'Origin':'https://untrusted.example'}).status_code==401
     assert setup.post('/api/production/customers/unknown/produce',headers={'Origin':'https://untrusted.example'}).status_code==401
+    assert setup.post('/api/production/customers/unknown/cancel',headers={'Origin':'https://untrusted.example'}).status_code==401
+    assert setup.post('/api/production/customers/unknown/cancel').status_code==400
 
 
 def test_pattern_fingerprint_binds_authored_content_without_certifying_test(setup):
