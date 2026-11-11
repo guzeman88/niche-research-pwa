@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { productionRequest, productionIntakes, intakeSpec, type ProductionOverview, type ProductionSpec } from '../lib/production'
+import { productionRequest, productionIntakes, intakeSpec, type ProductionOverview, type ProductionSpec, type LaunchRecipe } from '../lib/production'
 import ProductionSpecForm from './ProductionSpecForm'
 import ProductionJobReview from './ProductionJobReview'
 import ProductionTools from './ProductionTools'
 import { sellingRequest } from '../lib/sellingProducts'
+import ProductionCustomers from './ProductionCustomers'
 
 export default function ProductionQueue() {
   const [editor, setEditor] = useState<{spec?: ProductionSpec; productId?: string} | null>(null)
@@ -14,6 +15,7 @@ export default function ProductionQueue() {
     queryFn: () => sellingRequest<ProductionSpec>(`/opportunities/${encodeURIComponent(opportunity || '')}/production-intake`), enabled: Boolean(opportunity), retry: false})
   const client = useQueryClient()
   const query = useQuery({queryKey: ['production'], queryFn: () => productionRequest<ProductionOverview>(), refetchInterval: 5000})
+  const recipes = useQuery({queryKey: ['production-launch-recipes'], queryFn: () => productionRequest<{recipes: LaunchRecipe[]}>('/launch-recipes'), retry: false})
   const refresh = () => {void query.refetch(); void client.invalidateQueries({queryKey: ['product-validation']})}
   const pause = useMutation({mutationFn: (paused: boolean) => productionRequest('/pause', {paused}), onSuccess: refresh})
   const job = query.data?.jobs.find(item => item.id === selected) || query.data?.jobs[0]
@@ -26,13 +28,15 @@ export default function ProductionQueue() {
     {query.isPending && <p className="mt-4 text-sm" role="status">Loading private production records…</p>}
     {query.error && <p className="mt-4 text-sm" role="alert">{(query.error as Error).message}</p>}
     {query.data && <>
+      {recipes.data && <details className="mt-5 border-b border-surface-600 pb-5"><summary className="cursor-pointer text-sm font-semibold">Start a birthday or wedding product</summary><p className="mt-3 max-w-prose text-sm text-surface-200">Choose a starting brief, then add your original design choices, content and actual selling facts. These briefs are unvalidated launch tests.</p><div className="mt-4 flex flex-wrap gap-3">{recipes.data.recipes.map(recipe=><button className="btn-secondary" key={recipe.id} onClick={()=>setEditor({spec:recipe.spec})}>{recipe.name}</button>)}</div></details>}
       <div className="mt-4 flex flex-wrap items-center gap-4"><span className="text-sm">{query.data.jobs.length} saved revisions · {query.data.paused ? 'Paused' : 'Enabled'}</span><button className="btn-secondary" disabled={pause.isPending} onClick={() => pause.mutate(!query.data.paused)}>{query.data.paused ? 'Resume production' : 'Pause new production jobs'}</button></div>
       <ProductionTools overview={query.data} refresh={refresh} productId={job?.product_id} />
       {!query.data.jobs.length && <p className="mt-5 max-w-prose text-sm">No production jobs yet. Start with your original content and actual product facts. Incomplete costs, provider access, or research remain visible.</p>}
       {query.data.jobs.length > 0 && <label className="mt-5 block max-w-xl text-sm">Product revision<select className="input mt-2 w-full" value={job?.id || ''} onChange={event => setSelected(event.target.value)}>{query.data.jobs.map(item => <option key={item.id} value={item.id}>{item.spec.name} · {item.status.replace(/_/g, ' ')} · {item.revision.slice(0, 8)}</option>)}</select></label>}
       {job && <ProductionJobReview key={job.id} job={job} refresh={refresh} revise={spec => setEditor({spec, productId: job.product_id})} />}
+      <ProductionCustomers jobs={query.data.jobs} />
     </>}
     {pause.error && <p role="alert" className="mt-3 text-sm">{(pause.error as Error).message}</p>}
-    {editor && <ProductionSpecForm key={editor.productId || 'new'} initial={editor.spec} productId={editor.productId} refresh={refresh} close={() => setEditor(null)} />}
+    {editor && <ProductionSpecForm key={editor.productId || editor.spec?.family || 'new'} initial={editor.spec} productId={editor.productId} refresh={refresh} close={() => setEditor(null)} />}
   </section>
 }

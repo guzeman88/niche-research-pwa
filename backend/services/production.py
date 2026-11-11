@@ -63,15 +63,50 @@ def mirror(job):
     # Generic revisioned records are already supported by the private mirror.
     previous=validation.records(job['product_id'],'project')
     spec=job['spec']
-    project={'name':spec['name'],'product_type':spec['family'],'keywords':list(dict.fromkeys([spec['keyword'],*spec['supporting_keywords']]))[:15],
+    private_v2 = spec.get('schema_version', 1) == 2
+    project={'name':spec['family'].replace('_',' ').title() if private_v2 else spec['name'],'product_type':spec['family'],'keywords':[] if private_v2 else list(dict.fromkeys([spec['keyword'],*spec['supporting_keywords']]))[:15],
              'created_at':previous[0]['payload']['created_at'] if previous else validation.stamp(),
              'source':'production_engine','production_product_id':job['product_id']}
     validation.put('project',job['product_id'],project,job['product_id'])
-    validation.put('production_job',job['product_id'],job,'production:'+job['id'])
+    # Customer/order inputs must never be mirrored with catalog specifications.
+    # V2 mirrors are deliberately allowlisted even if a caller embeds private data.
+    mirrored = ({key:job.get(key) for key in ('id','product_id','revision','status','created_at','updated_at')}
+                if private_v2 else job)
+    if private_v2:
+        mirrored['schema_version']=2
+        mirrored['family']=spec['family']
+        mirrored['private_details_omitted']=True
+    validation.put('production_job',job['product_id'],mirrored,'production:'+job['id'])
+
+
+def renderer_capabilities():
+    try:
+        from etgen_production.capabilities import registry as registered
+        return registered()
+    except ImportError:
+        return {'status':'engine_upgrade_required','families':[],
+                'message':'Install the verified product-line engine to enable these builders.'}
+
+
+def customer_store():
+    try:
+        from etgen_production.customers import CustomerStore
+    except ImportError as exc:
+        raise ValueError('Install the verified engine with private customer intake support') from exc
+    return CustomerStore(engine())
+
+
+def launch_recipes():
+    try:
+        from services.production_recipes import recipes
+    except ImportError as exc:
+        raise ValueError('Install the verified product-line engine for starter briefs') from exc
+    return {'recipes':recipes(), 'research_status':'unvalidated_operator_concept',
+            'qualification_credit':False, 'automatic_activation':False}
 
 
 def overview():
-    return {**engine().status(),'capabilities':capabilities(),
+    return {**engine().status(),'capabilities':capabilities(),'renderers':renderer_capabilities(),
             'models':{key:os.getenv(var,'') for key,var in [('text','PRODUCTION_TEXT_MODEL'),('embedding','PRODUCTION_EMBED_MODEL'),('vision','PRODUCTION_VISION_MODEL')]}}
 
 

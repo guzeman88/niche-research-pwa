@@ -44,6 +44,7 @@ try {
     'scripts/test-sales-intelligence-ui.mjs',
     'scripts/test-shop-allocations-ui.mjs',
     'scripts/test-production-ui.mjs',
+    'scripts/test-product-line-ui.mjs',
   ]) {
     const result = spawnSync(process.execPath, [script], { env, stdio: 'inherit' })
     if (result.error) throw result.error

@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { artifactBlob, downloadArtifact, productionRequest, type ProductionJob, type ProductionSpec } from '../lib/production'
+import { artifactBlob, downloadArtifact, productionRequest, physicalProduct, type ProductionJob, type ProductionSpec } from '../lib/production'
 
 const checks = ['wording', 'usefulness', 'visual_quality', 'rights', 'files', 'mockups', 'facts']
 export default function ProductionJobReview({job, refresh, revise}: {job: ProductionJob; refresh: () => void; revise: (spec: ProductionSpec) => void}) {
   const [preview, setPreview] = useState(''); const [previewError, setPreviewError] = useState('')
   const [assessment, setAssessment] = useState('')
   const artifactHash = job.result?.manifest?.artifact_fingerprint
+  const previews = job.result?.manifest?.render.previews || ['preview.png']
+  const [previewPage, setPreviewPage] = useState(0)
+  const previewName = previews[previewPage] || previews[0]
   useEffect(() => {
     let active = true; let url = ''; setPreview(''); setPreviewError('')
-    if (artifactHash) artifactBlob(job.id, 'preview.png').then(blob => {
+    if (artifactHash) artifactBlob(job.id, previewName).then(blob => {
       url = URL.createObjectURL(blob); if (active) setPreview(url); else URL.revokeObjectURL(url)
     }).catch(error => {if (active) setPreviewError(error.message)})
     return () => {active = false; if (url) URL.revokeObjectURL(url)}
-  }, [job.id, artifactHash])
+  }, [job.id, artifactHash, previewName])
   const operation = useMutation({mutationFn: ({path, body}: {path: string; body: unknown}) => productionRequest(path, body),
     onSuccess: result => {setAssessment(JSON.stringify(result, null, 2)); refresh()}})
   const run = (path: string, body: unknown = {}) => operation.mutate({path: `/jobs/${job.id}${path}`, body})
@@ -22,6 +25,7 @@ export default function ProductionJobReview({job, refresh, revise}: {job: Produc
     <div className="flex flex-wrap items-baseline gap-3"><h3 className="text-lg font-semibold">{job.spec.name}</h3><span className="text-sm text-surface-200">{job.status.replace(/_/g, ' ')}</span></div>
     <p className="mt-2 max-w-prose text-sm text-surface-200">{job.spec.purpose}</p>
     <p className="mt-2 text-xs text-surface-200">Demand: {String(job.spec.research.status || 'unvalidated operator concept')} · Manufacturing: {result?.quality?.manufacturing || 'not assessed'}</p>
+    {job.steps && job.steps.length > 0 && <details className="mt-4"><summary className="cursor-pointer text-sm">Production steps</summary><ol className="mt-3 space-y-2 text-sm">{job.steps.map((step,index)=><li key={index}>{step.stage || step.step || step.name || 'Stage'} · {step.status.replace(/_/g,' ')}{step.attempt ? ` · attempt ${step.attempt}` : ''}</li>)}</ol></details>}
     {job.error && <p role="alert" className="mt-3 text-sm">{job.error}</p>}
     <div className="mt-4 flex flex-wrap gap-3">
       <button className="btn-secondary" onClick={() => revise(job.spec)}>Revise specification</button>
@@ -33,12 +37,12 @@ export default function ProductionJobReview({job, refresh, revise}: {job: Produc
       <button className="btn-secondary mt-3" onClick={() => revise({...job.spec, purpose: concept.purpose, content: concept.content, concept_method: 'authored'})}>Review and use this concept</button>
     </div>)}</div>}
     {result?.manifest && <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <div>{preview && <img className="max-h-[32rem] w-full rounded bg-white object-contain" src={preview} alt={`Actual generated layout for ${job.spec.name}`} />}
+      <div>{previews.length > 1 && <label className="mb-3 block text-sm">Review page or sheet<select className="input mt-2 w-full" value={previewPage} onChange={event=>setPreviewPage(Number(event.target.value))}>{previews.map((name,index)=><option key={name} value={index}>Page {index+1} · {name}</option>)}</select></label>}{preview && <img className="max-h-[32rem] w-full rounded bg-white object-contain" src={preview} alt={`Actual generated layout for ${job.spec.name}, page ${previewPage+1}`} />}
         {previewError && <p role="alert">{previewError}</p>}
         <p className="mt-3 text-xs text-surface-200">{result.manifest.render.preview_kind.replace(/_/g, ' ')}. Inspect customer files before approval.</p>
         <ul className="mt-4 space-y-2">{result.manifest.files.map(file => <li key={file.name}><button className="text-sm underline underline-offset-4" onClick={() => downloadArtifact(job.id, file.name).catch(error => setPreviewError(error.message))}>Download review copy: {file.name}</button><span className="ml-2 text-xs text-surface-200">{Math.ceil(file.bytes / 1024)} KB</span></li>)}</ul>
       </div>
-      <div><h4 className="font-semibold">Actual file checks</h4><ul className="mt-3 space-y-2 text-sm">{result.quality?.checks.map(check => <li key={check.check}>{check.passed ? 'Pass' : 'Fail'} · {check.check.replace(/_/g, ' ')}</li>)}</ul>
+      <div><h4 className="font-semibold">Actual file checks</h4><ul className="mt-3 space-y-2 text-sm">{result.quality?.checks.map(check => <li key={check.check}>{check.passed === true ? 'Pass' : check.passed === false ? 'Fail' : 'Not verified'} · {check.check.replace(/_/g, ' ')}</li>)}</ul>
         <h4 className="mt-5 font-semibold">Listing readiness</h4><ul className="mt-3 space-y-2 text-sm">{result.listing?.blockers.length ? result.listing.blockers.map(item => <li key={item}>{item}</li>) : <li>Facts complete. Human review still required.</li>}</ul>
         <details className="mt-4"><summary className="cursor-pointer text-sm">Generated listing copy</summary><p className="mt-3 whitespace-pre-wrap text-sm">{result.listing?.description}</p><p className="mt-3 text-sm">Tags: {result.listing?.tags.join(', ')}</p></details>
         <div className="mt-5 flex flex-wrap gap-3"><button className="btn-secondary" disabled={operation.isPending} onClick={() => run('/assess', {vision: false})}>Run OCR assessment</button><button className="btn-secondary" disabled={operation.isPending} onClick={() => run('/assess', {vision: true})}>Run local visual critique</button></div>
@@ -55,7 +59,8 @@ export default function ProductionJobReview({job, refresh, revise}: {job: Produc
         <button className="btn-secondary" type="button" onClick={() => run('/review', {revision: job.revision, artifact_fingerprint: result.manifest!.artifact_fingerprint, decision: 'reject', note: 'Rejected after inspecting the actual files; create a revised specification.', checks: {}})}>Reject and preserve revision</button><input type="hidden" name="decision" value="approve" /></div>
     </form>}
     {['approved', 'exported'].includes(job.status) && <div className="mt-5 flex flex-wrap gap-3"><button className="btn-primary" onClick={() => run('/export')}>Export approved package</button><button className="btn-secondary" onClick={() => run('/etsy-draft')}>Create Etsy draft</button></div>}
-    {['mug', 'apparel'].includes(job.spec.family) && result?.manifest && <button className="btn-secondary mt-5" onClick={() => run('/mockups')}>Create unpublished provider mockups</button>}
+    {physicalProduct(job.spec) && result?.manifest && <button className="btn-secondary mt-5" onClick={() => run('/mockups')}>Create unpublished provider mockups</button>}
+    {result?.manifest && <details className="mt-5"><summary className="cursor-pointer text-sm">Reconcile an uncertain provider creation</summary><p className="mt-3 max-w-prose text-sm text-surface-200">Use only when an earlier create request has an uncertain receipt. The server verifies the existing draft or unpublished product before adopting its ID. This does not publish or place an order.</p><form className="mt-3 max-w-xl space-y-3" onSubmit={event=>{event.preventDefault();const fields=new FormData(event.currentTarget);const provider=String(fields.get('provider'));run(provider==='etsy' ? '/reconcile-etsy' : '/reconcile-printify',{[provider==='etsy' ? 'listing_id' : 'product_id']:fields.get('target_id')})}}><label className="block text-sm">Provider<select name="provider" className="input mt-2 w-full"><option value="etsy">Etsy draft</option><option value="printify">Unpublished Printify product</option></select></label><label className="block text-sm">Verified existing provider ID<input name="target_id" className="input mt-2 w-full" required /></label><button className="btn-secondary" disabled={operation.isPending}>Verify and adopt existing receipt</button></form></details>}
     {operation.error && <p className="mt-3 text-sm" role="alert">{(operation.error as Error).message}</p>}
     {assessment && <details className="mt-4"><summary className="cursor-pointer text-sm">Last operation result</summary><pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs">{assessment}</pre></details>}
     <details className="mt-5"><summary className="cursor-pointer text-sm">Revision and operation history</summary><p className="mt-2 break-all text-xs text-surface-200">{job.revision}</p><ul className="mt-3 space-y-2 text-xs">{job.history.map((item, i) => <li key={i}>{item.action.replace(/_/g, ' ')} · {new Date(item.created_at).toLocaleString()}</li>)}</ul></details>

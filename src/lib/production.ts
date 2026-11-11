@@ -8,13 +8,20 @@ export interface ProductionSpec {
   delivery: string; materials: string; category_id: number | null; rights_note: string; tags: string[]
   supporting_keywords: string[]; provider: Record<string, unknown>; research: Record<string, unknown>
   artwork_id: string | null; concept_method: string; artwork_method: string; image_profile: string; schema_version?: number
+  delivery_kind?: 'instant_download' | 'made_to_order_digital' | 'physical'
+  product_data?: Record<string, unknown>; creative_note?: string; instructions?: string; compatibility?: string[]
 }
+export const productFamilies = ['planner', 'worksheet', 'wall_art', 'mug', 'apparel', 'birthday_magazine', 'birthday_newspaper', 'memory_book', 'party_set', 'wedding_workbook', 'wedding_binder', 'bundle', 'tote', 'pet_portrait', 'crochet_pattern']
+export const physicalProduct = (spec: Pick<ProductionSpec, 'family' | 'delivery_kind'>) => spec.delivery_kind ? spec.delivery_kind === 'physical' : ['mug', 'apparel', 'tote'].includes(spec.family)
+export interface RendererCapability {family: string; label?: string; implemented?: boolean; outputs?: string[]; prerequisite?: string; prerequisites?: string[]; [key: string]: unknown}
+export interface LaunchRecipe {id: string; name: string; collection: string; spec: ProductionSpec}
 export interface ProductionJob {
   id: string; product_id: string; revision: string; status: string; error: string | null; spec: ProductionSpec
   history: Array<{action: string; created_at: string}>
+  steps?: Array<{stage?: string; step?: string; name?: string; status: string; attempt?: number}>
   result: null | {
-    manifest?: {artifact_fingerprint: string; files: Array<{name: string; bytes: number}>; render: {preview_kind: string}}
-    quality?: {status: string; checks: Array<{check: string; passed: boolean}>; manufacturing: string}
+    manifest?: {artifact_fingerprint: string; files: Array<{name: string; bytes: number; role?: string}>; render: {preview_kind: string; previews?: string[]; customer_files?: string[]}}
+    quality?: {status: string; checks: Array<{check: string; passed: boolean | null}>; manufacturing: string}
     listing?: {title: string; description: string; tags: string[]; blockers: string[]; demand_status: string}
     concepts?: {concepts: Array<{name: string; purpose: string; content: string[]; composition: string; differentiation: string}>}
   }
@@ -24,6 +31,7 @@ export interface ProductionOverview {
   capabilities: Record<string, {status?: string; models?: string[]} | boolean>
   models: {text: string; embedding: string; vision: string}
   profiles: Array<{id: string; enabled: boolean; spec: ProductionSpec}>
+  renderer_capabilities?: RendererCapability[]
 }
 export const productionRequest = <T,>(path = '', body?: unknown) => operatorRequest<T>(`/api/production${path}`, body)
 
