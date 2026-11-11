@@ -51,8 +51,33 @@ try{
   await workbook.getByRole('combobox',{name:/Product family/}).selectOption('pet_portrait')
   assert.equal(await workbook.getByRole('checkbox',{name:/verified the pet.s identity and likeness/}).isChecked(),false)
   assert.deepEqual(errors,[])
+  // Exercise the installed URL with a fresh session, without touching the live
+  // app. Proxy only this isolated browser context to the test servers.
+  const startup=await browser.newPage()
+  await startup.route('http://127.0.0.1:5175/**',async route=>{
+    const response=await route.fetch({url:route.request().url().replace('http://127.0.0.1:5175',origin)})
+    await route.fulfill({response})
+  })
+  await startup.route('http://127.0.0.1:18020/**',async route=>{
+    const response=await route.fetch({url:route.request().url().replace('http://127.0.0.1:18020',api)})
+    await route.fulfill({response})
+  })
+  await startup.goto('http://127.0.0.1:5175/validation')
+  await startup.getByRole('heading',{name:'Production queue',exact:true}).waitFor()
+  const connection=startup.locator('details').filter({has:startup.getByText('Research workspace connection',{exact:true})}).first()
+  assert.equal(await connection.evaluate(element=>element.open),false,'Healthy installed app hides setup automatically')
+  assert.equal(await startup.evaluate(()=>sessionStorage.getItem('etgen:operator-connection')),null,'No token or connection setup is stored')
+  await startup.reload();await startup.getByRole('heading',{name:'Production queue',exact:true}).waitFor()
+  for(const width of [320,1440]){await startup.setViewportSize({width,height:1000});assert(await startup.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await startup.screenshot({path:`work/ui-product-lines/local-startup-${width}.png`,fullPage:true})}
+  await startup.route('http://127.0.0.1:18020/**',route=>route.abort())
+  await startup.reload()
+  await startup.getByText('EtGen’s local service is unavailable.',{exact:false}).first().waitFor()
+  assert.equal(await connection.evaluate(element=>element.open),true,'Unavailable service exposes recovery controls')
   console.log('Product-line UI: seven briefs, real v2 API handoff, original-content fields, workbook controls, private-order boundary and four responsive widths passed.')
 }finally{
-  if(browser)await browser.close()
+  if(browser){
+    for(const context of browser.contexts())for(const page of context.pages())await page.unrouteAll({behavior:'wait'})
+    await browser.close()
+  }
   for(const process of [backend,preview]){if(process.pid){if(globalThis.process.platform==='win32')spawnSync('taskkill',['/PID',String(process.pid),'/T','/F'],{stdio:'ignore'});else process.kill()}}
 }

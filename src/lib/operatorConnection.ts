@@ -1,5 +1,6 @@
 const KEY = 'etgen:operator-connection'
 const LOCAL_KEY = 'etgen:local-validation-address'
+const DISCONNECTED_KEY = 'etgen:operator-disconnected'
 export interface OperatorConnection { url: string; token: string }
 
 function localValidationPage() {
@@ -18,7 +19,8 @@ export function readConnection(): OperatorConnection {
     // Account refresh still clears every operator token. Retain only an explicit
     // loopback address for the standalone local validation page, never credentials.
     const local = sessionStorage.getItem(LOCAL_KEY) || ''
-    return {url: localValidationPage() && loopbackOrigin(local) ? local : '', token: ''}
+    const installed = localValidationPage() && location.port === '5175' && sessionStorage.getItem(DISCONNECTED_KEY) !== '1'
+    return {url: localValidationPage() && loopbackOrigin(local) ? local : installed ? 'http://127.0.0.1:18020' : '', token: ''}
   }
   catch { return {url: '', token: ''} }
 }
@@ -32,13 +34,14 @@ export function saveConnection(connection: OperatorConnection) {
     throw new Error('Use HTTPS for a remote backend.')
   }
   sessionStorage.setItem(KEY, JSON.stringify({url: url.origin, token: connection.token.trim()}))
+  sessionStorage.removeItem(DISCONNECTED_KEY)
   if (localValidationPage() && loopbackOrigin(url.origin)) sessionStorage.setItem(LOCAL_KEY, url.origin)
   else sessionStorage.removeItem(LOCAL_KEY)
 }
 
 export function clearConnection(removeLocalAddress = false) {
   sessionStorage.removeItem(KEY)
-  if (removeLocalAddress) sessionStorage.removeItem(LOCAL_KEY)
+  if (removeLocalAddress) {sessionStorage.removeItem(LOCAL_KEY); sessionStorage.setItem(DISCONNECTED_KEY, '1')}
 }
 
 export function operatorHeaders(url: string): Record<string, string> {
@@ -54,6 +57,11 @@ export async function operatorRequest<T>(path: string, body?: unknown): Promise<
     headers: {'Content-Type': 'application/json', ...operatorHeaders(url)},
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(path.startsWith('/api/production') ? 120000 : 20000),
+  }).catch((error: unknown) => {
+    if (localValidationPage() && location.port === '5175' && loopbackOrigin(url)) {
+      throw new Error('EtGen’s local service is unavailable. Open EtGen from its launcher, then retry the connection.')
+    }
+    throw error
   })
   if (!response.ok) {
     const detail = await response.json().catch(() => ({})) as {detail?: unknown}
