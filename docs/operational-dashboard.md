@@ -34,6 +34,14 @@ Protected configuration, outside Git:
 - `PIPELINE_API_TOKEN` (random strong local server credential)
 - `DASHBOARD_BRIDGE_SECRET` (random32-byte base64 encryption key, also configured
   in the hosted account function environment without a VITE prefix)
+- `PIPELINE_ALLOWED_ORIGINS` when testing an authenticated preview: enumerate
+  exact approved origins alongside the production origins; do not allow arbitrary
+  preview domains. This is separate from administrator authorization.
+
+Selling discovery uses a covering metadata index to filter and rank catalog
+identities before loading the selected evidence packets. This preserves signal
+priority and pagination without sorting millions of multi-kilobyte packets.
+The additive index preserves every original packet and observation.
 
 Apply the root repository's November11 dashboard migrations first. They add
 isolated reporting tables, a narrow observation index and a newest-valid-Google

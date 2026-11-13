@@ -104,6 +104,25 @@ def test_purchase_expiry_units_reviews_and_no_rolling_sums(catalog):
     assert feed.browse()['counts']['purchase_reports'] == 1
 
 
+def test_browse_preserves_signal_priority_and_pagination(catalog):
+    for identity, hours, message, review in [
+            ('201', 0, True, False), ('202', 0, True, False),
+            ('203', 0, False, True), ('204', 0, False, False),
+            ('205', 25, True, False)]:
+        insert(packet(identity, hours=hours, message=message, review=review))
+    with closing(feed.connect()) as con, con:
+        con.execute("UPDATE candidates SET observed_at='2026-01-01T00:00:00+00:00', favorites=1")
+        con.execute("UPDATE candidates SET favorites=100 WHERE listing_id='204'")
+    first = feed.browse(limit=2)
+    second = feed.browse(page=1, limit=2)
+    third = feed.browse(page=2, limit=2)
+    assert [v['listing_id'] for v in first['items'] + second['items'] + third['items']] == [
+        '201', '202', '203', '204', '205']
+    assert first['total'] == second['total'] == third['total'] == 5
+    assert first['counts'] == {'indexed': 5, 'purchase_reports': 2, 'review_activity': 1}
+    assert [v['listing_id'] for v in feed.browse(signal='unknown')['items']] == ['203', '204', '205']
+
+
 def test_investigate_idempotent_and_updates_stale_brief(catalog):
     feed.sync_catalog()
     candidate = feed.browse('planner 1')['items'][0]

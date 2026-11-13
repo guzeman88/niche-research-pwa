@@ -54,6 +54,9 @@ def connect():
         CREATE INDEX IF NOT EXISTS candidates_due ON candidates(next_check,observed_at DESC);
         CREATE INDEX IF NOT EXISTS candidates_purchase ON candidates(purchase_at DESC);
         CREATE INDEX IF NOT EXISTS candidates_watchlist ON candidates(opportunity_id) WHERE opportunity_id IS NOT NULL;
+        -- Browse compact metadata; never sort millions of full evidence packets.
+        CREATE INDEX IF NOT EXISTS candidates_browse ON candidates(
+          observed_at DESC,favorites DESC,listing_id,purchase_until,review_at,title,keyword,shop);
         CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY,value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY,started_at TEXT NOT NULL,
           completed_at TEXT,status TEXT NOT NULL,scanned INTEGER NOT NULL DEFAULT 0,
@@ -217,16 +220,18 @@ def browse(q='', signal='all', page=0, limit=20):
         conditions.append('(purchase_until IS NULL OR purchase_until<=?)'); params.append(purchase_cutoff)
     where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
     with closing(connect()) as con:
-        total = con.execute('SELECT count(*) FROM candidates' + where, params).fetchone()[0]
-        rows = con.execute('SELECT * FROM candidates' + where + ''' ORDER BY
+        total = con.execute('SELECT count(*) FROM candidates INDEXED BY candidates_browse' + where, params).fetchone()[0]
+        identities = con.execute('SELECT listing_id FROM candidates INDEXED BY candidates_browse' + where + ''' ORDER BY
           CASE WHEN purchase_until>? THEN 0 WHEN review_at>=? THEN 1 ELSE 2 END,
           observed_at DESC, favorites DESC, listing_id LIMIT ? OFFSET ?''',
           [*params, purchase_cutoff, review_cutoff, limit, page * limit]).fetchall()
+        rows = [con.execute('SELECT * FROM candidates WHERE listing_id=?', (row[0],)).fetchone()
+                for row in identities]
         controls = dict(con.execute('SELECT name,value FROM control').fetchall())
         last = con.execute('SELECT * FROM runs ORDER BY id DESC LIMIT 1').fetchone()
         counts = dict(con.execute('''SELECT count(*) AS "indexed",
           coalesce(sum(purchase_until>?),0) purchase_reports,
-          coalesce(sum(review_at>=?),0) review_activity FROM candidates''', (purchase_cutoff, review_cutoff)).fetchone())
+          coalesce(sum(review_at>=?),0) review_activity FROM candidates INDEXED BY candidates_browse''', (purchase_cutoff, review_cutoff)).fetchone())
     items = []
     for row in rows:
         packet = json.loads(row['packet'])

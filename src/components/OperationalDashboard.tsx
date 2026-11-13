@@ -6,7 +6,7 @@ import {DashboardSkeleton} from './Skeleton'
 import useClock from '../hooks/useClock'
 
 const number=(value: number | null | undefined)=>value==null?'Unknown':value.toLocaleString()
-const name=(value:string)=>value.replace(/_/g,' ')
+const name=(value:string)=>value.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/_/g,' ')
 const date=(value:string|null|undefined)=>value && Number.isFinite(Date.parse(value))?new Date(value).toLocaleString(): 'Not recorded'
 
 export default function OperationalDashboard(){

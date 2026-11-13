@@ -19,7 +19,8 @@ export default function SellingProducts() {
   const query = useQuery({ queryKey: ['selling-products', version], queryFn: () => sellingRequest<Overview>(), enabled: connected, retry: false })
   const items = query.data?.items.filter(item => (!stage || item.stage === stage) && `${item.name} ${item.keyword} ${item.audience}`.toLowerCase().includes(search.toLowerCase())) || []
   const refresh = async () => { await query.refetch(); await client.invalidateQueries({ queryKey: ['selling-opportunity'] }) }
-  return <main className="page min-h-screen bg-surface-950 text-surface-50">
+  const Surface = accountConnectionAvailable() ? 'div' : 'main'
+  return <Surface className="page min-h-screen bg-surface-950 text-surface-50">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="text-2xl font-semibold">Selling products</h1><p className="mt-3 max-w-2xl text-base leading-relaxed text-surface-200">Find commercial activity, understand what buyers need, and plan an original product that improves the offer.</p></div>
       <Link className="btn-secondary" to="/validation">Product validation</Link>
@@ -66,5 +67,5 @@ export default function SellingProducts() {
       </div>
       </section>
     </>}
-  </main>
+  </Surface>
 }
