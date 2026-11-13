@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/',
+      '.impeccable/',
       'work/',
       'node_modules/',
       'public/data/',

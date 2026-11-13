@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings, WORKSPACE
 from routers import research, keywords, gaps, scheduler, stats, settings, stream, export, stores, store_ideas, designs, workspace, evidence, validation, product_validation
-from routers import production
+from routers import production, selling_products, sales_intelligence, dashboard
 
 _PROCESS_BOOT_ID = uuid.uuid4().hex
 _PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
@@ -65,6 +65,9 @@ app.include_router(workspace.router)
 app.include_router(evidence.router)
 app.include_router(validation.router)
 app.include_router(product_validation.router)
+app.include_router(selling_products.router)
+app.include_router(sales_intelligence.router)
+app.include_router(dashboard.router)
 
 
 async def _scheduler_watchdog() -> None:
@@ -125,6 +128,14 @@ async def startup():
     from services.app_keyword_feed import configured_worker
     worker = configured_worker()
     app.state.keyword_feed_worker = worker
+    from services.selling_discovery_worker import configured_worker as discovery_worker
+    app.state.selling_discovery_worker = discovery_worker()
+    if app.state.selling_discovery_worker:
+        app.state.selling_discovery_worker.start()
+    from services.sales_intelligence.worker import configured_worker as intelligence_worker
+    app.state.sales_intelligence_worker = intelligence_worker()
+    if app.state.sales_intelligence_worker:
+        app.state.sales_intelligence_worker.start()
     if os.environ.get('APP_PRODUCTION_ENABLED') == '1':
         from services.production import Worker
         app.state.production_worker = Worker()
@@ -132,11 +143,24 @@ async def startup():
     if worker:
         worker.start()
         safe_log('[startup] App-owned keyword collection started')
+    from services.dashboard_integration import configured_worker as dashboard_worker
+    app.state.dashboard_worker = dashboard_worker()
+    if app.state.dashboard_worker:
+        app.state.dashboard_worker.start()
 
 
 @app.on_event("shutdown")
 async def shutdown():
     """Gracefully stop the scheduler if running."""
+    dashboard_worker = getattr(app.state, 'dashboard_worker', None)
+    if dashboard_worker:
+        await dashboard_worker.stop()
+    intelligence_worker = getattr(app.state, 'sales_intelligence_worker', None)
+    if intelligence_worker:
+        await intelligence_worker.stop()
+    discovery_worker = getattr(app.state, 'selling_discovery_worker', None)
+    if discovery_worker:
+        await discovery_worker.stop()
     production_worker = getattr(app.state, 'production_worker', None)
     if production_worker:
         await production_worker.stop()
@@ -171,17 +195,18 @@ def api_health():
     from pipeline import keyword_database as kdb
     db_ok = False
     try:
-        kdb.init_db()
-        stats = kdb.get_stats()
-        db_ok = stats.get("total_seeds", 0) > 0
+        db_ok = kdb.has_seeds()
     except Exception:
         pass
     return {
         "status": "ok",
         "database": "connected" if db_ok else "empty",
+        "dashboard_reporting": getattr(getattr(app.state, 'dashboard_worker', None), 'state', {'enabled': False}),
         "boot_id": _PROCESS_BOOT_ID,
         "started_at": _PROCESS_STARTED_AT,
         "revision": os.environ.get("RENDER_GIT_COMMIT") or None,
+        "sales_intelligence": {"owner": "etgen_backend", "enabled": bool(getattr(app.state, 'sales_intelligence_worker', None)),
+            **getattr(getattr(app.state, 'sales_intelligence_worker', None), 'state', {})},
         "production_scheduler": {"owner":"etgen_backend", "enabled": bool(getattr(app.state,'production_worker',None)),
             "last_outcome": getattr(getattr(app.state,'production_worker',None),'last_outcome','disabled')},
         "collection_scheduler": dict(app.state.keyword_feed_worker.state)

@@ -92,3 +92,43 @@ def test_provider_and_profile_gates(setup,monkeypatch):
     assert setup.post('/api/production/profiles',json={'spec':data,'enabled':False,'facts_reviewed':True}).status_code==200
     assert setup.get('/api/production/training-dataset').json()['training_started'] is False
     assert setup.post('/api/production/assets',json={'base64':'invalid','license_note':'Original authored source.'}).status_code==400
+
+
+def test_launch_recipes_are_seven_unvalidated_editable_briefs(setup):
+    response=setup.get('/api/production/launch-recipes');assert response.status_code==200
+    payload=response.json();assert payload['qualification_credit'] is False
+    assert len(payload['recipes'])==7
+    assert {row['id'] for row in payload['recipes']}=={'birthday_magazine','birthday_newspaper','memory_book','party_set','wedding_workbook','wedding_binder','bundle'}
+    assert all(row['spec']['creative_note']=='' and row['spec']['price'] is None for row in payload['recipes'])
+    assert setup.get('/api/production/capabilities').status_code==200
+
+
+def test_v2_mirror_never_copies_private_spec_or_results(setup):
+    import json
+    job={'id':'private-spec-test','product_id':'test-product-private','revision':'revision-test','status':'needs_review',
+         'spec':{'schema_version':2,'family':'pet_portrait','name':'Secret customer name','keyword':'Secret customer email',
+                 'supporting_keywords':[],'product_data':{'customer_photo':'secret-photo-url','name':'Secret customer name'}},
+         'result':{'private_file':'secret-photo-url'},'error':'Secret customer name'}
+    production.mirror(job)
+    payload=product_validation.records(kind='production_job')[0]['payload']
+    assert payload['status']=='needs_review' and payload['private_details_omitted'] is True
+    assert 'spec' not in payload and 'result' not in payload and 'error' not in payload
+    exported=json.dumps(product_validation.export_ledger())
+    assert 'Secret customer' not in exported and 'secret-photo-url' not in exported
+
+
+def test_customer_routes_retain_operator_security(setup):
+    assert setup.get('/api/production/customers',headers={'Origin':'https://untrusted.example'}).status_code==401
+    assert setup.post('/api/production/customers',json={},headers={'Origin':'https://untrusted.example'}).status_code==401
+    assert setup.post('/api/production/customers/unknown/produce',headers={'Origin':'https://untrusted.example'}).status_code==401
+    assert setup.post('/api/production/customers/unknown/cancel',headers={'Origin':'https://untrusted.example'}).status_code==401
+    assert setup.post('/api/production/customers/unknown/cancel').status_code==400
+
+
+def test_pattern_fingerprint_binds_authored_content_without_certifying_test(setup):
+    data={'author':'An original maker','instructions':['A human-written instruction.'], 'materials':['Cotton yarn'], 'gauge':'Maker measured gauge'}
+    first=setup.post('/api/production/pattern-fingerprint',json={'product_data':data})
+    assert first.status_code==200 and first.json()['maker_test_verified'] is False
+    changed=setup.post('/api/production/pattern-fingerprint',json={'product_data':{**data,'gauge':'A different measured gauge'}})
+    assert changed.json()['fingerprint']!=first.json()['fingerprint']
+    assert setup.post('/api/production/pattern-fingerprint',json={'product_data':data},headers={'Origin':'https://untrusted.example'}).status_code==401

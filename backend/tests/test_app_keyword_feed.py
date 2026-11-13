@@ -31,6 +31,22 @@ def test_app_tick_uses_start_to_start_cadence_and_keeps_pause_visible(tmp_path):
     assert worker.state['last_outcome'] == 'completed'
 
 
+def test_due_supplemental_turn_precedes_native_and_failure_cannot_disable_it(tmp_path):
+    installed(tmp_path)
+    calls = []
+    async def supplemental():
+        calls.append('discovery')
+        raise ValueError('Fixture unavailable')
+    async def runner(*args):
+        calls.append('native')
+        return 'completed'
+    worker = feed.AppKeywordFeed(tmp_path, runner, lambda: 0, between_cycles=supplemental)
+    asyncio.run(worker.tick())
+    assert calls == ['discovery', 'native']
+    assert worker.state['last_outcome'] == 'completed'
+    assert worker.state['supplemental_outcome'] == 'ValueError'
+
+
 def test_concurrent_ticks_cannot_start_two_collectors(tmp_path):
     installed(tmp_path)
     calls = []

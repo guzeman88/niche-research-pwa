@@ -1,10 +1,9 @@
 import { Suspense, lazy } from 'react'
 import type { ReactNode } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import BrandLogo from './components/BrandLogo'
-import useScannerHeartbeat from './hooks/useScannerHeartbeat'
-import { AppModeProvider, useAppMode } from './lib/appMode'
+import { AppModeProvider } from './lib/appMode'
 import {RequireAccount, useAuth} from './lib/auth'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -14,6 +13,8 @@ const LaunchLab = lazy(() => import('./pages/LaunchLab'))
 const Workspace = lazy(() => import('./pages/Workspace'))
 const EvidenceOperations = lazy(() => import('./pages/EvidenceOperations'))
 const ProductValidation = lazy(() => import('./pages/ProductValidation'))
+const SellingProducts = lazy(() => import('./pages/SellingProducts'))
+const Production = lazy(() => import('./pages/Production'))
 const Account = lazy(() => import('./pages/Account'))
 const SignIn = lazy(() => import('./pages/SignIn'))
 const ConfirmAccount = lazy(() => import('./pages/ConfirmAccount'))
@@ -49,10 +50,6 @@ export default function App() {
 }
 
 function AppRoutes() {
-  const { mode } = useAppMode()
-  const auth = useAuth()
-  useScannerHeartbeat(mode === 'developer' && auth.profile?.role === 'admin')
-
   return (
     <Routes>
       <Route path="/signin" element={page(<SignIn />)} />
@@ -61,18 +58,30 @@ function AppRoutes() {
       <Route path="/privacy" element={page(<Privacy />)} />
       <Route path="/terms" element={page(<Terms />)} />
       <Route path="/auth/etsy" element={page(<EtsyAuth />)} />
-      <Route path="/validation" element={page(<ProductValidation />)} />
+      <Route path="/validation" element={<OperatorPage>{page(<ProductValidation />)}</OperatorPage>} />
+      <Route path="/selling" element={<OperatorPage>{page(<SellingProducts />)}</OperatorPage>} />
+      <Route path="/production" element={<OperatorPage>{page(<Production />)}</OperatorPage>} />
       <Route element={<RequireAccount><Layout /></RequireAccount>}>
         <Route index element={page(<Dashboard />)} />
         <Route path="/keywords" element={page(<Keywords />)} />
         <Route path="/store-generator" element={page(<StoreGenerator />)} />
-        <Route path="/launch" element={page(<LaunchLab />)} />
+        <Route path="/launch" element={<Administrator>{page(<LaunchLab />)}</Administrator>} />
         <Route path="/workspace" element={page(<Workspace />)} />
-        <Route path="/evidence" element={page(<EvidenceOperations />)} />
+        <Route path="/evidence" element={<Administrator>{page(<EvidenceOperations />)}</Administrator>} />
         <Route path="/account" element={page(<Account />)} />
         <Route path="/stores" element={page(<Stores />)} />
         <Route path="*" element={page(<NotFound />)} />
       </Route>
     </Routes>
   )
+}
+
+function OperatorPage({children}:{children:ReactNode}){
+  const standalone=['localhost','127.0.0.1','[::1]'].includes(location.hostname)
+  if(standalone)return children
+  return <RequireAccount><Administrator><Layout content={children}/></Administrator></RequireAccount>
+}
+function Administrator({children}:{children:ReactNode}){
+  const auth=useAuth()
+  return auth.profile?.role==='admin'?children:<Navigate to="/" replace/>
 }

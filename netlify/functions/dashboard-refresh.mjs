@@ -20,6 +20,11 @@ export default async function handler() {
       throw new Error('Dashboard refresh is not configured.');
     }
     const service = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, options);
+    const operational=await service.from('app_dashboard_state').select('snapshot_version,generated_at').eq('id','active').maybeSingle();
+    if(!operational.error && operational.data){
+      const stale=Date.now()-Date.parse(operational.data.generated_at)>150000;
+      return new Response(JSON.stringify({ok:!stale,owner:'etgen_backend',...operational.data,stale}),{status:stale?503:200,headers});
+    }
     const result = await service.rpc('refresh_research_dashboard_snapshot', { force_refresh: false });
     if (result.error) throw result.error;
     const snapshot = Array.isArray(result.data) ? result.data[0] : result.data;

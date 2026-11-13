@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       VITE_API_URL: ${{ vars.VITE_API_URL }}
       VITE_BACKUP_API_URLS: ${{ vars.VITE_BACKUP_API_URLS }}
@@ -40,6 +40,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - run: python -m pip install -c backend/requirements-constraints.txt -r backend/requirements.txt
+      - run: python scripts/install-production-engine.py
       - run: npm ci
       - run: npm test
       - run: npm run lint

@@ -38,7 +38,13 @@ try {
     'scripts/test-launch-ui.mjs',
     'scripts/run-validation-ui-check.mjs',
     'scripts/test-supported-keywords-ui.mjs',
+    'scripts/test-keyword-rights-ui.mjs',
+    'scripts/test-selling-products-ui.mjs',
+    'scripts/test-selling-discovery-ui.mjs',
+    'scripts/test-sales-intelligence-ui.mjs',
+    'scripts/test-shop-allocations-ui.mjs',
     'scripts/test-production-ui.mjs',
+    'scripts/test-product-line-ui.mjs',
   ]) {
     const result = spawnSync(process.execPath, [script], { env, stdio: 'inherit' })
     if (result.error) throw result.error

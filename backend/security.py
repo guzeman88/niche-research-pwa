@@ -41,6 +41,18 @@ def is_authorized(request: Request) -> bool:
     provided = request.headers.get("authorization", "")
     if key and hmac.compare_digest(provided, f"Bearer {key}"):
         return True
+    if key and provided.startswith('Bearer '):
+        try:
+            claims = jwt.decode(provided[7:], key, algorithms=['HS256'],
+                issuer='etgen-account-bridge', audience='etgen-private-api',
+                options={'require_exp': True, 'require_iat': True, 'require_sub': True})
+            if (claims.get('method') == request.method and claims.get('path') == request.url.path
+                    and 0 < claims['exp'] - claims['iat'] <= 30
+                    and claims['iat'] <= time.time() + 5):
+                request.state.account_id = claims['sub']
+                return True
+        except (JWTError, ValueError, TypeError, KeyError):
+            pass
     if provided:
         return False
     # Remote proxies/tunnels must authenticate even when their TCP peer is local.
@@ -164,16 +176,20 @@ async def authenticated_administrator(request: Request) -> bool:
 
 
 async def protect_operator_api(request: Request, call_next):
-    private_read = request.url.path.startswith(("/api/settings", "/api/scheduler", "/api/stream", "/api/stores", "/api/workspace", "/api/evidence", "/api/product-validation", "/api/production"))
+    private_read = request.url.path.startswith(("/api/dashboard", "/api/settings", "/api/scheduler", "/api/stream", "/api/stores", "/api/workspace", "/api/evidence", "/api/product-validation", "/api/production", "/api/selling-products", "/api/sales-intelligence"))
     protected = request.url.path.startswith("/api/") and (
         request.method not in {"GET", "HEAD", "OPTIONS"} or private_read
+        or os.environ.get('APP_DASHBOARD_TUNNEL_ENABLED') == '1'
     )
     if (protected and request.method != "OPTIONS" and not is_authorized(request)
             and not await github_heartbeat_authorized(request)
             and not await authenticated_administrator(request)):
         return JSONResponse({"detail": "Sign in with an active administrator account to use this action."},
                             status_code=401, headers={"WWW-Authenticate": "Bearer"})
-    return await call_next(request)
+    response = await call_next(request)
+    if protected or request.url.path.startswith(('/api/selling-products', '/api/sales-intelligence')):
+        response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 def redact_settings(value):

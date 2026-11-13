@@ -1,8 +1,9 @@
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import WorkspaceSaveStatus from './account/WorkspaceSaveStatus'
+import type {ReactNode} from 'react'
 
-export default function Layout() {
+export default function Layout({content}:{content?:ReactNode}) {
   return (
     <div className="flex h-screen overflow-hidden bg-surface-950 text-surface-50">
       {/* Desktop sidebar */}
@@ -10,9 +11,9 @@ export default function Layout() {
         <Sidebar />
       </aside>
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto pb-32 lg:pb-0">
+      <main className="flex-1 overflow-y-auto pb-48 lg:pb-0">
         <WorkspaceSaveStatus />
-        <Outlet />
+        {content || <Outlet />}
       </main>
       {/* Mobile bottom nav */}
       <nav

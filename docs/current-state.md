@@ -1,3 +1,105 @@
+# October 30, 2026 neutral shop-review counter basis
+
+New estimator captures retain API-reported shop review counts and averages under
+neutral names with `api_reported_period_unverified` basis and capture time. A
+bounded endpoint-count probe disagreed with the documented annual interpretation;
+it does not establish universal lifetime semantics. Raw caches, earlier captures
+and frozen model inputs keep their original values and legacy names. No extra
+request, model activation or runtime installation is added. See the dated
+[input-contract correction](review-rate-inputs.md). The desktop canonical handoff
+records installation and live verification; source alone is not rollout.
+
+# October 29, 2026 dated shop-review input retention
+
+This historical revision named returned shop-review context as past-year based
+on the API documentation; October 30 supersedes that unverified period label.
+It retained counts, ratings and creation timestamps; no new request, source
+scope, schedule, model activation or lifetime review-rate assumption was added.
+[Input contract](review-rate-inputs.md). The desktop canonical handoff
+records installation and live verification; this source entry alone is not rollout.
+
+# October 27, 2026 shop-counter anchored allocation
+
+The private estimate workspace now includes an experimental joint allocation lane
+anchored to actual observed shop-counter intervals, with delayed-review scenarios,
+an unobserved-product bucket, frozen estimates and guarded independent-outcome
+evaluation. A bounded twenty-small-shop public catalog pilot reuses the normal
+backend collection pass and quota. See [method and operations](shop-anchored-estimates.md).
+This is unvalidated counter allocation, not verified product purchases or ±5%
+sales accuracy. Existing review scenarios remain separate. The desktop canonical
+handoff records installation and live verification; source alone is not rollout.
+
+# October 25, 2026 collection efficiency successor
+
+The user's free-only maximization request adds batch listing details, cached
+shops, exact-ID shop review reuse, resumable paginated date windows, shared quota
+guarantees and a rotating panel. Existing keyword data, source gates, daily
+reserve, native worker ownership and unknown/unvalidated sales semantics remain.
+See [collection efficiency](collection-efficiency.md). Source alone does not
+confirm installation; the desktop CURRENT_STATE records matched app/native
+revisions, backups and dated live proof.
+
+# October 24, 2026 automatic estimator connection
+
+The source now connects scheduled permitted Etsy evidence to the existing v1
+estimator through a persistent bounded product panel. Selling → Sales intelligence
+→ Estimates shows automatic 7/30-day review scenarios, capture/collection state,
+explicit uncalibrated assumptions and unknown results. External provider feeds
+are optional comparisons. See [automatic-sales-estimates.md](automatic-sales-estimates.md).
+Source changes do not establish installation or purchase accuracy; the desktop
+handoff records the exact runtime and dated live proof.
+
+# October 17, 2026 sales intelligence successor
+
+Private `/selling` now adds a separate historical reference archive, all 24 source
+leads, protected capability/allowance checks, durable backend jobs, read-only native
+history, compatible group-weighted consensus, chart/data history, coverage,
+reference ranking, imports, frozen consensus/actual-outcome model lanes and guarded
+activation/rollback. See [sales-intelligence.md](sales-intelligence.md) for contracts,
+thresholds and acquisition limits. No external estimate provider is yet verified
+as an operational automated feed; no fitted live model or accuracy is invented.
+
+The developer mailbox contained Etsy's October 16 response: documented listing,
+image, review and shop APIs are permitted for the requested research within the
+existing limits; automated unsupported listing-page purchase messages are denied.
+Only `listing_api`, `shop_api`, `listing_reviews` are recorded in the protected
+proof. Its January 15 review date is an internal review gate, not an Etsy expiry.
+Private correspondence/account identities remain outside Git. This does not
+authorize unrelated providers' model reuse or prove recent listing orders.
+
+Exact installation, preservation and dated live results belong to the desktop
+canonical `docs/CURRENT_STATE.md`. Lower dated sections are historical.
+
+# October 16, 2026 sales model successor
+
+The private /selling workspace now includes the EtGen sales model: preserved
+purchase messages, provisional 7/30-day ranges, explicit conversion/review-delay
+assumptions, sample-scoped opportunity scores and held-out calibration. See
+[sales-model.md](sales-model.md) for the numerical contract and limits, and
+[design review](sales-model-design-review.md) for the bounded UI review.
+No collector, paid provider or schedule was added. Original evidence, source
+authenticity and model estimates remain distinct; no live accuracy is established.
+Source changes do not install the local runtime. Read the desktop repository's
+canonical CURRENT_STATE.md for exact installed revision, backups and verification.
+Older sections below describe predecessor installations, not current live state.
+
+# October 15, 2026 advisory keyword flags
+
+The user requested a simple nonblocking flag rather than a rights-clearance or
+approval system. Keywords (desktop/mobile), supported candidates and product
+preparation now show expandable **Possible rights issue** notices from a small
+local watchlist. Names such as Ted Baker and Baker Mayfield are included; generic
+professions stay unflagged. No registry search or legal finding is implied. See
+[keyword-rights-flags.md](keyword-rights-flags.md) for scope and maintenance.
+
+Installed local backend/web source is `0c97023aaa767cf373ef519ab8ed5f14354ca6c0`,
+release SHA-256 `afb415cf0d8bae1efee2d548febe52269597e96f41f184ffbfbf1f605f79eaf4`.
+Web PR 114 is a draft with passing CI. The production engine, native collector,
+private records, runtime environments and data paths were preserved; no public
+deploy occurred. Read the canonical root handoff for dated verification and both
+verified incremental encrypted backups. Later documentation commits do not change
+the installed runtime revision.
+
 # October 14, 2026 production successor
 
 The local validation app now includes a private product production queue with

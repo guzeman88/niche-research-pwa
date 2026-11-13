@@ -180,10 +180,7 @@ async function supabaseKeywords() {
     supabaseRows('keyword_latest_evidence', {
       select: 'keyword,scanned_at,opportunity_score,gap_score,trajectory,profitability_index,evidence_status,score_version,evidence_details,observed_search_volume,listing_count,sampled_listing_count,avg_price_usd', order: 'keyword.asc',
     }, Infinity, 1000),
-    supabaseRows('keyword_observations', {
-      select: 'keyword,value,observed_at', source: 'eq.google_ads_keyword_planner',
-      metric: 'eq.monthly_searches', order: 'keyword.asc,observed_at.desc',
-    }, Infinity, 1000),
+    supabaseGoogleVolumes(),
   ]);
   const collectionByKeyword = byKeyword(collectionStates);
   const attemptByKeyword = byKeyword(attempts);
@@ -230,6 +227,22 @@ async function supabaseKeywords() {
     if (a.scanned !== b.scanned) return a.scanned ? 1 : -1;
     return String(b.last_scanned_at || '').localeCompare(String(a.last_scanned_at || ''));
   });
+}
+
+async function supabaseGoogleVolumes() {
+  const rows=[]; let after=null;
+  while(true){
+    const params={select:'keyword,value,observed_at',order:'keyword.asc',limit:1000};
+    if(after!==null) params.keyword='gt.'+after;
+    const page=await supabaseFetch('app_google_keyword_volumes',params);
+    if(!Array.isArray(page)) throw new Error('Google volume export returned an invalid page.');
+    rows.push(...page);
+    if(page.length<1000)break;
+    const next=page[page.length-1].keyword;
+    if(next===after)throw new Error('Google volume export did not advance.');
+    after=next;
+  }
+  return rows;
 }
 
 async function supabaseOpportunities(limit = 500) {
@@ -397,9 +410,11 @@ function generateTestCandidates(rows) {
   const { createHash } = require('crypto');
   const files = Object.fromEntries(Object.keys(snapshots).map(name => [name,
     createHash('sha256').update(fs.readFileSync(path.join(OUT, name))).digest('hex')]));
+  const watermarks=source==='supabase' ? await supabaseFetch('research_dashboard_current',{select:'source_watermarks',limit:1}) : [];
   fs.writeFileSync(path.join(OUT, 'release.json'), JSON.stringify({
     schema_version: 1, source, pipeline_commit: process.env.PIPELINE_COMMIT || null, generated_at: new Date().toISOString(),
     commit: execFileSync('git', ['rev-parse', 'HEAD'], {cwd:path.join(__dirname,'..'),encoding:'utf8'}).trim(), files,
+    source_data_as_of:watermarks[0]?.source_watermarks?.observations_at || null,
   }, null, 2));
 })().catch(error => { console.error(error.message); process.exitCode = 1; });
 

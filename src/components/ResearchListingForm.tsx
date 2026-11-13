@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { validationRequest, values } from '../lib/productValidation'
 import type { SupportedKeyword } from '../lib/supportedKeywords'
+import KeywordRightsFlag from './KeywordRightsFlag'
 
 export default function ResearchListingForm({keyword, onSaved}: {keyword: SupportedKeyword; onSaved: (project: string) => Promise<void>}) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -14,6 +15,7 @@ export default function ResearchListingForm({keyword, onSaved}: {keyword: Suppor
     finally {setBusy(false)}
   }}>
     <h3 className="text-base font-semibold">Prepare a product for “{keyword.keyword}”</h3>
+    <KeywordRightsFlag keyword={keyword.keyword} />
     <p className="text-sm leading-relaxed text-surface-200">Enter actual product facts. The draft retains its evidence and creates a product concept for costs, relevance review and sales tracking.</p>
     <div className="grid gap-4 sm:grid-cols-2">
       <label className="text-sm">Descriptive product name<input className="input mt-2 w-full" name="product_name" maxLength={140} required /></label>

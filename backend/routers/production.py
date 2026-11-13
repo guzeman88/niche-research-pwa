@@ -25,12 +25,37 @@ def mutate(job_id,fn,*args):
     return result
 
 
+def customer_invoke(method,*args):
+    return invoke(lambda: getattr(service.customer_store(),method)(*args))
+
+
 @router.get('')
 def overview():return service.overview()
 
 
+@router.get('/capabilities')
+def capabilities():return invoke(service.renderer_capabilities)
+
+
+@router.get('/launch-recipes')
+def launch_recipes():return invoke(service.launch_recipes)
+
+
 @router.post('/jobs',status_code=201)
 def submit(data:dict=Body(...)):return invoke(service.submit,data)
+
+
+@router.post('/pattern-fingerprint')
+def pattern_fingerprint(data:dict=Body(...)):
+    try:
+        from etgen_production.builders import pattern_source_fingerprint
+    except ImportError as exc:
+        raise HTTPException(503,'Install the verified pattern publishing engine first') from exc
+    payload=data.get('product_data')
+    import json
+    if not isinstance(payload,dict) or len(json.dumps(payload))>100000:
+        raise HTTPException(400,'Supply bounded authored pattern content')
+    return {'fingerprint':invoke(pattern_source_fingerprint,payload),'maker_test_verified':False}
 
 
 @router.get('/jobs/{job_id}')
@@ -50,10 +75,58 @@ def export(job_id:str):return mutate(job_id,service.engine().export,job_id)
 def action(job_id:str,data:dict=Body(...)):return mutate(job_id,service.engine().action,job_id,data.get('action'))
 
 
-@router.get('/jobs/{job_id}/files/{name}')
+@router.get('/jobs/{job_id}/files/{name:path}')
 def file(job_id:str,name:str):
     path=invoke(service.engine().file,job_id,name)
     return FileResponse(path,filename=name,headers={'Cache-Control':'private, no-store'})
+
+
+@router.get('/customers')
+def customers():return customer_invoke('list_instances')
+
+
+@router.post('/customers',status_code=201)
+def customer_create(data:dict=Body(...)):return customer_invoke('create',data)
+
+
+@router.get('/customers/{instance_id}')
+def customer(instance_id:str):return customer_invoke('get',instance_id)
+
+
+@router.post('/customers/{instance_id}/photos')
+def customer_photo(instance_id:str,data:dict=Body(...)):
+    try:
+        raw=data.get('base64','')
+        if not isinstance(raw,str) or len(raw)>28_000_000:raise ValueError('Photo is too large')
+        value=base64.b64decode(raw,validate=True)
+    except (ValueError,TypeError) as exc:raise HTTPException(400,'Select a valid photo of at most twenty MB') from exc
+    return customer_invoke('import_photo',instance_id,value,data.get('license_note',''),data.get('kind','reference'))
+
+
+@router.post('/customers/{instance_id}/revise')
+def customer_revise(instance_id:str,data:dict=Body(...)):return customer_invoke('revise',instance_id,data)
+
+
+@router.post('/customers/{instance_id}/produce')
+def customer_produce(instance_id:str):return customer_invoke('produce',instance_id)
+
+
+@router.post('/customers/{instance_id}/cancel')
+def customer_cancel(instance_id:str):return customer_invoke('cancel',instance_id)
+
+
+@router.post('/customers/{instance_id}/review')
+def customer_review(instance_id:str,data:dict=Body(...)):return customer_invoke('review_proof',instance_id,data)
+
+
+@router.post('/customers/{instance_id}/export')
+def customer_export(instance_id:str):return customer_invoke('export',instance_id)
+
+
+@router.get('/customers/{instance_id}/files/{name:path}')
+def customer_file(instance_id:str,name:str):
+    path=customer_invoke('file',instance_id,name)
+    return FileResponse(path,filename=path.name,headers={'Cache-Control':'private, no-store'})
 
 
 @router.post('/jobs/{job_id}/assess')
@@ -124,3 +197,15 @@ def mockups(job_id:str):
 def etsy(job_id:str):
     from etgen_production.marketplace import etsy_draft
     return invoke(etsy_draft,service.engine(),job_id)
+
+
+@router.post('/jobs/{job_id}/reconcile-etsy')
+def reconcile_etsy(job_id:str,data:dict=Body(...)):
+    from etgen_production.marketplace import adopt_etsy_draft
+    return invoke(adopt_etsy_draft,service.engine(),job_id,data.get('listing_id',''))
+
+
+@router.post('/jobs/{job_id}/reconcile-printify')
+def reconcile_printify(job_id:str,data:dict=Body(...)):
+    from etgen_production.marketplace import adopt_printify_product
+    return invoke(adopt_printify_product,service.engine(),job_id,data.get('product_id',''))
