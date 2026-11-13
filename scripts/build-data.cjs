@@ -8,6 +8,7 @@ const { spawnSync } = require('child_process');
 const { collectionScanStatus, summarizeCollectionStates } = require('./collection-state.cjs');
 const { latestGoogleVolumes } = require('./google-volume.cjs');
 const { supabaseTransport } = require('./supabase-transport.cjs');
+const { readWithRetry } = require('./read-retry.cjs');
 
 let API = process.env.VITE_API_URL || '';
 const OUT = process.env.SNAPSHOT_OUTPUT_DIR || path.join(__dirname, '..', 'public', 'data');
@@ -67,6 +68,10 @@ function hasSupabaseSource() {
 }
 
 function supabaseFetch(resource, params = {}) {
+  return readWithRetry(() => supabaseFetchOnce(resource, params));
+}
+
+function supabaseFetchOnce(resource, params = {}) {
   return new Promise((resolve, reject) => {
     if (!hasSupabaseSource()) {
       reject(new Error('Supabase URL/key not configured'));
@@ -87,13 +92,17 @@ function supabaseFetch(resource, params = {}) {
       res.on('data', c => data += c);
       res.on('end', () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          reject(new Error(`Supabase ${resource} failed with ${res.statusCode}: ${data.slice(0, 200)}`));
+          const error=new Error(`Supabase ${resource} failed with ${res.statusCode}: ${data.slice(0, 200)}`);
+          error.statusCode=res.statusCode;
+          reject(error);
           return;
         }
         try { resolve(JSON.parse(data || '[]')); }
         catch(e) { reject(new Error(`Supabase JSON parse failed for ${resource}: ${data.slice(0, 200)}`)); }
       });
-    }).on('timeout', function () { this.destroy(new Error('Snapshot request timed out')); }).on('error', reject);
+    }).on('timeout', function () {
+      const error=new Error('Snapshot request timed out');error.code='ETIMEDOUT';this.destroy(error);
+    }).on('error', reject);
   });
 }
 
