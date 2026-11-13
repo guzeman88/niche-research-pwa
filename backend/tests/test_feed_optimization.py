@@ -121,6 +121,46 @@ def test_google_atomic_idempotence_unknowns_and_close_variant_volume(research):
         assert con.execute('SELECT count(*) FROM feed_google_packages').fetchone()[0] == 1
 
 
+@pytest.mark.parametrize('reverse', [False, True])
+def test_google_overlapping_unknown_variants_preserve_measured_attribution(research, reverse):
+    unknown = {'keyword': 'teacher mugs', 'monthly_searches': None, 'metadata': {}}
+    measured = {'keyword': 'teacher mug', 'monthly_searches': 0,
+                'metadata': {'close_variants': ['teacher mugs']}}
+    signals = [unknown, measured] if reverse else [measured, unknown]
+    signals += [{'keyword': 'rare mugs', 'monthly_searches': None,
+                 'metadata': {'close_variants': ['rare mug']}},
+                {'keyword': 'rare mug', 'monthly_searches': None, 'metadata': {}}]
+    payload = {'schema_version': 1, 'source': 'google_ads_keyword_planner',
+               'collected_at': datetime.now(timezone.utc).isoformat(), 'geography': 'US',
+               'requested_keywords': ['teacher mug', 'teacher mugs', 'rare mug', 'rare mugs'],
+               'signals': signals}
+    package = {'payload': payload, 'sha256': digest(payload)}
+    with research._conn() as con:
+        result = import_package(con, package)
+        assert result['measured_keywords'] == 2
+        assert con.execute("SELECT count(*) FROM keyword_observations WHERE metric='monthly_searches'").fetchone()[0] == 1
+        assert con.execute("SELECT value FROM keyword_observations WHERE metric='monthly_searches'").fetchone()[0] == 0
+        assert con.execute("SELECT status FROM provider_keyword_state WHERE keyword='teacher mugs'").fetchone()[0] == 'completed'
+        assert con.execute("SELECT status FROM provider_keyword_state WHERE keyword='rare mug'").fetchone()[0] == 'no_data'
+        assert json.loads(con.execute("SELECT payload FROM feed_import_records WHERE origin='google-packages'").fetchone()[0]) == package
+        assert import_package(con, package)['duplicate']
+
+
+def test_google_overlapping_measured_groups_still_roll_back(research):
+    payload = {'schema_version': 1, 'source': 'google_ads_keyword_planner',
+               'collected_at': datetime.now(timezone.utc).isoformat(),
+               'requested_keywords': ['teacher mug', 'teacher mugs'],
+               'signals': [{'keyword': 'teacher mug', 'monthly_searches': 100,
+                            'metadata': {'close_variants': ['teacher mugs']}},
+                           {'keyword': 'teacher mugs', 'monthly_searches': 200, 'metadata': {}}]}
+    with pytest.raises(ValueError, match='OverlappingGoogleVariantGroups'):
+        with research._conn() as con:
+            import_package(con, {'payload': payload, 'sha256': digest(payload)})
+    with research._conn() as con:
+        assert con.execute('SELECT count(*) FROM feed_google_packages').fetchone()[0] == 0
+        assert con.execute('SELECT count(*) FROM keyword_observations').fetchone()[0] == 0
+
+
 def test_marketplace_shortlist_import_is_idempotent_and_preserves_rounding(research):
     from services.feed_market import import_observation
     research.add_seed('teacher mug')

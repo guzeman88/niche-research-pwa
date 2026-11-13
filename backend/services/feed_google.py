@@ -31,9 +31,6 @@ def import_package(con, package, audit_attempts=True):
         aliases = {keyword, *metadata.get('close_variants', [])}.intersection(requested)
         if not aliases:
             raise ValueError('GoogleResultOutsideRequestedKeywords')
-        if aliases.intersection(seen_aliases):
-            raise ValueError('OverlappingGoogleVariantGroups')
-        seen_aliases.update(aliases)
         # Close variants share the same observation. Persist the returned phrase
         # once; retain alias attribution rather than duplicating its volume.
         con.execute('INSERT OR IGNORE INTO seeds VALUES(?,?,?,?)', (keyword, 'discovered', provider, timestamp))
@@ -43,6 +40,14 @@ def import_package(con, package, audit_attempts=True):
         for item in metadata.get('observations', []):
             if item.get('value') is not None:
                 numeric.append((item['metric'], item['value'], item['unit'], item.get('period_start'), item.get('period_end')))
+        # Google can return overlapping no-data variant rows. They carry no
+        # volume to duplicate and must not block an otherwise valid package.
+        # Measured groups still require exclusive alias attribution.
+        has_evidence = bool(numeric) or any(point.get('value') is not None for point in signal.get('time_series', []))
+        if has_evidence:
+            if aliases.intersection(seen_aliases):
+                raise ValueError('OverlappingGoogleVariantGroups')
+            seen_aliases.update(aliases)
         for metric, value, unit, start, end in numeric:
             if isinstance(value, bool) or not math.isfinite(float(value)) or float(value) < 0:
                 raise ValueError('InvalidGoogleMetric')
@@ -57,7 +62,7 @@ def import_package(con, package, audit_attempts=True):
             con.execute('INSERT OR IGNORE INTO keyword_trend_points(keyword,source,point_at,value,unit,geography,timeframe,collected_at,collection_run_id,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?)',
                         (keyword, provider, point['date'], point['value'], point.get('unit', 'searches'), payload.get('geography'), 'calendar_month', timestamp, run_id, json.dumps(metadata)))
         for alias in aliases:
-            matched[alias] = bool(numeric)
+            matched[alias] = matched.get(alias, False) or bool(numeric)
     for keyword in requested:
         useful = matched.get(keyword, False); status = 'completed' if useful else 'no_data'
         previous = con.execute('SELECT last_attempt_at FROM provider_keyword_state WHERE provider=? AND keyword=?', (provider, keyword)).fetchone()
