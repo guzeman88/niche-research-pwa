@@ -1,8 +1,8 @@
 {
   "repository": "https://github.com/guzeman88/etsy-pipeline.git",
-  "commit": "28246af4e16c4086ea9ad429603ffea620fe36d5",
+  "commit": "6305fa0b361a7e4752d3f66ca8d18ce127ee2a3c",
   "package": "etgen-production",
-  "version": "0.2.0",
-  "wheel": "etgen_production-0.2.0-py3-none-any.whl",
-  "sha256": "06a981832a6d4bc2c73684de0ff6a3edbc6ff7a4932a1f01224ca5595f1aad55"
+  "version": "0.2.1",
+  "wheel": "etgen_production-0.2.1-py3-none-any.whl",
+  "sha256": "1951aa1b8391337fe76fa6982ce44d4e0c43a150deb3b2c9d33e3ccc6c0a530b"
 }
