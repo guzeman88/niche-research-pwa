@@ -4,6 +4,7 @@ import {createEmailFlow, readEmailFlow, emailFlowCookie, emailRecipientAllowed, 
 import { ValidationError, hash, seal, unseal, trustedMutation, validatePassword, validateProfile, validateWorkspace, sessionCookie, readSessionCookie } from './lib/account-security.mjs';
 import { dashboardEtag, normalizeDashboardSnapshot } from './lib/dashboard-summary.mjs';
 import {activeBackend, accessTicket, backendPath} from './lib/backend-access.mjs';
+import {sellerRequest,verifiedAuthorization,callbackFields} from './lib/seller-connection.mjs';
 
 const options = {global:{fetch:(input, init = {}) => fetch(input, {...init, signal: init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000)})},auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}};
 class Failure extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -14,7 +15,7 @@ const assurance = token => { try { return JSON.parse(Buffer.from(token.split('.'
 
 export default async function handler(request, context = {}) {
   const origin = process.env.APP_ORIGIN || 'https://etgen.xyz';
-  const headers = {'Content-Type':'application/json', 'Cache-Control':'private, no-store', 'Pragma':'no-cache', 'Vary':'Cookie', 'X-Content-Type-Options':'nosniff'};
+  const headers = {'Content-Type':'application/json', 'Cache-Control':'private, no-store', 'Pragma':'no-cache', 'Vary':'Cookie', 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
   const extraCookies = [];
   const response = (data, status = 200) => {
     const combined = new Headers(headers);
@@ -269,6 +270,24 @@ export default async function handler(request, context = {}) {
       check(await service.from('app_invites').upsert({email,role:'member',expires_at:new Date(Date.now()+14*86400000).toISOString()}));
       // Invitation membership and verified-email signup are separate: no password or bearer link is shared.
       await audit(user.id,'member_invited'); return response({message:'Access granted for 14 days. Share the registration link with this person.',url:`${origin}/signin?mode=signup`});
+    }
+    if (route === '/etsy/start' && request.method === 'POST') {
+      if(profile.role!=='admin')throw new Failure(403,'Administrator access required.');
+      await limit(`etsy-connect:${user.id}`,10,900);
+      try{return response(verifiedAuthorization(await sellerRequest(service,user.id,'connect/start',{})));}
+      catch{throw new Failure(503,'The seller connection is not ready. Check the private backend and verified shop settings.');}
+    }
+    if (route === '/etsy/callback' && request.method === 'GET') {
+      if(profile.role!=='admin')throw new Failure(403,'Administrator access required.');
+      let outcome='failed';
+      try{
+        const fields=callbackFields(url);
+        if(fields){await sellerRequest(service,user.id,'connect/complete',fields);outcome='connected';await audit(user.id,'etsy_seller_connected');}
+        else outcome='cancelled';
+      }catch{/* Do not copy provider errors or callback codes into the redirect. */}
+      const combined=new Headers(headers);combined.set('Location',`${origin}/production?etsy_connection=${outcome}`);
+      for(const cookie of extraCookies)combined.append('Set-Cookie',cookie);
+      return new Response(null,{status:303,headers:combined});
     }
     if (route === '/backend/access' && request.method === 'POST') {
       if (profile.role !== 'admin') throw new Failure(403,'Administrator access required.');

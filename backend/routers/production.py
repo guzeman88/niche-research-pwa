@@ -1,7 +1,7 @@
 """Private operator APIs; no automatic publication or billable provider fallback."""
 import base64
 import httpx
-from fastapi import APIRouter,Body,Depends,HTTPException
+from fastapi import APIRouter,Body,Depends,HTTPException,Request
 from fastapi.responses import FileResponse
 from services import production as service
 
@@ -39,6 +39,72 @@ def capabilities():return invoke(service.renderer_capabilities)
 
 @router.get('/launch-recipes')
 def launch_recipes():return invoke(service.launch_recipes)
+
+
+@router.post('/cost-plan/preview')
+def preview_cost(data:dict=Body(...)):
+    from etgen_production.costs import estimate_plan
+    return invoke(estimate_plan,data.get('price'),data.get('cost_plan'))
+
+
+@router.get('/etsy/status')
+def seller_status(request:Request):
+    from services.seller_connection import configured_store,account_id,ConnectionFailure
+    try:return configured_store().status(account_id(request))
+    except ConnectionFailure as exc:return {'configured':False,'connected':False,'reason':str(exc),'automatic_publication':False}
+
+
+@router.post('/etsy/connect/start')
+def seller_start(request:Request):
+    from services.seller_connection import configured_store,account_id
+    return invoke(lambda:configured_store().start(account_id(request)))
+
+
+@router.post('/etsy/connect/complete')
+def seller_complete(request:Request,data:dict=Body(...)):
+    from services.seller_connection import configured_store,account_id
+    return invoke(lambda:configured_store().complete(account_id(request),data.get('state'),data.get('code')))
+
+
+@router.get('/etsy/orders')
+def seller_orders(request:Request):
+    from services.seller_connection import configured_store,account_id
+    from services.seller_orders import OrderCapture
+    return invoke(lambda:OrderCapture(configured_store()).summary(account_id(request)))
+
+
+@router.post('/etsy/orders/sync')
+def sync_seller_orders(request:Request):
+    from services.seller_connection import configured_store,account_id
+    from services.seller_orders import OrderCapture
+    return invoke(lambda:OrderCapture(configured_store()).sync(account_id(request)))
+
+
+@router.post('/etsy/orders/support')
+def save_support(request:Request,data:dict=Body(...)):
+    from services.seller_connection import configured_store,account_id
+    from services.seller_orders import OrderCapture
+    return invoke(lambda:OrderCapture(configured_store()).support(account_id(request),data.get('order_key'),data.get('minutes')))
+
+
+@router.post('/jobs/{job_id}/listing-images')
+def listing_images(job_id:str,data:dict=Body(...)):
+    values=data.get('images')
+    if not isinstance(values,list) or not 1<=len(values)<=10 or any(not isinstance(value,str) or len(value)>12*1024*1024 for value in values):
+        raise HTTPException(400,'Supply one to ten bounded PNG images')
+    try:images=[base64.b64decode(value,validate=True) for value in values]
+    except (ValueError,TypeError):raise HTTPException(400,'Listing images need valid base64 PNG contents') from None
+    return mutate(job_id,service.engine().attach_listing_images,job_id,images,data.get('source_artifact_fingerprint'))
+
+
+def seller_credentials(request):
+    from services.seller_connection import configured_store,account_id,ConnectionFailure
+    from etgen_production.marketplace import configured
+    try:store=configured_store()
+    except ConnectionFailure:
+        if configured()['etsy']:return None # Preserve separately reviewed legacy operator configuration.
+        raise
+    return store.credentials(account_id(request))
 
 
 @router.post('/jobs',status_code=201)
@@ -194,15 +260,28 @@ def mockups(job_id:str):
 
 
 @router.post('/jobs/{job_id}/etsy-draft')
-def etsy(job_id:str):
+def etsy(job_id:str,request:Request):
     from etgen_production.marketplace import etsy_draft
-    return invoke(etsy_draft,service.engine(),job_id)
+    # Keep the exact-product gate ahead of credential refresh/provider access.
+    engine=service.engine();job=engine.job(job_id)
+    if job['status'] not in ('approved','exported'):raise HTTPException(400,'Approve the exact listing and customer files first')
+    connection=invoke(seller_credentials,request)
+    result=invoke(etsy_draft,engine,job_id,connection=connection)
+    if connection is not None:
+        from services.seller_connection import configured_store,account_id
+        from contextlib import closing
+        store=configured_store()
+        with closing(store.connect()) as c,c:c.execute('INSERT INTO connection_events(account,event,at) VALUES(?,?,?)',
+            (account_id(request),'draft_upload_verified',store.clock()))
+    return result
 
 
 @router.post('/jobs/{job_id}/reconcile-etsy')
-def reconcile_etsy(job_id:str,data:dict=Body(...)):
+def reconcile_etsy(job_id:str,request:Request,data:dict=Body(...)):
     from etgen_production.marketplace import adopt_etsy_draft
-    return invoke(adopt_etsy_draft,service.engine(),job_id,data.get('listing_id',''))
+    engine=service.engine()
+    if engine.job(job_id)['status'] not in ('approved','exported'):raise HTTPException(400,'Approve the exact package before reconciling its draft')
+    return invoke(lambda:adopt_etsy_draft(engine,job_id,data.get('listing_id',''),connection=seller_credentials(request)))
 
 
 @router.post('/jobs/{job_id}/reconcile-printify')

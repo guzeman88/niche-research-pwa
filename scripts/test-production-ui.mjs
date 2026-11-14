@@ -35,7 +35,7 @@ try {
   await form.getByLabel('Buyer', {exact: true}).fill('People planning a workday')
   await form.getByLabel('Purpose and promised contents').fill('Printable writing areas for priorities, appointments and daily notes.')
   await form.getByLabel('Original content', {exact: false}).fill('Monday\nTuesday')
-  await form.getByLabel('Actual selling price').fill('8')
+  await form.getByLabel('Selling price').fill('8')
   await form.getByLabel('Total variable cost').fill('1')
   await form.getByLabel('Verified Etsy taxonomy ID').fill('123')
   await form.getByLabel('Delivery, processing and return terms').fill('Download the PDF. Contact seller for support.')
