@@ -84,6 +84,11 @@ try{
   assert.equal(await startup.evaluate(()=>sessionStorage.getItem('etgen:operator-connection')),null,'No token or connection setup is stored')
   await startup.reload();await startup.getByRole('heading',{name:'Production queue',exact:true}).waitFor()
   for(const width of [320,1440]){await startup.setViewportSize({width,height:1000});assert(await startup.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await startup.screenshot({path:`work/ui-product-lines/local-startup-${width}.png`,fullPage:true})}
+  await startup.unrouteAll({behavior:'wait'})
+  await startup.route('http://127.0.0.1:5175/**',async route=>{
+    const response=await route.fetch({url:route.request().url().replace('http://127.0.0.1:5175',origin)})
+    await route.fulfill({response})
+  })
   await startup.route('http://127.0.0.1:18020/**',route=>route.abort())
   await startup.reload()
   await startup.getByText('EtGen’s local service is unavailable.',{exact:false}).first().waitFor()
