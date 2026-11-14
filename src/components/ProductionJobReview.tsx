@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { artifactBlob, downloadArtifact, productionRequest, physicalProduct, type ProductionJob, type ProductionSpec } from '../lib/production'
+import {CostPlanSummary} from './ProductionCostPlan'
 
 const checks = ['wording', 'usefulness', 'visual_quality', 'rights', 'files', 'mockups', 'facts']
 export default function ProductionJobReview({job, refresh, revise}: {job: ProductionJob; refresh: () => void; revise: (spec: ProductionSpec) => void}) {
   const [preview, setPreview] = useState(''); const [previewError, setPreviewError] = useState('')
   const [assessment, setAssessment] = useState('')
   const artifactHash = job.result?.manifest?.artifact_fingerprint
-  const previews = job.result?.manifest?.render.previews || ['preview.png']
+  const previews = [...(job.result?.manifest?.render.previews || ['preview.png']),...(job.result?.listing_images||[])]
   const [previewPage, setPreviewPage] = useState(0)
   const previewName = previews[previewPage] || previews[0]
   useEffect(() => {
@@ -36,6 +37,14 @@ export default function ProductionJobReview({job, refresh, revise}: {job: Produc
       <h4 className="font-semibold">{concept.name}</h4><p className="mt-2 max-w-prose text-sm">{concept.purpose}</p><p className="mt-2 text-sm text-surface-200">{concept.composition}</p>
       <button className="btn-secondary mt-3" onClick={() => revise({...job.spec, purpose: concept.purpose, content: concept.content, concept_method: 'authored'})}>Review and use this concept</button>
     </div>)}</div>}
+    {job.status==='needs_review'&&result?.manifest&&<details className="mt-5"><summary className="cursor-pointer text-sm">Listing images for Etsy</summary><p className="mt-3 max-w-prose text-sm text-surface-200">Attach PNGs showing the actual product. They become part of the exact package you review, and are used for Etsy drafts. Customer download files stay separate.</p><label className="mt-3 block text-sm">Add listing images · up to ten PNGs<input type="file" accept="image/png" multiple className="input mt-2 w-full" disabled={operation.isPending} onChange={async event=>{
+      const files=[...(event.target.files||[])];if(!files.length)return
+      try{
+        if(files.length>10||files.some(file=>file.size>8*1024*1024))throw new Error('Choose up to ten PNGs, each at most eight MB.')
+        const images=await Promise.all(files.map(file=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('An image could not be read.'));reader.readAsDataURL(file)})))
+        run('/listing-images',{images,source_artifact_fingerprint:artifactHash})
+      }catch(error){setPreviewError(error instanceof Error?error.message:'Check the listing image files.')}
+    }}/></label></details>}
     {result?.manifest && <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div>{previews.length > 1 && <label className="mb-3 block text-sm">Review page or sheet<select className="input mt-2 w-full" value={previewPage} onChange={event=>setPreviewPage(Number(event.target.value))}>{previews.map((name,index)=><option key={name} value={index}>Page {index+1} · {name}</option>)}</select></label>}{preview && <img className="max-h-[32rem] w-full rounded bg-white object-contain" src={preview} alt={`Actual generated layout for ${job.spec.name}, page ${previewPage+1}`} />}
         {previewError && <p role="alert">{previewError}</p>}
@@ -43,7 +52,8 @@ export default function ProductionJobReview({job, refresh, revise}: {job: Produc
         <ul className="mt-4 space-y-2">{result.manifest.files.map(file => <li key={file.name}><button className="text-sm underline underline-offset-4" onClick={() => downloadArtifact(job.id, file.name).catch(error => setPreviewError(error.message))}>Download review copy: {file.name}</button><span className="ml-2 text-xs text-surface-200">{Math.ceil(file.bytes / 1024)} KB</span></li>)}</ul>
       </div>
       <div><h4 className="font-semibold">Actual file checks</h4><ul className="mt-3 space-y-2 text-sm">{result.quality?.checks.map(check => <li key={check.check}>{check.passed === true ? 'Pass' : check.passed === false ? 'Fail' : 'Not verified'} · {check.check.replace(/_/g, ' ')}</li>)}</ul>
-        <h4 className="mt-5 font-semibold">Listing readiness</h4><ul className="mt-3 space-y-2 text-sm">{result.listing?.blockers.length ? result.listing.blockers.map(item => <li key={item}>{item}</li>) : <li>Facts complete. Human review still required.</li>}</ul>
+        {result.listing?.cost_summary&&<CostPlanSummary summary={result.listing.cost_summary}/>}
+        <h4 className="mt-5 font-semibold">Listing readiness</h4><ul className="mt-3 space-y-2 text-sm">{result.listing?.blockers.length ? result.listing.blockers.map(item => <li key={item}>{item}</li>) : <li>{job.spec.cost_plan?'Planning inputs complete. Final review and cost-plan acknowledgment are still required.':'Facts complete. Human review still required.'}</li>}</ul>
         <details className="mt-4"><summary className="cursor-pointer text-sm">Generated listing copy</summary><p className="mt-3 whitespace-pre-wrap text-sm">{result.listing?.description}</p><p className="mt-3 text-sm">Tags: {result.listing?.tags.join(', ')}</p></details>
         <div className="mt-5 flex flex-wrap gap-3"><button className="btn-secondary" disabled={operation.isPending} onClick={() => run('/assess', {vision: false})}>Run OCR assessment</button><button className="btn-secondary" disabled={operation.isPending} onClick={() => run('/assess', {vision: true})}>Run local visual critique</button></div>
       </div>
@@ -51,9 +61,10 @@ export default function ProductionJobReview({job, refresh, revise}: {job: Produc
     {job.status === 'needs_review' && result?.manifest && <form className="mt-6 max-w-2xl" aria-label="Review production files" onSubmit={event => {
       event.preventDefault(); const data = new FormData(event.currentTarget)
       run('/review', {revision: job.revision, artifact_fingerprint: result.manifest!.artifact_fingerprint,
-        decision: data.get('decision'), note: data.get('note'), checks: Object.fromEntries(checks.map(key => [key, data.has(key)]))})
+        decision: data.get('decision'), note: data.get('note'), checks: Object.fromEntries([...checks, ...(job.spec.cost_plan ? ['cost_plan'] : [])].map(key => [key, data.has(key)]))})
     }}>
       <fieldset><legend className="font-semibold">Review the exact revision</legend><div className="mt-3 grid gap-3 sm:grid-cols-2">{checks.map(key => <label key={key} className="flex items-center gap-3 text-sm"><input type="checkbox" name={key} />{key.replace(/_/g, ' ')}</label>)}</div></fieldset>
+      {job.spec.cost_plan&&<label className="mt-4 flex items-start gap-3 text-sm"><input name="cost_plan" type="checkbox" required/>I accept this provisional cost plan and understand its assumptions are not measured costs or guaranteed profit.</label>}
       <label className="mt-4 block text-sm">Review note<textarea name="note" required minLength={10} className="input mt-2 w-full" /></label>
       <div className="mt-4 flex flex-wrap gap-3"><button className="btn-primary" name="decision" value="approve" disabled={operation.isPending} onClick={event => {event.currentTarget.form?.querySelector<HTMLInputElement>('input[name="decision"]')?.setAttribute('value', 'approve')}}>Approve exact package</button>
         <button className="btn-secondary" type="button" onClick={() => run('/review', {revision: job.revision, artifact_fingerprint: result.manifest!.artifact_fingerprint, decision: 'reject', note: 'Rejected after inspecting the actual files; create a revised specification.', checks: {}})}>Reject and preserve revision</button><input type="hidden" name="decision" value="approve" /></div>

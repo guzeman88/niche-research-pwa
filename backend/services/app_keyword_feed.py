@@ -105,6 +105,8 @@ class AppKeywordFeed:
                     supplemental = await self.between_cycles()
                     if isinstance(supplemental, dict) and 'review_history_counts' in supplemental:
                         self.state['review_history_counts'] = supplemental['review_history_counts']
+                    if isinstance(supplemental,dict) and 'seller_orders' in supplemental:
+                        self.state['seller_orders']=supplemental['seller_orders']
                     self.state['supplemental_outcome'] = 'checked'
                 except Exception as exc:
                     # A failed supplemental pass cannot disable native collection.
@@ -147,11 +149,18 @@ class AppKeywordFeed:
 async def between_native_cycles():
     """Give due API discovery a bounded turn before a long native cycle restarts."""
     from services import selling_discovery
+    from services.seller_orders import sync_active
+    try:
+        orders=await asyncio.to_thread(sync_active)
+        summary={'seller_orders':{'status':orders.get('status','needs_attention'),'checked_at':orders.get('checked_at')}}
+    except Exception:
+        summary={'seller_orders':{'status':'needs_attention'}}
     if selling_discovery.approval()['scopes']:
         from services.selling_discovery_worker import cycle
         result = await asyncio.to_thread(cycle)
         if 'review_history_counts' in result:
-            return {'review_history_counts': result['review_history_counts']}
+            summary['review_history_counts']=result['review_history_counts']
+    return summary
 
 
 def configured_worker():

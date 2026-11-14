@@ -411,7 +411,10 @@ def test_hook_and_background_worker_dispatch_cannot_overlap(rig, monkeypatch):
         pending = pool.submit(owner.cycle)
         assert started.wait(timeout=5)
         try:
-            assert asyncio.run(feed.between_native_cycles()) is None
+            result = asyncio.run(feed.between_native_cycles())
+            # The independent own-order hook may report connection readiness,
+            # but must not dispatch a second review-history collection pass.
+            assert 'review_history_counts' not in (result or {})
             assert len(rig.instances) == 1
         finally:
             release.set()

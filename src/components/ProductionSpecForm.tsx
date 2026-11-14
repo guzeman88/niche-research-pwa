@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { productionRequest, productFamilies, type ProductionSpec, type ProductionOverview } from '../lib/production'
+import ProductionCostPlan from './ProductionCostPlan'
+import {costPlanFromForm} from '../lib/costPlan'
 
 export default function ProductionSpecForm({initial, productId, refresh, close}: {
   initial?: ProductionSpec; productId?: string; refresh: () => void; close: () => void
@@ -11,9 +13,11 @@ export default function ProductionSpecForm({initial, productId, refresh, close}:
   const catalog = useQuery({queryKey: ['production-bundle-candidates'], queryFn: () => productionRequest<ProductionOverview>(), enabled: family === 'bundle'})
   const selling = (initial?.research?.selling_products || initial?.research || {}) as Record<string, unknown>
   const physical = ['mug', 'apparel', 'tote'].includes(family)
+  const costPlanAllowed=v2&&!physical&&family!=='pet_portrait'
   const mutation = useMutation({mutationFn: ({path, body}: {path: string; body: unknown}) => productionRequest(path, body), onSuccess: () => {refresh(); close()}})
   const [error, setError] = useState('')
   const [patternFingerprint, setPatternFingerprint] = useState('')
+  const [costPlanEnabled,setCostPlanEnabled]=useState(Boolean(initial?.cost_plan))
   async function submit(form: HTMLFormElement, recipe = false) {
     setError(''); const data = Object.fromEntries(new FormData(form)) as Record<string, string>
     try {
@@ -21,11 +25,13 @@ export default function ProductionSpecForm({initial, productId, refresh, close}:
         content: data.content.split('\n').map(x => x.trim()).filter(Boolean),
         tags: data.tags.split(',').map(x => x.trim()).filter(Boolean),
         supporting_keywords: data.supporting_keywords.split(',').map(x => x.trim()).filter(Boolean),
-        price: data.price ? Number(data.price) : null, unit_cost: data.unit_cost ? Number(data.unit_cost) : null,
+        price: data.price ? Number(data.price) : null, unit_cost: costPlanAllowed&&costPlanEnabled?null:data.unit_cost ? Number(data.unit_cost) : null,
         category_id: data.category_id ? Number(data.category_id) : null,
         provider: JSON.parse(data.provider || '{}'), artwork_id: data.artwork_id || null,
         research: selling.selling_opportunity ? {selling_opportunity: selling.selling_opportunity, evidence_fingerprint: selling.evidence_fingerprint} : {}, schema_version: v2 ? 2 : 1}
       for (const key of ['creative_note','instructions','recipient','occasion_date','page_bodies','capacity','currency','budget_rows','guest_rows','author','tester','test_notes','tested_revision','pattern_instructions','materials_list','pet_name','portrait_date','component','test_date','maker_attested','likeness_reviewed','gauge','dimensions','authored_chart']) delete (spec as Record<string, unknown>)[key]
+      for(const key of Object.keys(spec))if(key.startsWith('cp_'))delete (spec as Record<string,unknown>)[key]
+      delete spec.cost_plan
       if (v2) {
         const values = {...productData}
         if (['birthday_magazine','birthday_newspaper','memory_book','party_set','wedding_binder'].includes(family)) {
@@ -38,7 +44,7 @@ export default function ProductionSpecForm({initial, productId, refresh, close}:
           values.budget=(data.budget_rows || '').split('\n').filter(x => x.trim()).map(line => {
             const [category,item,estimated,actual,paid]=line.split('|').map(x=>x.trim())
             if (![estimated || '0',actual || '0',paid || '0'].every(x=>Number.isFinite(Number(x)))) throw new Error('Budget amounts must be numbers.')
-            return {category,item,estimated:estimated || '0',actual:actual || '0',paid:paid || '0'}
+            return {category,item,estimated:estimated || '',actual:actual || '',paid:paid || ''}
           })
           values.guests=(data.guest_rows || '').split('\n').filter(x=>x.trim()).map(line=>{const [household,name,rsvp,meal]=line.split('|').map(x=>x.trim());return {household,name,rsvp:rsvp || 'Pending',meal:meal || '',notes:''}})
         }
@@ -59,7 +65,8 @@ export default function ProductionSpecForm({initial, productId, refresh, close}:
           values.maker_test={tester:data.tester,completed_at:data.test_date,notes:data.test_notes,source_fingerprint:source.fingerprint}
         }
         Object.assign(spec,{delivery_kind:physical ? 'physical' : family==='pet_portrait' ? 'made_to_order_digital' : 'instant_download',
-          product_data:values,creative_note:data.creative_note,instructions:data.instructions,compatibility:initial?.compatibility || []})
+          product_data:values,creative_note:data.creative_note,instructions:data.instructions,compatibility:initial?.compatibility || [],
+          cost_plan:costPlanEnabled&&!physical&&family!=='pet_portrait'?costPlanFromForm(data):null})
       }
       mutation.mutate({path: recipe ? '/profiles' : '/jobs', body: recipe ? {spec, enabled: false, facts_reviewed: true} : {spec, product_id: productId}})
     } catch (problem) {setError(problem instanceof SyntaxError ? 'Provider configuration must be valid JSON.' : problem instanceof Error ? problem.message : 'Check the product fields before saving.')}
@@ -86,7 +93,7 @@ export default function ProductionSpecForm({initial, productId, refresh, close}:
     {v2 && <fieldset className="space-y-4 border-y border-surface-600 py-5"><legend className="font-semibold">Original product details</legend>
       <p className="max-w-prose text-sm text-surface-200">Describe your individual creative choices. Keep real customer names and photos in private order intake after approving the reusable product.</p>
       <label className="block text-sm">Your creative direction<textarea className="input mt-2 w-full" name="creative_note" required minLength={10} defaultValue={initial?.creative_note} /></label>
-      <label className="block text-sm">Human-authored customer instructions<textarea className="input mt-2 min-h-24 w-full" name="instructions" required minLength={10} defaultValue={initial?.instructions} /></label>
+      <label className="block text-sm">Customer instructions<textarea className="input mt-2 min-h-24 w-full" name="instructions" required minLength={10} defaultValue={initial?.instructions} /></label>
       {['birthday_magazine','birthday_newspaper','memory_book','party_set','wedding_binder'].includes(family) && <>
         <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm">Example recipient or event name<input className="input mt-2 w-full" name="recipient" defaultValue={String(productData.recipient || '')} /></label><label className="text-sm">Example occasion date<input className="input mt-2 w-full" name="occasion_date" defaultValue={String(productData.occasion_date || '')} /></label></div>
         <label className="block text-sm">Page text · separate pages with a blank line<textarea className="input mt-2 min-h-32 w-full" name="page_bodies" defaultValue={Array.isArray(productData.pages) ? productData.pages.map(page=>String((page as {body?: string}).body || '')).join('\n\n') : ''} /></label>
@@ -119,9 +126,10 @@ export default function ProductionSpecForm({initial, productId, refresh, close}:
     <label className="block text-sm">Personalized wording<input className="input mt-2 w-full" name="personalization" maxLength={80} defaultValue={initial?.personalization} /></label>
     <div className="grid gap-4 sm:grid-cols-3">
       <label className="text-sm">Actual selling price · USD<input className="input mt-2 w-full" name="price" type="number" min="0.01" step="0.01" defaultValue={initial?.price ?? ''} /></label>
-      <label className="text-sm">Total variable cost · USD<input className="input mt-2 w-full" name="unit_cost" type="number" min="0" step="0.01" defaultValue={initial?.unit_cost ?? ''} /></label>
+      <label className="text-sm">Total variable cost · USD<input className="input mt-2 w-full" name="unit_cost" disabled={costPlanAllowed&&costPlanEnabled} type="number" min="0" step="0.01" defaultValue={initial?.unit_cost ?? ''} /></label>
       <label className="text-sm">Verified Etsy taxonomy ID<input className="input mt-2 w-full" name="category_id" type="number" min="1" defaultValue={initial?.category_id ?? ''} /></label>
     </div>
+    {v2&&!physical&&family!=='pet_portrait'&&<ProductionCostPlan initial={initial?.cost_plan} enabled={costPlanEnabled} toggle={setCostPlanEnabled}/>}
     <label className="block text-sm">Delivery, processing and return terms<textarea className="input mt-2 w-full" name="delivery" defaultValue={initial?.delivery} /></label>
     <label className="block text-sm">Artwork and content rights provenance<textarea className="input mt-2 w-full" name="rights_note" defaultValue={initial?.rights_note} /></label>
     <label className="block text-sm">Thirteen curated tags · comma separated<input className="input mt-2 w-full" name="tags" defaultValue={initial?.tags.join(', ')} /></label>
