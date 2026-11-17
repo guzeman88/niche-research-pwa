@@ -56,20 +56,37 @@ page.on('pageerror', error => errors.push(error.message))
 try {
   await page.goto(origin)
   await page.getByRole('heading', { name: 'Dashboard' }).waitFor()
-  await page.getByRole('heading',{name:'Connected to active research'}).waitFor()
-  await page.getByRole('heading',{name:'Collection status'}).waitFor()
-  await page.getByText('2,617,148 saved listing identities.',{exact:true}).waitFor()
+
+  await page.getByText('Research workspace',{exact:true}).waitFor()
+
+  await page.getByRole('heading',{name:'Collection',exact:true}).waitFor()
+
+  for(const name of ['Research','Review','Launch'])await page.getByRole('heading',{name:new RegExp('^'+name)}).first().waitFor()
+
+  assert.equal(await page.locator('.summary-strip').count(),0)
+
+  await page.getByText('Etsy Marketplace Insights',{exact:true}).waitFor()
+
   for (const width of [320, 768, 1440]) {
     await page.setViewportSize({ width, height: 960 })
     await page.screenshot({ path: `work/dashboard-qa/dashboard-${width}.png`, fullPage: true })
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Dashboard overflows at ${width}`)
   }
-  await page.getByRole('button', { name: 'Refresh dashboard',exact:true }).focus()
+
+  await page.locator('.capture-header button').click()
+
+  await page.getByRole('button', { name: 'Refresh report',exact:true }).focus()
+
   await page.keyboard.press('Enter')
-  await page.getByRole('heading',{name:'Connected to active research'}).waitFor()
+
+  await page.getByText('Research workspace',{exact:true}).waitFor()
+
   summary.generated_at=new Date(Date.now()-600000).toISOString();summary.delivery.stale=true
-  await page.getByRole('button', { name: 'Refresh dashboard',exact:true }).click()
-  await page.getByRole('heading',{name:'Backend sync delayed'}).waitFor()
+
+  await page.getByRole('button', { name: 'Refresh report',exact:true }).click()
+
+  await page.getByText('Sync delayed',{exact:true}).waitFor()
+
   assert.deepEqual(staticRequests,[],'Dashboard sections must not mix old static files into active reporting')
   assert.deepEqual(errors, [])
   console.log('PASS: live dashboard status renders and refreshes at mobile, tablet, and desktop widths.')

@@ -1,0 +1,65 @@
+// Pipeline shell, real query contracts and account boundaries using explicit QA fixtures.
+// Specialist mutation workflows remain covered by the existing isolated-backend suites.
+import assert from 'node:assert/strict'
+import {mkdir,writeFile} from 'node:fs/promises'
+import {chromium} from 'playwright'
+const origin=process.env.DASHBOARD_UI_ORIGIN||'http://127.0.0.1:4173'
+const qaOrigin='http://etgen.test'
+let role='admin'
+const at=new Date().toISOString(),requests=[],errors=[],results=[]
+const project={id:'qa-project',name:'QA wedding binder',product_type:'wedding_binder',keywords:[],status:'needs_evidence',records:[],queue:[],economics:null,economics_currency:null,sync_pending:0,model_version:'qa',input_fingerprint:'qa',outcomes:{status:'not_started',periods:0,orders:null,revenue:null,net_profit:null,contribution:null,visits:null,currencies:[]}}
+const spec={name:'QA coordination binder',family:'wedding_binder',research:{},purpose:'Original QA template',price:7,unit_cost:null,tags:[]}
+const job={id:'qa-job',product_id:'qa-product',revision:'qa-revision',status:'needs_review',spec,history:[],result:{quality:{status:'passed',checks:[],manufacturing:'not_applicable'},manifest:{artifact_fingerprint:'qa-artifact',files:[],render:{preview_kind:'document',previews:['preview.png','preview-002.png'],customer_files:['customer.pdf']}},listing:{tags:[],blockers:[],description:'QA original customer content'}}}
+const summary={schema_version:2,generated_at:at,scope:'native_collection_library',stats:{total_seeds:350000,failed:0,no_data:12,stale:1,domains:[{domain:'wedding',cnt:12}]},source_watermarks:{latest_collection_at:at},feed:{status:'needs_attention',last_completed:at},delivery:{mode:'live'},connection:{private_actions_available:true,status:'connected'},sources:[{source:'etsy_open_api',keywords:12,rows:30,latest:at}],evidence:{versioned_scores:0,versioned_gaps:0},intelligence:{automatic_estimator:{estimated:1}}}
+const keyword={keyword:'wedding binder',domain:'wedding',evidence_status:'verified',listing_count:1200,sampled_listing_count:100,avg_price_usd:8,last_scanned_at:at}
+const candidate={id:'qa-candidate',name:'QA binder studio',focus:'QA printable templates',target_buyer:'QA planner buyer',validation_state:'provisional_marketplace',test_priority_score:30,score_cap:65,evidence:{keyword_count:1,median_observed_price_usd:28},keywords:[keyword],product_candidates:[],blockers:['QA demand remains unvalidated']}
+const estimate={listing_id:'qa-listing',status:'uncalibrated_review_scenario',collection:{title:'QA printable',shop:'QA shop'},review_scenarios:{'30':{value:10,low:3.33,high:50,review_count:1}},captured_at:at}
+const browser=await chromium.launch({headless:true}),context=await browser.newContext({serviceWorkers:'block'})
+await context.route(qaOrigin+'/**',async route=>{const u=new URL(route.request().url());return route.fulfill({response:await context.request.get(origin+u.pathname+u.search)})})
+await context.route('**/api/account/**',async route=>{
+ const req=route.request(),p=new URL(req.url()).pathname.replace('/api/account','')
+ if(p==='/session')return route.fulfill({json:{user:{id:'pipeline-qa',email:'qa@example.test'},profile:{id:'pipeline-qa',display_name:'QA owner',business_name:'QA studio',timezone:'America/New_York',currency:'USD',role},mfa_required:false}})
+ if(p==='/workspace')return route.fulfill({json:req.method()==='GET'?{payload:{},revision:1}:{revision:2}})
+ if(p==='/dashboard/summary')return route.fulfill({json:summary})
+ if(p==='/backend/access'){const body=req.postDataJSON();requests.push(body.path);return route.fulfill({json:{url:'https://pipeline-qa.test'+body.path,token:'qa-only-ticket'}})}
+ return route.fulfill({status:404,json:{error:'Unknown fixture account route'}})
+})
+await context.route('https://pipeline-qa.test/**',route=>{
+ const url=new URL(route.request().url()),p=url.pathname
+ if(p==='/api/health')return route.fulfill({json:{backend:'ok',collection:{interval_minutes:15}}})
+ if(p==='/api/product-validation')return route.fulfill({json:{projects:[project],pending_sync:0}})
+ if(p==='/api/product-validation/supported-keywords')return route.fulfill({json:{status:'tracking',target:3000,qualified_this_month:1,drafts:[],blockers:[],candidates:[{keyword:'wedding binder',status:'google_supported',automated_relevance:0.8,google_monthly_searches:1000,etsy_listing_count:1200,sample_count:100,human_relevance_review_required:true}]}})
+ if(p==='/api/production/launch-recipes')return route.fulfill({json:{recipes:[{id:'qa-recipe',name:'QA binder recipe',spec}]}})
+ if(p==='/api/production')return route.fulfill({json:{jobs:[job],paused:false,capabilities:{},profiles:[],models:{}}})
+ if(p.startsWith('/api/production/jobs/'))return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aH1sAAAAASUVORK5CYII=','base64')})
+ if(p==='/api/dashboard/keywords')return route.fulfill({json:{items:url.searchParams.get('q')==='missing'?[]:[keyword],total:url.searchParams.get('q')==='missing'?0:201,limit:20}})
+ if(p==='/api/sales-intelligence/estimates')return route.fulfill({json:{items:[estimate],summary:{tracked:1,estimated:1}}})
+ if(p==='/api/sales-intelligence/coverage')return route.fulfill({json:{observations:0,outcomes:0,models:0}})
+ if(p==='/api/selling-products/discovery')return route.fulfill({json:{items:[],total:0}})
+ if(p==='/api/selling-products')return route.fulfill({json:{items:[]}})
+ return route.fulfill({status:404,json:{detail:'Unknown fixture research route'}})
+})
+await context.route('**/data/test-candidates.json*',r=>r.fulfill({json:{stores:[candidate,{...candidate,id:'qa-unknown',name:'QA unknown price',evidence:{...candidate.evidence,median_observed_price_usd:null}}],generated_at:at}}))
+const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error'&&!m.text().includes('Failed to load resource'))errors.push(m.text())});await mkdir('work/pipeline-qa',{recursive:true})
+try{
+ const routes=[['/','Dashboard'],['/keywords','Keywords'],['/selling','Selling products'],['/validation','Product validation'],['/production','Production'],['/store-generator','Store Generator'],['/launch','Launch Lab'],['/stores','My Stores'],['/evidence','Evidence operations'],['/workspace','Workspace & backups'],['/account','Account & profile']]
+ for(const [path,title] of routes){
+  await page.goto(qaOrigin+path);await page.getByRole('heading',{name:title,exact:true}).first().waitFor();await page.evaluate(()=>document.fonts.ready)
+  if(path==='/store-generator')await page.getByRole('cell',{name:'$28.00',exact:true}).waitFor()
+  assert.equal(await page.locator('.summary-strip').count(),0)
+  assert.equal(await page.locator('.primary-nav a').count(),11)
+  assert.match(await page.locator('body').evaluate(()=>getComputedStyle(document.body).fontFamily),/Archivo/)
+  for(const width of [1440,1024,768,390,320]){
+   await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`${path} overflows at ${width}`)
+   if(width===1440||width===390)await page.screenshot({path:`work/pipeline-qa/${path==='/'?'dashboard':path.slice(1)}-${width}.png`,fullPage:true})
+   results.push({page:path,width})
+  }
+ }
+ await page.setViewportSize({width:1440,height:1000});await page.goto(qaOrigin+'/store-generator');await page.getByRole('button',{name:'QA binder studio',exact:true}).click();assert.match(await page.locator('.detail-panel').innerText(),/Median listing price\s+\$28.00/);await page.screenshot({path:'work/pipeline-qa/generator-currency-drawer.png',fullPage:true});await page.getByRole('button',{name:'Close details'}).click();await page.getByRole('button',{name:'QA unknown price',exact:true}).click();assert.match(await page.locator('.detail-panel').innerText(),/Median listing price\s+Unknown/);await page.screenshot({path:'work/pipeline-qa/generator-unknown-drawer.png',fullPage:true});await page.getByRole('button',{name:'Close details'}).click();await page.goto(qaOrigin+'/keywords');await page.getByRole('button',{name:'wedding binder',exact:true}).waitFor();await page.getByRole('cell',{name:'$8.00',exact:true}).waitFor();await Promise.all([page.waitForResponse(r=>decodeURIComponent(r.url()).includes('evidence=verified'),{timeout:5000}),page.getByLabel('Evidence',{exact:true}).selectOption('verified',{timeout:5000})]);await Promise.all([page.waitForResponse(r=>decodeURIComponent(r.url()).includes('sort=avg_price_usd')&&r.url().includes('direction=desc'),{timeout:5000}),page.getByLabel('Sort',{exact:true}).selectOption('avg_price_usd',{timeout:5000})]);assert(await page.locator('.page-heading').getByRole('button',{name:'Export visible rows'}).isVisible());await page.getByLabel('Evidence',{exact:true}).selectOption('');await page.getByLabel('Sort',{exact:true}).selectOption('keyword');const pagination=page.waitForResponse(r=>r.url().includes('pipeline-qa.test/api/dashboard/keywords')&&r.url().includes('offset=20'));await page.getByRole('button',{name:'Next',exact:true}).click();await pagination
+ await page.getByLabel('Search keywords',{exact:true}).fill('missing');await page.getByRole('heading',{name:'No matching records'}).waitFor();await page.getByLabel('Search keywords',{exact:true}).fill('');await page.getByRole('button',{name:'wedding binder',exact:true}).click();assert.match(await page.locator('.detail-panel').innerText(),/Verified sales\s+Unknown/);await page.getByRole('button',{name:'Close details'}).click()
+ await page.setViewportSize({width:390,height:1000});await page.locator('#mobile-pages summary').click();assert.equal(await page.locator('#mobile-pages nav a').count(),11);await page.locator('#mobile-pages nav a[href="/validation"]').click();await page.getByRole('button',{name:'QA wedding binder'}).click();assert.equal(await page.locator('.detail-panel').getAttribute('aria-modal'),'true');assert(await page.locator('.app-shell').evaluate(el=>el.inert));for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert(await page.locator('.detail-panel').evaluate(el=>el.contains(document.activeElement)))}await page.getByRole('link',{name:'Edit evidence',exact:true}).click();await page.locator('.detail-panel').waitFor({state:'detached'});assert.equal(await page.locator('.detail-panel').count(),0);assert(!(await page.locator('.app-shell').evaluate(el=>el.inert)))
+ await page.setViewportSize({width:1440,height:1000});await page.goto(qaOrigin+'/production');await page.getByRole('button',{name:'Starting recipes',exact:true}).click();await page.getByRole('button',{name:'QA binder recipe',exact:true}).waitFor();await page.getByRole('button',{name:'Close details'}).click();await page.goto(qaOrigin+'/validation');await page.getByRole('button',{name:'Add product concept',exact:true}).click();await page.locator('.detail-panel').getByLabel('Buyer keywords',{exact:false}).waitFor();await page.getByRole('button',{name:'Close details'}).click();
+ await page.setViewportSize({width:1440,height:1000});await page.goto(qaOrigin);await page.getByRole('button',{name:'Workspace',exact:true}).click();await page.getByRole('button',{name:'User',exact:true}).click();assert.equal(await page.getByRole('button',{name:'User',exact:true}).getAttribute('aria-pressed'),'true');await page.getByRole('button',{name:'Close details'}).click();const before=requests.length;await page.goto(qaOrigin+'/keywords');await page.getByRole('heading',{name:'Keywords',exact:true}).waitFor();await page.waitForTimeout(100);assert.equal(requests.length,before,'User keywords must not read the native research library')
+ role='member';await page.goto(qaOrigin+'/validation');await page.waitForURL(qaOrigin+'/');assert.equal(await page.locator('.primary-nav a').count(),6);assert.equal(await page.locator('.primary-nav a[href="/production"]').count(),0);
+ assert.deepEqual(errors,[]);console.log('PASS: Pipeline eleven-page geometry, full-library pagination, errors/empty state, mobile navigation/modal focus, navigation cleanup and user-data isolation.')
+}catch(error){await page.screenshot({path:'work/pipeline-qa/failure.png',fullPage:true});await writeFile('work/pipeline-qa/failure.txt',await page.locator('body').innerText());throw error}finally{await writeFile('work/pipeline-qa/results.json',JSON.stringify({results,requests,errors},null,2));await context.unrouteAll({behavior:'wait'});await browser.close()}

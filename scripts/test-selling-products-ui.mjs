@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // Full research-to-original-PDF workflow. All records and files are isolated fixtures.
 import assert from 'node:assert/strict'
 import {spawn, spawnSync} from 'node:child_process'
@@ -40,7 +41,9 @@ try {
   browser = await chromium.launch({headless: true}); page = await browser.newPage(); const errors = []
   page.on('pageerror', error => errors.push(error.message))
   const origin = process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'
-  await page.goto(`${origin}/selling`)
+
+  await page.goto(`${origin}/selling`); await openPipelineTools(page)
+
   await page.getByLabel('Research server address').fill(api)
   await page.getByRole('button', {name: 'Connect workspace', exact: true}).click()
   await page.getByRole('heading', {name: 'Opportunity watchlist'}).waitFor()

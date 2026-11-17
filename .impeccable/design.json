@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-17T15:20:53-05:00",
+  "title": "Design System: EtGen Pipeline",
+  "extensions": {
+    "colorMeta": {
+      "accent": {"role": "primary", "displayName": "Pale Blue"},
+      "nav": {"role": "neutral", "displayName": "Deep Charcoal"},
+      "paper": {"role": "neutral", "displayName": "Charcoal Paper"},
+      "status-ink": {"role": "secondary", "displayName": "Warm Review"}
+    },
+    "typographyMeta": {
+      "headline": {"displayName": "Page heading", "purpose": "Direct start to primary views; 22px on mobile."},
+      "label": {"displayName": "Compact metadata", "purpose": "Status pills and supporting evidence labels."}
+    },
+    "shadows": [
+      {"name": "menu", "value": "0 8px 32px hsl(220 15% 10% / .18)", "purpose": "All pages overlay."},
+      {"name": "drawer", "value": "-8px 0 32px hsl(220 16% 12% / .17)", "purpose": "Detail overlay edge."}
+    ],
+    "motion": [],
+    "breakpoints": [
+      {"name": "stage-density", "value": "1200px"},
+      {"name": "compact-canvas", "value": "1150px"},
+      {"name": "stacked-workspaces", "value": "1000px"},
+      {"name": "mobile", "value": "700px"}
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary review action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Pale-blue action with the approved compact geometry.",
+      "html": "<button class=\"ds-primary\">Review products</button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;min-height:34px;border:1px solid var(--accent,hsl(215 67% 78%));border-radius:5px;padding:7px 12px;background:var(--accent,hsl(215 67% 78%));color:var(--on-accent,hsl(220 30% 13%));font:600 12px/1.35 Archivo,sans-serif;cursor:pointer}.ds-primary:hover{filter:brightness(.92)}.ds-primary:focus-visible{outline:3px solid var(--accent,hsl(215 67% 78%));outline-offset:3px}.ds-primary:disabled{opacity:.4;cursor:default}"
+    },
+    {
+      "name": "Outlined field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Dark paper field with a distinct keyboard-focus outline.",
+      "html": "<label class=\"ds-field\">Product name<input placeholder=\"Enter a name\" /></label>",
+      "css": ".ds-field{display:grid;gap:8px;color:var(--ink,hsl(216 18% 94%));font:500 12px/1.45 Archivo,sans-serif}.ds-field input{min-width:0;border:1px solid var(--line,hsl(220 9% 30%));border-radius:5px;padding:9px 10px;background:var(--paper,hsl(220 14% 17%));color:var(--ink,hsl(216 18% 94%));font:400 13px/1.45 Archivo,sans-serif}.ds-field input::placeholder{color:var(--muted,hsl(216 10% 70%))}.ds-field input:focus-visible{outline:2px solid var(--accent,hsl(215 67% 78%));outline-offset:2px}.ds-field input:disabled{color:var(--muted,hsl(216 10% 70%));cursor:default}"
+    },
+    {
+      "name": "Review stage",
+      "kind": "card",
+      "refersTo": "stage",
+      "description": "Flat bordered stage with explicit review status and a compact secondary action.",
+      "html": "<section class=\"ds-stage\"><h2>Launch</h2><span class=\"ds-status\">Owner approval required</span><button class=\"ds-secondary\">Launch Lab</button></section>",
+      "css": ".ds-stage{display:grid;justify-items:start;gap:20px;min-width:0;border:1px solid var(--line,hsl(220 9% 30%));border-radius:7px;padding:20px;background:var(--paper,hsl(220 14% 17%));color:var(--ink,hsl(216 18% 94%));font:400 14px/1.45 Archivo,sans-serif}.ds-stage h2{margin:0;font:600 14px/1.4 Archivo,sans-serif;letter-spacing:-.01em}.ds-status{border-radius:4px;padding:3px 7px;background:var(--status-bg,hsl(32 27% 22%));color:var(--status-ink,hsl(34 53% 79%));font:500 11px/1.4 Archivo,sans-serif}.ds-secondary{min-height:34px;border:1px solid var(--line,hsl(220 9% 30%));border-radius:5px;padding:7px 12px;background:var(--paper,hsl(220 14% 17%));color:var(--ink,hsl(216 18% 94%));font:500 12px/1.35 Archivo,sans-serif;cursor:pointer}.ds-secondary:hover{background:var(--soft,hsl(220 12% 18%))}.ds-secondary:focus-visible{outline:3px solid var(--accent,hsl(215 67% 78%));outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Pipeline",
+    "overview": "The approved Pipeline reference supplies the visual identity: charcoal work surfaces, pale-blue actions, compact Archivo typography and quiet separators. Screens start with useful records, review stages or forms; information gains emphasis through placement, weight and spacing.\n\nThis record describes the implemented frontend source, not an installed or deployed runtime. Authority: [surface contract](docs/pipeline-design/SURFACE.md), [reference hashes](docs/pipeline-design/reference.json), `src/pipeline/reference.css`, `src/pipeline/production.css` and their React consumers.",
+    "keyCharacteristics": [
+      "Compact tables, clear section spacing and restrained primary actions.",
+      "Real evidence, explicit unknowns and separate research/account contexts.",
+      "Existing specialist workflows remain reachable through named tools."
+    ],
+    "rules": [
+      {"name": "The Evidence Rule", "body": "Missing, failed or stale data stays explicitly unknown or unavailable; supply samples and supporting demand never become verified sales or profit.", "section": "colors"},
+      {"name": "The Direct Start Rule", "body": "Primary views begin with a title and useful content, without opening number strips or default secondary paragraph copy. Keep necessary labels, evidence limits and errors adjacent to their relevant controls.", "section": "typography"}
+    ],
+    "dos": [
+      "Do reuse the approved Archivo, HSL roles, spacing and compact control geometry.",
+      "Do preserve keyboard access, responsive scrolling, named tools and explicit evidence states.",
+      "Do retain exact-product review and authorization gates while simplifying presentation.",
+      "Do show currency for known USD prices in rows and details, and keep unavailable prices unknown."
+    ],
+    "donts": [
+      "Don't add opening number strips or default secondary paragraphs to primary views.",
+      "Don't turn missing evidence into zero, sales, profit or approval.",
+      "Don't mix account records with native research or impose snapshot caps on live pagination."
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "reference": "User-approved Pipeline HTML, opening number strips removed",
+  "sha256": "a7684ad12f4799e5bbef17c9087202e41426e96bcc2b019e3ddd753ac0256c35",
+  "font_sha256": "8f704806dbedeaaeca334b11ec348bc3ac3a439d6431544b3afb54f534ee4967",
+  "snapshot_data_embedded": false,
+  "targets": [
+    "hosted PWA desktop/mobile",
+    "Windows installed loopback operator"
+  ],
+  "preserved": "Account roles, developer/user modes, all existing forms/queries/actions/approval gates. Research and account workspaces remain separate."
+}

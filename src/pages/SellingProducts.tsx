@@ -1,5 +1,7 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+
+import { Link, useSearchParams } from 'react-router-dom'
+
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { readConnection, saveConnection, accountConnectionAvailable } from '../lib/operatorConnection'
 import { sellingRequest, text, families, values, type Overview, type Detail } from '../lib/sellingProducts'
@@ -9,17 +11,23 @@ import SellingDiscovery from '../components/selling/SellingDiscovery'
 import SalesIntelligence from '../components/selling/SalesIntelligence'
 
 export default function SellingProducts() {
+  const [params]=useSearchParams();const requestedOpportunity=params.get('opportunity')
   const initial = readConnection()
   const [url, setUrl] = useState(initial.url || (['localhost', '127.0.0.1'].includes(location.hostname) ? 'http://127.0.0.1:18020' : ''))
   const [token, setToken] = useState(initial.token), [connected, setConnected] = useState(Boolean(initial.url))
-  const [version, setVersion] = useState(0), [selected, setSelected] = useState('')
+
+  const [version, setVersion] = useState(0), [selected, setSelected] = useState(() => new URLSearchParams(location.search).get('opportunity') || '')
+
   const [create, setCreate] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [search, setSearch] = useState(''), [stage, setStage] = useState('')
+  useEffect(()=>{if(requestedOpportunity)setSelected(requestedOpportunity)},[requestedOpportunity])
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['selling-products', version], queryFn: () => sellingRequest<Overview>(), enabled: connected, retry: false })
   const items = query.data?.items.filter(item => (!stage || item.stage === stage) && `${item.name} ${item.keyword} ${item.audience}`.toLowerCase().includes(search.toLowerCase())) || []
   const refresh = async () => { await query.refetch(); await client.invalidateQueries({ queryKey: ['selling-opportunity'] }) }
-  const Surface = accountConnectionAvailable() ? 'div' : 'main'
+
+  const Surface = 'div'
+
   return <Surface className="page min-h-screen bg-surface-950 text-surface-50">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="text-2xl font-semibold">Selling products</h1><p className="mt-3 max-w-2xl text-base leading-relaxed text-surface-200">Find commercial activity, understand what buyers need, and plan an original product that improves the offer.</p></div>

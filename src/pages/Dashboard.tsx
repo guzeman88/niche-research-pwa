@@ -1,3 +1,4 @@
+import {PipelineHome} from '../pipeline/PipelineWorkspaces'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -14,7 +15,8 @@ import type { ReportListItem } from '../types/research'
 import { useAppMode } from '../lib/appMode'
 import { getUserOpportunities, getUserStats } from '../lib/userData'
 import { dashboardFreshness, getDashboardSummary, refreshDashboardSummary } from '../lib/dashboardSummary'
-import OperationalDashboard from '../components/OperationalDashboard'
+
+
 
 interface DashboardOpportunity {
   id: string
@@ -24,8 +26,9 @@ interface DashboardOpportunity {
 }
 
 export default function Dashboard() {
-  const {isUserMode}=useAppMode()
-  return isUserMode ? <ImportedDashboard/> : <OperationalDashboard/>
+
+  return <PipelineHome userWorkspace={<ImportedDashboard/>}/>
+
 }
 
 function ImportedDashboard() {

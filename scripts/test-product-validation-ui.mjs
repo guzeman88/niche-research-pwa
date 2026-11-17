@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // Exercise the real forms against an isolated backend ledger; no marketplace writes.
 import assert from 'node:assert/strict'
 import {mkdir} from 'node:fs/promises'
@@ -14,7 +15,7 @@ const errors = []
 page.on('pageerror', error => errors.push(error.message))
 const today = new Date().toISOString().slice(0, 10)
 try {
-  await page.goto(`${origin}/validation`)
+  await page.goto(`${origin}/validation`); await openPipelineTools(page)
   await page.getByLabel('Research server address').fill(api)
   await page.getByRole('button', {name: 'Connect workspace'}).click()
   await page.getByLabel('Product concept', {exact: true}).first().fill('QA teacher tote')
@@ -22,7 +23,7 @@ try {
   await page.getByLabel('Buyer keywords').fill('teacher tote')
   await page.getByRole('button', {name: 'Create validation queue'}).click()
   await page.getByRole('heading', {name: 'QA teacher tote', exact: true}).waitFor()
-  await page.reload()
+  await page.reload(); await openPipelineTools(page)
   await page.getByRole('heading', {name: 'QA teacher tote', exact: true}).waitFor()
   await page.getByLabel('Period start', {exact: true}).fill(today)
   await page.getByLabel('Period end', {exact: true}).fill(today)

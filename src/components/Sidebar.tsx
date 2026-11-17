@@ -1,155 +1,41 @@
-import { Link, NavLink } from 'react-router-dom'
-import Icon from './Icon'
-import type { IconName } from './Icon'
-import { useAppMode, type AppMode } from '../lib/appMode'
-import BrandLogo from './BrandLogo'
-import {useAuth} from '../lib/auth'
 import {useQuery} from '@tanstack/react-query'
-import {getDashboardSummary} from '../lib/dashboardSummary'
-import useClock from '../hooks/useClock'
+import {productionRequest} from '../lib/production'
+import type {ProductionOverview} from '../lib/production'
+import {validationRequest} from '../lib/productValidation'
+import type {ValidationOverview} from '../lib/productValidation'
+import {readConnection} from '../lib/operatorConnection'
+import {usePipelineDrawer} from '../pipeline/drawerContext'
 
-const NAV_ITEMS: { to: string; label: string; shortLabel?: string; icon: IconName; adminOnly?: boolean }[] = [
-  { to: '/', label: 'Dashboard', icon: 'home' },
-  { to: '/keywords', label: 'Keywords', icon: 'search' },
-  { to: '/selling', label: 'Selling products', shortLabel: 'Selling', icon: 'trending-up', adminOnly: true },
-  { to: '/validation', label: 'Product validation', shortLabel: 'Validate', icon: 'search', adminOnly: true },
-  { to: '/production', label: 'Production', icon: 'package', adminOnly: true },
-  { to: '/store-generator', label: 'Store Generator', shortLabel: 'Generator', icon: 'layers' },
-  { to: '/launch', label: 'Launch Lab', shortLabel: 'Launch', icon: 'target', adminOnly: true },
-  { to: '/stores', label: 'My Stores', icon: 'package' },
-]
+import {NavLink,Link,useLocation} from 'react-router-dom'
 
-export default function Sidebar({ mobile = false }: { mobile?: boolean }) {
-  const { mode, setMode } = useAppMode()
-  const auth = useAuth()
-  const currentTime=useClock()
-  const report=useQuery({queryKey:['dashboard-summary'],queryFn:getDashboardSummary,enabled:auth.profile?.role==='admin' && mode==='developer',staleTime:30000,refetchInterval:60000})
-  const statusOk=report.data?.schema_version===2 && currentTime-Date.parse(report.data.generated_at)<150000
-  const statusText=mode==='user'?'Account workspace':statusOk?'Research sync connected':report.data?'Research sync delayed':'Checking research sync'
-  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || auth.profile?.role === 'admin')
+import {useAuth} from '../lib/auth'
 
-  if (mobile) {
-    return (
-      <div className="p-1.5">
-        <div className="flex items-center gap-2"><div className="flex-1">{auth.profile?.role === 'admin' && <ModeSwitch mode={mode} onModeChange={setMode} compact />}</div>
-          {auth.profile?.role === 'admin' && <Link to="/evidence" className="text-xs text-surface-100 px-2 py-2">Evidence</Link>}<Link to="/workspace" className="text-xs text-surface-100 px-2 py-2">Backups</Link><Link to="/account" className="text-xs text-surface-100 px-2 py-2">Account</Link></div>
-        <div className={`mt-1 grid gap-1 ${visibleItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
-          {visibleItems.map(({ to, label, shortLabel, icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                `group relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1.5 py-2 text-[10px] font-semibold leading-none transition-all duration-200 focus:outline-hidden focus:ring-2 focus:ring-primary-400/45 ${
-                  isActive
-                    ? 'bg-surface-700/80 text-surface-50 shadow-[0_10px_22px_rgba(7,10,14,0.24),inset_0_1px_0_rgba(255,255,255,0.06)]'
-                    : 'text-surface-300 hover:bg-surface-800/70 hover:text-surface-100'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <span
-                    className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-200 ${
-                      isActive
-                        ? 'bg-primary-400/18 text-primary-100 ring-1 ring-primary-300/25'
-                        : 'text-surface-300 group-hover:text-surface-100'
-                    }`}
-                  >
-                    <Icon name={icon} size={17} />
-                  </span>
-                  <span className="max-w-full truncate">{shortLabel || label}</span>
-                  {isActive && (
-                    <span className="absolute -bottom-1 h-0.5 w-6 rounded-full bg-primary-200 shadow-[0_0_10px_rgba(136,192,208,0.55)]" />
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
-        </div>
-      </div>
-    )
-  }
+import {useAppMode} from '../lib/appMode'
 
-  return (
-    <div className="flex flex-col h-full p-4">
-      <div className="mb-7 rounded-lg border border-surface-600/60 bg-surface-800/70 p-3">
-        <BrandLogo subtitle="Research console" />
-      </div>
+import {PipelineIcon,Facts} from '../pipeline/PipelineUI'
 
-      <div className="mb-5">
-        {auth.profile?.role === 'admin' && <ModeSwitch mode={mode} onModeChange={setMode} />}
-      </div>
+const items=[['/','Dashboard','grid'],['/keywords','Keywords','search'],['/selling','Selling products','chart'],['/validation','Product validation','check'],['/production','Production','box'],['/store-generator','Store Generator','layers'],['/launch','Launch Lab','file'],['/stores','My Stores','box'],['/evidence','Evidence','chart'],['/workspace','Workspace & backups','layers'],['/account','Account & profile','account']] as const
 
-      <nav className="flex-1 space-y-1">
-        {visibleItems.map(({ to, label, icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-semibold transition-all duration-150 ${
-                isActive
-                  ? 'text-white bg-primary-400/15 border border-primary-400/25 shadow-[inset_3px_0_0_rgba(111,150,200,0.95)]'
-                  : 'text-surface-300 hover:text-surface-50 hover:bg-surface-800/70'
-              }`
-            }
-          >
-            <Icon name={icon} size={18} />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
+const privatePages=['/selling','/validation','/production','/launch','/evidence']
 
-      {auth.profile?.role === 'admin' && <Link to="/evidence" className="text-sm text-surface-100 px-3 py-3">Evidence operations</Link>}
-      <Link to="/workspace" className="text-sm text-surface-100 px-3 py-3">Workspace & backups</Link>
-      <Link to="/account" className="text-sm text-surface-100 px-3 py-3">Account & profile</Link>
-      <div className="pt-4 border-t border-surface-600/60">
-        <div className="flex items-center gap-2 rounded-lg border border-surface-600/55 bg-surface-800/55 px-3 py-2 text-[11px]">
-          <span className={`w-2 h-2 rounded-full ${statusOk ? 'bg-emerald-400 shadow-[0_0_6px_#a3be8c]' : 'bg-red-400'}`} />
-          <span className="text-surface-300 font-medium">
-            {statusText}
-          </span>
-        </div>
-      </div>
-    </div>
-  )
+export default function Sidebar({local=false}:{local?:boolean}){
+
+ const auth=useAuth(),open=usePipelineDrawer(),location=useLocation()
+
+ const {isUserMode}=useAppMode(),enabled=Boolean(readConnection().url)&&(local||auth.profile?.role==='admin'&&!isUserMode)
+ const projects=useQuery({queryKey:['product-validation',0],queryFn:()=>validationRequest<ValidationOverview>(),enabled,staleTime:30000,refetchInterval:60000,retry:false})
+ const production=useQuery({queryKey:['production'],queryFn:()=>productionRequest<ProductionOverview>(),enabled,staleTime:30000,refetchInterval:60000,retry:false})
+ const badge=(path:string)=>enabled&&path==='/validation'&&Array.isArray(projects.data?.projects)?<span className="count">{projects.data!.projects.length}</span>:enabled&&path==='/production'&&Array.isArray(production.data?.jobs)?<span className="count">{new Set(production.data!.jobs.map(j=>j.product_id)).size}</span>:null
+ const visible=items.filter(([path])=>local||auth.profile?.role==='admin'||!privatePages.includes(path))
+
+ const links=()=>visible.map(([path,label,icon])=>local&&!['/selling','/validation','/production'].includes(path)?<a key={path} href={'https://etgen.xyz'+path}><PipelineIcon name={icon}/><span>{label}</span></a>:<NavLink key={path} to={path} end={path==='/'} onClick={()=>document.querySelector<HTMLDetailsElement>('#mobile-pages')?.removeAttribute('open')}><PipelineIcon name={icon}/><span>{label}</span>{badge(path)}</NavLink>)
+
+ return <><Link className="brand" to={local?'/validation':'/'}>EtGen</Link><nav className="primary-nav" aria-label="EtGen pages">{links()}</nav><div className="sidebar-tools"><button className="snapshot-button" onClick={()=>open('Workspace',<WorkspaceInfo local={local}/>)}>Workspace</button><details id="mobile-pages" className="pages mobile-pages" key={location.pathname}><summary>All pages</summary><nav aria-label="Mobile EtGen pages">{links()}</nav></details></div></>
+
 }
 
-function ModeSwitch({
-  mode,
-  onModeChange,
-  compact = false,
-}: {
-  mode: AppMode
-  onModeChange: (mode: AppMode) => void
-  compact?: boolean
-}) {
-  const options: Array<{ value: AppMode; label: string; icon: IconName }> = [
-    { value: 'developer', label: compact ? 'Dev' : 'Developer', icon: 'database' },
-    { value: 'user', label: 'User', icon: 'users' },
-  ]
-  return (
-    <div className={`grid grid-cols-2 gap-1 rounded-lg border border-surface-600/60 bg-surface-950/35 p-1 ${compact ? '' : 'shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'}`}>
-      {options.map((option) => {
-        const active = mode === option.value
-        return (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={active}
-            onClick={() => onModeChange(option.value)}
-            className={`inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 text-[11px] font-extrabold transition-all duration-150 focus:outline-hidden focus:ring-2 focus:ring-primary-400/40 ${
-              active
-                ? 'bg-primary-400/18 text-primary-100 ring-1 ring-primary-300/25'
-                : 'text-surface-300 hover:bg-surface-800/70 hover:text-surface-100'
-            }`}
-          >
-            <Icon name={option.icon} size={13} />
-            {option.label}
-          </button>
-        )
-      })}
-    </div>
-  )
+
+function WorkspaceInfo({local}:{local:boolean}){
+ const auth=useAuth(),{mode,setMode}=useAppMode()
+ return <><Facts rows={[["Scope",local?'Local research':mode==='developer'?'Active research':'Account records'],["Access",local?'Local operator':auth.profile?.role==='admin'?'Administrator':'Member']]}/>{!local&&auth.profile?.role==='admin'&&<div className="drawer-actions"><button className="button" aria-pressed={mode==='developer'} onClick={()=>setMode('developer')}>Developer</button><button className="button" aria-pressed={mode==='user'} onClick={()=>setMode('user')}>User</button></div>}</>
 }

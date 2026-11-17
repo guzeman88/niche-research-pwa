@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // Isolated real API: starting briefs, v2 authoring, privacy and responsive UI.
 import assert from 'node:assert/strict'
 import {spawn, spawnSync} from 'node:child_process'
@@ -20,8 +21,11 @@ const preview=spawn(process.execPath,['node_modules/vite/bin/vite.js','preview',
 let browser
 try{
   for(const url of [`${api}/api/health`,origin]){let ready=false;for(let attempt=0;attempt<60;attempt++){try{if((await fetch(url)).ok){ready=true;break}}catch{}await delay(500)}assert(ready,`server ready: ${url}`)}
-  browser=await chromium.launch({headless:true});const page=await browser.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message))
-  await page.goto(`${origin}/validation`)
+
+  browser=await chromium.launch({headless:true});const page=await browser.newPage({serviceWorkers:'block'});const errors=[];page.on('pageerror',error=>errors.push(error.message))
+
+  await page.goto(`${origin}/validation`); await openPipelineTools(page)
+
   await page.getByLabel('Research server address').fill(api);await page.getByRole('button',{name:'Connect workspace',exact:true}).click()
   await page.getByText('Start a birthday or wedding product',{exact:true}).click()
   for(const name of ['Birthday magazine','Milestone birthday newspaper','Photo memory book','Coordinated birthday party set','Wedding budget and guest workbook','Wedding-day coordination binder','Complete wedding planning suite'])assert.equal(await page.getByRole('button',{name,exact:true}).count(),1)
@@ -68,35 +72,42 @@ try{
   assert.deepEqual(errors,[])
   // Exercise the installed URL with a fresh session, without touching the live
   // app. Proxy only this isolated browser context to the test servers.
-  const startup=await browser.newPage()
+
+  const startup=await browser.newPage({serviceWorkers:'block'})
+  let localServiceAvailable=true
+
   await startup.route('http://127.0.0.1:5175/**',async route=>{
     const response=await route.fetch({url:route.request().url().replace('http://127.0.0.1:5175',origin)})
     await route.fulfill({response})
   })
   await startup.route('http://127.0.0.1:18020/**',async route=>{
+    if(!localServiceAvailable)return route.abort()
     const response=await route.fetch({url:route.request().url().replace('http://127.0.0.1:18020',api)})
     await route.fulfill({response})
   })
-  await startup.goto('http://127.0.0.1:5175/validation')
+
+  await startup.goto('http://127.0.0.1:5175/validation'); await openPipelineTools(startup)
+
   await startup.getByRole('heading',{name:'Production queue',exact:true}).waitFor()
-  const connection=startup.locator('details').filter({has:startup.getByText('Research workspace connection',{exact:true})}).first()
+
+  const connection=startup.getByText('Research workspace connection',{exact:true}).locator('..')
+
   assert.equal(await connection.evaluate(element=>element.open),false,'Healthy installed app hides setup automatically')
   assert.equal(await startup.evaluate(()=>sessionStorage.getItem('etgen:operator-connection')),null,'No token or connection setup is stored')
-  await startup.reload();await startup.getByRole('heading',{name:'Production queue',exact:true}).waitFor()
+
+  await startup.reload(); await openPipelineTools(startup);await startup.getByRole('heading',{name:'Production queue',exact:true}).waitFor()
+
   for(const width of [320,1440]){await startup.setViewportSize({width,height:1000});assert(await startup.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await startup.screenshot({path:`work/ui-product-lines/local-startup-${width}.png`,fullPage:true})}
-  await startup.unrouteAll({behavior:'wait'})
-  await startup.route('http://127.0.0.1:5175/**',async route=>{
-    const response=await route.fetch({url:route.request().url().replace('http://127.0.0.1:5175',origin)})
-    await route.fulfill({response})
-  })
-  await startup.route('http://127.0.0.1:18020/**',route=>route.abort())
-  await startup.reload()
+  localServiceAvailable=false
+  await startup.reload(); await openPipelineTools(startup)
+
   await startup.getByText('EtGen’s local service is unavailable.',{exact:false}).first().waitFor()
   assert.equal(await connection.evaluate(element=>element.open),true,'Unavailable service exposes recovery controls')
   console.log('Product-line UI: seven briefs, real v2 API handoff, original-content fields, workbook controls, private-order boundary and four responsive widths passed.')
 }finally{
   if(browser){
-    for(const context of browser.contexts())for(const page of context.pages())await page.unrouteAll({behavior:'wait'})
+    // Navigation/closing can cancel a proxied poll after every assertion passed.
+    for(const context of browser.contexts())for(const page of context.pages())await page.unrouteAll({behavior:'ignoreErrors'})
     await browser.close()
   }
   for(const process of [backend,preview]){if(process.pid){if(globalThis.process.platform==='win32')spawnSync('taskkill',['/PID',String(process.pid),'/T','/F'],{stdio:'ignore'});else process.kill()}}

@@ -9,6 +9,8 @@ import { installChunkRecovery } from './chunkRecovery'
 import { registerPwaUpdates } from './pwa'
 import './index.css'
 
+import './pipeline/reference.css'
+import './pipeline/production.css'
 if (window.location.hostname === 'etgen.netlify.app') {
   const officialUrl = new URL(window.location.href)
   officialUrl.hostname = 'etgen.xyz'

@@ -40,11 +40,13 @@ export function saveConnection(connection: OperatorConnection) {
   sessionStorage.removeItem(DISCONNECTED_KEY)
   if (localValidationPage() && loopbackOrigin(url.origin)) sessionStorage.setItem(LOCAL_KEY, url.origin)
   else sessionStorage.removeItem(LOCAL_KEY)
+  if(typeof window!=='undefined'&&typeof window.dispatchEvent==='function')window.dispatchEvent(new Event('etgen:connection-updated'))
 }
 
 export function clearConnection(removeLocalAddress = false) {
   sessionStorage.removeItem(KEY)
   if (removeLocalAddress) {sessionStorage.removeItem(LOCAL_KEY); sessionStorage.setItem(DISCONNECTED_KEY, '1')}
+  if(typeof window!=='undefined'&&typeof window.dispatchEvent==='function')window.dispatchEvent(new Event('etgen:connection-updated'))
 }
 
 export function operatorHeaders(url: string): Record<string, string> {
@@ -81,5 +83,7 @@ export async function operatorRequest<T>(path: string, body?: unknown): Promise<
     throw new Error(response.status === 401 ? 'The backend rejected the connection. Check your operator token.'
       : typeof detail.detail === 'string' ? detail.detail : `Backend request failed (${response.status}).`)
   }
-  return response.json() as Promise<T>
+  const result = await response.json() as T
+  if(body!==undefined&&typeof window!=='undefined'&&typeof window.dispatchEvent==='function')window.dispatchEvent(new CustomEvent('etgen:research-updated',{detail:path}))
+  return result
 }

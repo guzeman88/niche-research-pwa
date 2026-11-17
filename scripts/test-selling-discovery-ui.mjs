@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // End-to-end discovery using isolated fixtures. No live ledger or Etsy requests.
 import assert from 'node:assert/strict'
 import {spawn, spawnSync} from 'node:child_process'
@@ -47,7 +48,7 @@ try {
   assert(ready, log)
   browser = await chromium.launch({headless: true}); page = await browser.newPage(); const errors = []
   page.on('pageerror', error => errors.push(error.message))
-  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/selling`)
+  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/selling`); await openPipelineTools(page)
   await page.getByLabel('Research server address').fill(api)
   await page.getByRole('button', {name: 'Connect workspace', exact: true}).click()
   await page.getByText('25 indexed listings', {exact: false}).waitFor()

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Icon from '../components/Icon'
 import type { IconName } from '../components/Icon'
@@ -55,7 +55,9 @@ export default function LaunchLab() {
   const auth = useAuth()
   const queryClient = useQueryClient()
   const [workflows, setWorkflows] = useState<LaunchWorkflow[]>(() => listLaunchWorkflows())
-  const [activeId, setActiveId] = useState(() => workflows[0]?.id || '')
+  const [params]=useSearchParams();const requestedWorkflow=params.get('workflow')
+  const [activeId, setActiveId] = useState(() => requestedWorkflow || workflows[0]?.id || '')
+  useEffect(()=>{if(requestedWorkflow)setActiveId(requestedWorkflow)},[requestedWorkflow])
   const active = workflows.find((workflow) => workflow.id === activeId) || null
   const [activeStage, setActiveStage] = useState<LaunchStageId>('keyword')
   const [keywordDraft, setKeywordDraft] = useState('')
