@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // Browser regression for provisional candidate rendering. Account boundaries
 // are mocked; candidate data is generated from explicit test-only inputs.
 import assert from 'node:assert/strict'
@@ -42,8 +43,11 @@ await context.route('**/api/account/**', async route => {
 })
 
 try {
-  await page.goto(`${origin}/store-generator`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-  await page.getByRole('heading', { name: 'Store Idea Generator' }).waitFor()
+
+  await page.goto(`${origin}/store-generator`, { waitUntil: 'domcontentloaded', timeout: 60_000 }); await openPipelineTools(page)
+
+  await page.getByRole('heading', { name: 'Store Generator', exact:true }).waitFor()
+
   await page.getByRole('heading', { name: 'Ranked experiments, not promised winners' }).waitFor()
   await page.getByText(firstCandidate.name, { exact: true }).first().waitFor()
   for (const width of [320, 768, 1440]) {

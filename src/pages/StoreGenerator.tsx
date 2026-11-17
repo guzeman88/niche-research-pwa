@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { createStore, getProfitableStoreIdeas, getTestCandidatePortfolio } from '../lib/api'
 import type { TestStoreCandidate } from '../lib/api'
 import Icon from '../components/Icon'
@@ -13,11 +13,13 @@ import { getUserStoreIdeas } from '../lib/userData'
 const COLORS = ['#6f96c8', '#a9c88f', '#f0cf89', '#c29ad4', '#c86f7a', '#7f9fc6']
 
 export default function StoreGenerator() {
+  const [params]=useSearchParams();const requestedCandidate=params.get('candidate')
   const queryClient = useQueryClient()
   const { mode, isUserMode, userDataVersion } = useAppMode()
   const [savedConcepts, setSavedConcepts] = useState<Set<string>>(() => new Set())
   const [saveError, setSaveError] = useState<string>('')
-  const [expandedConceptId, setExpandedConceptId] = useState<string | null>(null)
+  const [expandedConceptId, setExpandedConceptId] = useState<string | null>(()=>requestedCandidate)
+  useEffect(()=>{if(requestedCandidate)setExpandedConceptId(requestedCandidate)},[requestedCandidate])
   const [expandedKeywordIds, setExpandedKeywordIds] = useState<Set<string>>(() => new Set())
 
   const {

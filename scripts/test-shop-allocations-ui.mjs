@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // Synthetic UI contract fixtures only. No live backend, account or provider use.
 import assert from 'node:assert/strict'
 import {mkdir, writeFile} from 'node:fs/promises'
@@ -46,7 +47,7 @@ await page.route(`${api}/api/**`, async route => {
   return route.fulfill({contentType: 'application/json', headers, body: JSON.stringify(data)})
 })
 const open = async () => {
-  await page.goto(`${origin}/selling`)
+  await page.goto(`${origin}/selling`); await openPipelineTools(page)
   await page.getByRole('heading', {name: 'Selling products', exact: true}).waitFor()
   const address = page.getByLabel('Research server address', {exact: true})
   await address.waitFor({state: 'attached'})

@@ -90,6 +90,46 @@ def test_keyword_search_and_paging_cover_the_full_library(tmp_path,monkeypatch):
         assert client.get('/api/dashboard/keywords',params={'q':'%'}).json()['total']==0
 
 
+def test_keyword_evidence_and_numeric_sort_precede_full_library_paging(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from pipeline import keyword_database as kdb
+    from routers import dashboard
+    path = tmp_path / 'filtered.sqlite'
+    monkeypatch.setattr(kdb, 'DB_PATH', path)
+    kdb.init_db()
+    with sqlite3.connect(path) as db:
+        db.executemany('INSERT INTO seeds(keyword,domain,source,added_at) VALUES(?,?,?,?)',
+            [(f'early {i:05}', 'fixture', 'test', '2026-11-17') for i in range(15010)] +
+            [('zulu many listings', 'fixture', 'test', '2026-11-17'),
+             ('zulu high price', 'fixture', 'test', '2026-11-17'),
+             ('zulu failed reading', 'fixture', 'test', '2026-11-17')])
+        db.executemany('INSERT INTO keyword_collection_state\n            (keyword,last_collected_at,evidence_status,listing_count,sampled_listing_count,avg_price_usd,sources_json,updated_at)\n            VALUES(?,?,?,?,?,?,?,?)', [
+            ('zulu many listings', '2026-11-17', 'verified', 9000, 100, 5.0, '[]', '2026-11-17'),
+            ('zulu high price', '2026-11-17', 'verified', 10, 10, 90.0, '[]', '2026-11-17'),
+            ('zulu failed reading', '2026-11-17', 'failed', 99999, 1, 999.0, '[]', '2026-11-17')])
+    monkeypatch.setattr(dashboard, 'native_database', lambda: path)
+    app = FastAPI()
+    app.include_router(dashboard.router)
+    before = path.read_bytes()
+    with TestClient(app) as client:
+        first = client.get('/api/dashboard/keywords', params={
+            'evidence': 'verified', 'sort': 'listing_count', 'direction': 'desc', 'limit': 1}).json()
+        assert first['total'] == 2
+        assert first['items'][0]['keyword'] == 'zulu many listings'
+        second = client.get('/api/dashboard/keywords', params={
+            'evidence': 'verified', 'sort': 'listing_count', 'direction': 'desc', 'limit': 1, 'offset': 1}).json()
+        assert second['items'][0]['keyword'] == 'zulu high price'
+        price = client.get('/api/dashboard/keywords', params={
+            'evidence': 'verified', 'sort': 'avg_price_usd', 'direction': 'desc', 'limit': 1}).json()
+        assert price['items'][0]['avg_price_usd'] == 90
+        unverified = client.get('/api/dashboard/keywords', params={'evidence': 'unverified', 'limit': 1}).json()
+        assert unverified['total'] == 15010
+        assert unverified['items'][0]['listing_count'] is None
+        assert client.get('/api/dashboard/keywords', params={'evidence': "verified;DELETE"}).status_code == 422
+    assert path.read_bytes() == before, 'Filtering and sorting must not mutate the research library'
+
+
 def test_connector_mode_protects_even_research_gets(monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

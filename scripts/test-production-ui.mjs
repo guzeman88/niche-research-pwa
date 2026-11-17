@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // Real private API/worker/files; isolated data and no live marketplace providers.
 import assert from 'node:assert/strict'
 import {spawn, spawnSync} from 'node:child_process'
@@ -24,7 +25,9 @@ try {
   assert(ready)
   browser = await chromium.launch({headless: true}); const page = await browser.newPage(); const errors = []
   page.on('pageerror', error => errors.push(error.message))
-  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/validation`)
+
+  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/validation`); await openPipelineTools(page)
+
   await page.getByLabel('Research server address').fill(api)
   await page.getByRole('button', {name: 'Connect workspace', exact: true}).click()
   await page.getByRole('heading', {name: 'Production queue', exact: true}).waitFor()

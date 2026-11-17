@@ -89,8 +89,10 @@ export default function Stores() {
   const { data: rawStores, isLoading, isError } = useQuery<StoreItem[]>({ queryKey: ['stores'], queryFn: getStores })
   const { data: designProviders } = useQuery<DesignProviderInfo[]>({ queryKey: ['design-providers'], queryFn: getDesignProviders })
   const stores = useMemo(() => (rawStores || []).filter((store) => storeMatchesMode(store, mode)), [rawStores, mode])
+  const requestedStore=searchParams.get('store')
   const requestedTab = searchParams.get('tab')
   const [selected, setSelected] = useState<string>(() => searchParams.get('store') || '')
+  useEffect(()=>{if(requestedStore)setSelected(requestedStore)},[requestedStore])
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => (
     requestedTab === 'products' || requestedTab === 'listings' ? requestedTab : 'dashboard'
   ))

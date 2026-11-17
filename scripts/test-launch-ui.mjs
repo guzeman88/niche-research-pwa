@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // Browser regression test for the evidence-to-product workflow. No live account,
 // provider, or marketplace mutation is used; every network boundary is mocked.
 import assert from 'node:assert/strict'
@@ -78,7 +79,9 @@ await context.route('**/api/keywords/search**', route => route.fulfill({ json: [
 }] }))
 
 try {
-  await page.goto(`${origin}/launch`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+
+  await page.goto(`${origin}/launch`, { waitUntil: 'domcontentloaded', timeout: 60_000 }); await openPipelineTools(page)
+
   await page.getByRole('heading', { name: 'Launch Lab' }).waitFor()
   for (const width of [320, 768, 1440]) {
     await page.setViewportSize({ width, height: 960 })
@@ -100,7 +103,9 @@ try {
   await page.getByRole('button', { name: 'Approve product development' }).click()
   await page.getByRole('heading', { name: 'Shape the product' }).waitFor()
   await page.waitForTimeout(900)
-  await page.getByText('Workspace saved to your account', { exact: true }).waitFor()
+
+  await page.getByText('Workspace saved to your account', { exact: true }).waitFor({state:'attached'})
+
   await page.screenshot({ path: 'work/launch-qa/product.png', fullPage: true })
   assert.ok(await page.getByRole('button', { name: 'Use this concept' }).count() >= 3)
   assert.deepEqual(errors, [])

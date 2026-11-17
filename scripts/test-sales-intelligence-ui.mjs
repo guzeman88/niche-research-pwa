@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // Isolated synthetic references and temporary backend; no real provider/account use.
 import assert from 'node:assert/strict'
 import {spawn, spawnSync} from 'node:child_process'
@@ -57,7 +58,7 @@ try {
   const errors = [], providerRequests = []
   page.on('pageerror', error => errors.push(error.message))
   page.on('request', request => {if (/https:\/\/(?:www\.)?(?:etsy|muadzo|ehunt|exto)\./.test(request.url())) providerRequests.push(request.url())})
-  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/selling`)
+  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/selling`); await openPipelineTools(page)
   await page.getByLabel('Research server address').fill(api)
   await page.getByRole('button', {name: 'Connect workspace', exact: true}).click()
   const intelligence = page.getByRole('region', {name: 'Sales intelligence', exact: true})

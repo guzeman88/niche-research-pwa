@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react'
 import type { ReactNode } from 'react'
+import PipelineWorkspace from './pipeline/PipelineWorkspaces'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import BrandLogo from './components/BrandLogo'
@@ -58,18 +59,30 @@ function AppRoutes() {
       <Route path="/privacy" element={page(<Privacy />)} />
       <Route path="/terms" element={page(<Terms />)} />
       <Route path="/auth/etsy" element={page(<EtsyAuth />)} />
-      <Route path="/validation" element={<OperatorPage>{page(<ProductValidation />)}</OperatorPage>} />
-      <Route path="/selling" element={<OperatorPage>{page(<SellingProducts />)}</OperatorPage>} />
-      <Route path="/production" element={<OperatorPage>{page(<Production />)}</OperatorPage>} />
+
+      <Route path="/validation" element={<OperatorPage>{page(<PipelineWorkspace id="validation"><ProductValidation /></PipelineWorkspace>)}</OperatorPage>} />
+
+      <Route path="/selling" element={<OperatorPage>{page(<PipelineWorkspace id="selling"><SellingProducts /></PipelineWorkspace>)}</OperatorPage>} />
+
+      <Route path="/production" element={<OperatorPage>{page(<PipelineWorkspace id="production"><Production /></PipelineWorkspace>)}</OperatorPage>} />
+
       <Route element={<RequireAccount><Layout /></RequireAccount>}>
         <Route index element={page(<Dashboard />)} />
-        <Route path="/keywords" element={page(<Keywords />)} />
-        <Route path="/store-generator" element={page(<StoreGenerator />)} />
-        <Route path="/launch" element={<Administrator>{page(<LaunchLab />)}</Administrator>} />
-        <Route path="/workspace" element={page(<Workspace />)} />
-        <Route path="/evidence" element={<Administrator>{page(<EvidenceOperations />)}</Administrator>} />
-        <Route path="/account" element={page(<Account />)} />
-        <Route path="/stores" element={page(<Stores />)} />
+
+        <Route path="/keywords" element={page(<PipelineWorkspace id="keywords"><Keywords /></PipelineWorkspace>)} />
+
+        <Route path="/store-generator" element={page(<PipelineWorkspace id="generator"><StoreGenerator /></PipelineWorkspace>)} />
+
+        <Route path="/launch" element={<Administrator>{page(<PipelineWorkspace id="launch"><LaunchLab /></PipelineWorkspace>)}</Administrator>} />
+
+        <Route path="/workspace" element={page(<PipelineWorkspace id="workspace"><Workspace /></PipelineWorkspace>)} />
+
+        <Route path="/evidence" element={<Administrator>{page(<PipelineWorkspace id="evidence"><EvidenceOperations /></PipelineWorkspace>)}</Administrator>} />
+
+        <Route path="/account" element={page(<PipelineWorkspace id="account"><Account /></PipelineWorkspace>)} />
+
+        <Route path="/stores" element={page(<PipelineWorkspace id="stores"><Stores /></PipelineWorkspace>)} />
+
         <Route path="*" element={page(<NotFound />)} />
       </Route>
     </Routes>
@@ -78,7 +91,9 @@ function AppRoutes() {
 
 function OperatorPage({children}:{children:ReactNode}){
   const standalone=['localhost','127.0.0.1','[::1]'].includes(location.hostname)
-  if(standalone)return children
+
+  if(standalone)return <Layout local content={children}/>
+
   return <RequireAccount><Administrator><Layout content={children}/></Administrator></RequireAccount>
 }
 function Administrator({children}:{children:ReactNode}){

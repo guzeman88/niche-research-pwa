@@ -1,3 +1,4 @@
+import {openPipelineTools} from './pipeline-test-tools.mjs'
 // Advisory flags against fixture responses only; no provider calls or live writes.
 import assert from 'node:assert/strict'
 import { mkdir } from 'node:fs/promises'
@@ -36,7 +37,7 @@ const errors = []
 page.on('pageerror', error => errors.push(error.message))
 await mkdir('work/keyword-rights-qa', { recursive: true })
 try {
-  await page.goto(`${origin}/keywords`)
+  await page.goto(`${origin}/keywords`); await openPipelineTools(page)
   await page.getByRole('heading', { name: 'Keywords', exact: true }).waitFor()
   for (const width of [320, 768, 1440]) {
     await page.setViewportSize({ width, height: 960 })
@@ -50,7 +51,7 @@ try {
     await page.screenshot({ path: `work/keyword-rights-qa/keywords-${width}.png`, fullPage: true })
     await page.keyboard.press('Enter')
   }
-  await page.goto(`${origin}/validation`)
+  await page.goto(`${origin}/validation`); await openPipelineTools(page)
   await page.getByRole('button', { name: 'Connect workspace', exact: true }).click()
   const table = page.getByRole('table', { name: 'Supported research candidates for product preparation' })
   await table.waitFor()
