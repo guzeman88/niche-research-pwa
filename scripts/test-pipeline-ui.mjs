@@ -6,6 +6,7 @@ import {chromium} from 'playwright'
 const origin=process.env.DASHBOARD_UI_ORIGIN||'http://127.0.0.1:4173'
 const qaOrigin='http://etgen.test'
 let role='admin'
+let health={status:'ok',database:'connected',collection_scheduler:{enabled:true,interval_minutes:15}}
 const at=new Date().toISOString(),requests=[],errors=[],results=[]
 const project={id:'qa-project',name:'QA wedding binder',product_type:'wedding_binder',keywords:[],status:'needs_evidence',records:[],queue:[],economics:null,economics_currency:null,sync_pending:0,model_version:'qa',input_fingerprint:'qa',outcomes:{status:'not_started',periods:0,orders:null,revenue:null,net_profit:null,contribution:null,visits:null,currencies:[]}}
 const spec={name:'QA coordination binder',family:'wedding_binder',research:{},purpose:'Original QA template',price:7,unit_cost:null,tags:[]}
@@ -26,7 +27,7 @@ await context.route('**/api/account/**',async route=>{
 })
 await context.route('https://pipeline-qa.test/**',route=>{
  const url=new URL(route.request().url()),p=url.pathname
- if(p==='/api/health')return route.fulfill({json:{backend:'ok',collection:{interval_minutes:15}}})
+ if(p==='/api/health')return route.fulfill({json:health})
  if(p==='/api/product-validation')return route.fulfill({json:{projects:[project],pending_sync:0}})
  if(p==='/api/product-validation/supported-keywords')return route.fulfill({json:{status:'tracking',target:3000,qualified_this_month:1,drafts:[],blockers:[],candidates:[{keyword:'wedding binder',status:'google_supported',automated_relevance:0.8,google_monthly_searches:1000,etsy_listing_count:1200,sample_count:100,human_relevance_review_required:true}]}})
  if(p==='/api/production/launch-recipes')return route.fulfill({json:{recipes:[{id:'qa-recipe',name:'QA binder recipe',spec}]}})
@@ -45,6 +46,7 @@ try{
  const routes=[['/','Dashboard'],['/keywords','Keywords'],['/selling','Selling products'],['/validation','Product validation'],['/production','Production'],['/store-generator','Store Generator'],['/launch','Launch Lab'],['/stores','My Stores'],['/evidence','Evidence operations'],['/workspace','Workspace & backups'],['/account','Account & profile']]
  for(const [path,title] of routes){
   await page.goto(qaOrigin+path);await page.getByRole('heading',{name:title,exact:true}).first().waitFor();await page.evaluate(()=>document.fonts.ready)
+  if(path==='/evidence'){await page.getByText('15 minutes',{exact:true}).waitFor();assert.match(await page.locator('.facts').innerText(),/Backend\s+Ok/)}
   if(path==='/store-generator')await page.getByRole('cell',{name:'$28.00',exact:true}).waitFor()
   assert.equal(await page.locator('.summary-strip').count(),0)
   assert.equal(await page.locator('.primary-nav a').count(),11)
@@ -55,6 +57,7 @@ try{
    results.push({page:path,width})
   }
  }
+ health={status:'ok',collection_scheduler:{enabled:false}};await page.goto(qaOrigin+'/evidence');await page.getByRole('heading',{name:'Evidence operations',exact:true}).waitFor();await page.locator('.facts').filter({hasText:'Backend'}).getByText('Ok',{exact:true}).waitFor();assert.match(await page.locator('.facts').innerText(),/Interval\s+Unknown/);assert.equal(await page.getByRole('heading',{name:'Something went wrong',exact:true}).count(),0);
  await page.setViewportSize({width:1440,height:1000});await page.goto(qaOrigin+'/store-generator');await page.getByRole('button',{name:'QA binder studio',exact:true}).click();assert.match(await page.locator('.detail-panel').innerText(),/Median listing price\s+\$28.00/);await page.screenshot({path:'work/pipeline-qa/generator-currency-drawer.png',fullPage:true});await page.getByRole('button',{name:'Close details'}).click();await page.getByRole('button',{name:'QA unknown price',exact:true}).click();assert.match(await page.locator('.detail-panel').innerText(),/Median listing price\s+Unknown/);await page.screenshot({path:'work/pipeline-qa/generator-unknown-drawer.png',fullPage:true});await page.getByRole('button',{name:'Close details'}).click();await page.goto(qaOrigin+'/keywords');await page.getByRole('button',{name:'wedding binder',exact:true}).waitFor();await page.getByRole('cell',{name:'$8.00',exact:true}).waitFor();await Promise.all([page.waitForResponse(r=>decodeURIComponent(r.url()).includes('evidence=verified'),{timeout:5000}),page.getByLabel('Evidence',{exact:true}).selectOption('verified',{timeout:5000})]);await Promise.all([page.waitForResponse(r=>decodeURIComponent(r.url()).includes('sort=avg_price_usd')&&r.url().includes('direction=desc'),{timeout:5000}),page.getByLabel('Sort',{exact:true}).selectOption('avg_price_usd',{timeout:5000})]);assert(await page.locator('.page-heading').getByRole('button',{name:'Export visible rows'}).isVisible());await page.getByLabel('Evidence',{exact:true}).selectOption('');await page.getByLabel('Sort',{exact:true}).selectOption('keyword');const pagination=page.waitForResponse(r=>r.url().includes('pipeline-qa.test/api/dashboard/keywords')&&r.url().includes('offset=20'));await page.getByRole('button',{name:'Next',exact:true}).click();await pagination
  await page.getByLabel('Search keywords',{exact:true}).fill('missing');await page.getByRole('heading',{name:'No matching records'}).waitFor();await page.getByLabel('Search keywords',{exact:true}).fill('');await page.getByRole('button',{name:'wedding binder',exact:true}).click();assert.match(await page.locator('.detail-panel').innerText(),/Verified sales\s+Unknown/);await page.getByRole('button',{name:'Close details'}).click()
  await page.setViewportSize({width:390,height:1000});await page.locator('#mobile-pages summary').click();assert.equal(await page.locator('#mobile-pages nav a').count(),11);await page.locator('#mobile-pages nav a[href="/validation"]').click();await page.getByRole('button',{name:'QA wedding binder'}).click();assert.equal(await page.locator('.detail-panel').getAttribute('aria-modal'),'true');assert(await page.locator('.app-shell').evaluate(el=>el.inert));for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert(await page.locator('.detail-panel').evaluate(el=>el.contains(document.activeElement)))}await page.getByRole('link',{name:'Edit evidence',exact:true}).click();await page.locator('.detail-panel').waitFor({state:'detached'});assert.equal(await page.locator('.detail-panel').count(),0);assert(!(await page.locator('.app-shell').evaluate(el=>el.inert)))
