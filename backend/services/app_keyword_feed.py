@@ -100,6 +100,13 @@ class AppKeywordFeed:
             metadata, minutes = installation(self.root)
             self.next_tick = self.clock() + minutes * 60
             self.state['interval_minutes'] = minutes
+            from services.storage_health import storage_state
+            storage=storage_state(self.root,metadata.get('database',self.root))
+            self.state['storage']=storage
+            if storage['status'] in ('critical','unknown'):
+                self.state['last_outcome']='insufficient_storage' if storage['status']=='critical' else 'storage_check_unavailable'
+                self.next_tick=self.clock()+60
+                return
             if self.between_cycles:
                 try:
                     supplemental = await self.between_cycles()

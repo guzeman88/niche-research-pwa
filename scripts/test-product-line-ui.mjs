@@ -101,8 +101,11 @@ try{
   localServiceAvailable=false
   await startup.reload(); await openPipelineTools(startup)
 
-  await startup.getByText('EtGen’s local service is unavailable.',{exact:false}).first().waitFor()
+  await startup.getByText('The local service could not be reached. EtGen will retry automatically.',{exact:false}).first().waitFor()
   assert.equal(await connection.evaluate(element=>element.open),true,'Unavailable service exposes recovery controls')
+  localServiceAvailable=true
+  await startup.evaluate(()=>window.dispatchEvent(new Event('visibilitychange')))
+  await startup.getByRole('heading',{name:'Production queue',exact:true}).waitFor()
   console.log('Product-line UI: seven briefs, real v2 API handoff, original-content fields, workbook controls, private-order boundary and four responsive widths passed.')
 }finally{
   if(browser){

@@ -1,3 +1,4 @@
+import {validateCandidatePortfolio,DataIntegrityError} from './dataContracts'
 /// <reference types="vite/client" />
 
 import type {
@@ -346,12 +347,14 @@ export interface TestCandidatePortfolio {
 export async function getTestCandidatePortfolio(): Promise<TestCandidatePortfolio> {
   try {
     const response = await fetch(`/data/test-candidates.json?_t=${Date.now()}`, { cache: 'no-store' });
-    if (response.ok) return await response.json() as TestCandidatePortfolio;
-  } catch {
+    if (response.ok) {const data=await response.json();validateCandidatePortfolio(data);return data as TestCandidatePortfolio;}
+  } catch(error) {
+    if(error instanceof DataIntegrityError)throw error
     // Fall through to the live report when the atomic static release is unavailable.
   }
   const report = await request<{ test_portfolio: TestCandidatePortfolio }>('/api/validation/report');
   if (!report.test_portfolio) throw new Error('The candidate portfolio is unavailable.');
+  validateCandidatePortfolio(report.test_portfolio);
   return report.test_portfolio;
 }
 

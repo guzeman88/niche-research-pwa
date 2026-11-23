@@ -26,6 +26,7 @@ export interface DashboardSummary {
   input_fingerprint: string;
   source_watermarks: Record<string, string | null>;
   duration_ms: number;
+  storage?: {status:string;free_bytes:number|null;minimum_free_bytes:number};
   scope?: string;
   connection?: {private_actions_available: boolean; status: string};
   sources?: Array<{source: string; rows: number; keywords: number; latest: string | null}>;
@@ -40,11 +41,11 @@ export interface DashboardSummary {
   supported?: {status: string; qualified_this_month?: number; target?: number; available_supported_groups?: number; etsy_demand_backed_groups?: number};
   stats: StatsResponse;
   evidence: {
-    versioned_scores: number;
-    versioned_gaps: number;
-    marketplace_insights_rows: number;
-    marketplace_insights_keywords: number;
-    shop_stats_rows: number;
+    versioned_scores: number | null;
+    versioned_gaps: number | null;
+    marketplace_insights_rows: number | null;
+    marketplace_insights_keywords: number | null;
+    shop_stats_rows: number | null;
   };
   providers: Array<{
     provider: string;

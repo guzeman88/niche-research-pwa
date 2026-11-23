@@ -24,3 +24,5 @@ body{background:var(--bg)}.pipeline-app{min-height:100vh;background:var(--bg);co
 .pipeline-functional label{font-weight:500}.pipeline-functional-account form>.grid{grid-template-columns:1fr}
 
 .pipeline-app .primary-nav>a .count{margin-left:auto;font-size:11px;min-height:18px;min-width:18px;padding:0 4px}.pipeline-app .mobile-pages nav a .count{margin-left:auto}
+
+.pipeline-live-actions{border:0;margin:0;padding:0;min-width:0}.pipeline-live-actions:disabled{opacity:.75}

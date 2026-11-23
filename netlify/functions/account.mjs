@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'node:crypto';
 import {createEmailFlow, readEmailFlow, emailFlowCookie, emailRecipientAllowed, authEmailRequest} from './lib/account-email.mjs';
 import { ValidationError, hash, seal, unseal, trustedMutation, validatePassword, validateProfile, validateWorkspace, sessionCookie, readSessionCookie } from './lib/account-security.mjs';
-import { dashboardEtag, normalizeDashboardSnapshot } from './lib/dashboard-summary.mjs';
+import { dashboardEtag, normalizeDashboardSnapshot, normalizeOperationalSnapshot } from './lib/dashboard-summary.mjs';
 import {activeBackend, accessTicket, backendPath} from './lib/backend-access.mjs';
 import {sellerRequest,verifiedAuthorization,callbackFields} from './lib/seller-connection.mjs';
 
@@ -175,11 +175,8 @@ export default async function handler(request, context = {}) {
       const operational = await service.from('app_dashboard_state').select('*').eq('id','active').maybeSingle();
       if (!operational.error && operational.data?.payload?.schema_version === 2) {
         const row=operational.data;
-        const stale=Date.now()-Date.parse(row.generated_at)>150000;
         headers.ETag=dashboardEtag(row);
-        return {...row.payload,snapshot_version:row.snapshot_version,generated_at:row.generated_at,
-          data_status:stale?'degraded':row.payload.data_status,
-          delivery:{mode:'live',refresh_interval_seconds:60,stale,scope:'native_collection_library'}};
+        try{return normalizeOperationalSnapshot(row)}catch{throw new Failure(503,'The latest research report failed consistency checks. Previously loaded data may be shown.')}
       }
       let row;
       if (refresh) {

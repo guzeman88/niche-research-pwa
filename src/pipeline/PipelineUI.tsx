@@ -1,3 +1,5 @@
+import useNetworkOnline from '../hooks/useNetworkOnline'
+import {date} from './format'
 import {useEffect, useRef, useState} from 'react'
 
 import type {ReactNode} from 'react'
@@ -15,11 +17,19 @@ export function Facts({rows}:{rows:Array<[string,ReactNode]>}){return <dl classN
 
 export function Pill({children,warning=false}:{children:ReactNode;warning?:boolean}){return <span className={`pill${warning?' warning':''}`}>{children}</span>}
 
-export function Table({heads,rows}:{heads:string[];rows:ReactNode[][]}){return <div className="table-scroll" role="region" tabIndex={0} aria-label={heads.filter(Boolean).join(', ')}><table><thead><tr>{heads.map((h,i)=><th key={i}>{h}</th>)}</tr></thead><tbody>{rows.length?rows.map((row,i)=><tr key={i}>{row.map((c,j)=><td key={j}>{c}</td>)}</tr>):<tr><td colSpan={heads.length}><div className="empty"><h2>No matching records</h2></div></td></tr>}</tbody></table></div>}
+export function Table({heads,rows,known=true}:{heads:string[];rows:ReactNode[][];known?:boolean}){return <div className="table-scroll" role="region" tabIndex={0} aria-label={heads.filter(Boolean).join(', ')}><table><thead><tr>{heads.map((h,i)=><th key={i}>{h}</th>)}</tr></thead><tbody>{rows.length?rows.map((row,i)=><tr key={i}>{row.map((c,j)=><td key={j}>{c}</td>)}</tr>):<tr><td colSpan={heads.length}><div className="empty"><h2>{known?'No matching records':'Source data unavailable'}</h2></div></td></tr>}</tbody></table></div>}
 
 export function Heading({title,actions}:{title:string;actions?:ReactNode}){return <header className="page-heading"><h1>{title}</h1><div className="heading-actions">{actions}</div></header>}
 
-export function QueryState({pending,error,retry}:{pending:boolean;error:Error|null;retry:()=>unknown}){return pending?<div role="status" aria-busy="true">Loading records…</div>:error?<div role="alert" className="pipeline-error"><h2>Data unavailable</h2><div>{error.message}</div><button className="button" onClick={()=>void retry()}>Retry connection</button></div>:null}
+export function QueryState({pending,error,retry,retained=false,lastUpdated}:{pending:boolean;error:Error|null;retry:()=>unknown;retained?:boolean;lastUpdated?:number}){
+ const online=useNetworkOnline()
+ if(!online||error){
+  const reconnecting=!online||Boolean(error&&'retryable' in error&&error.retryable)
+  return <div role="status" className="pipeline-error"><h2>{!online?'Offline':reconnecting?'Reconnecting':'Data unavailable'}</h2>{retained&&<div>Cached records · Last loaded {date(lastUpdated?new Date(lastUpdated).toISOString():null)}</div>}<div>{error?.message||'Reconnect to refresh these records.'}</div><button className="button" onClick={()=>void retry()} disabled={!online}>Retry connection</button></div>
+ }
+ return pending?<div role="status" aria-busy="true">Loading records…</div>:null
+}
+
 
 
 

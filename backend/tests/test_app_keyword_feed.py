@@ -153,3 +153,16 @@ def test_real_child_survives_supervisor_cancellation(tmp_path):
             await asyncio.sleep(.01)
         assert (code.parent / 'committed').read_text() == 'preserved'
     asyncio.run(scenario())
+
+
+def test_critical_storage_makes_no_collection_or_supplemental_requests(tmp_path,monkeypatch):
+    from services import storage_health
+    installed(tmp_path);calls=[];clock=[0]
+    async def runner(*_):calls.append('native');return 'completed'
+    async def supplemental():calls.append('supplemental')
+    monkeypatch.setattr(storage_health,'storage_state',lambda *_:{'status':'critical','free_bytes':0,'minimum_free_bytes':512*1024*1024})
+    worker=feed.AppKeywordFeed(tmp_path,runner,lambda:clock[0],between_cycles=supplemental)
+    asyncio.run(worker.tick());assert not calls
+    assert worker.state['last_outcome']=='insufficient_storage' and worker.next_tick==60
+    monkeypatch.setattr(storage_health,'storage_state',lambda *_:{'status':'ok','free_bytes':10**10,'minimum_free_bytes':512*1024*1024})
+    clock[0]=60;asyncio.run(worker.tick());assert calls==['supplemental','native']

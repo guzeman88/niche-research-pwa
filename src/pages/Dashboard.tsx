@@ -189,7 +189,7 @@ function FreshnessBar({ dashboard, refreshing, onRefresh }: { dashboard: Dashboa
             <span className="text-[11px] text-surface-300">{detail}</span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-surface-300">
-            Coverage refreshes within five minutes. {dashboard.evidence.marketplace_insights_rows.toLocaleString()} Marketplace Insights observations cover {dashboard.evidence.marketplace_insights_keywords.toLocaleString()} keywords. {dashboard.evidence.versioned_scores.toLocaleString()} evidence-qualified scores are available.
+            Coverage refreshes within five minutes. {fmt(dashboard.evidence.marketplace_insights_rows)} Marketplace Insights observations cover {fmt(dashboard.evidence.marketplace_insights_keywords)} keywords. {fmt(dashboard.evidence.versioned_scores)} evidence-qualified scores are available.
           </p>
           {fallback && <p className="mt-1 text-[11px] text-accent-amber">The live account service could not be reached; these values are from the last published static release.</p>}
         </div>
