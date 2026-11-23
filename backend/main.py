@@ -189,6 +189,12 @@ def root():
     }
 
 
+@app.get("/api/health/live")
+async def api_liveness():
+    """Cheap liveness: no database, report, provider or collector dependency."""
+    return {"status":"ok","boot_id":_PROCESS_BOOT_ID}
+
+
 @app.get("/api/health")
 def api_health():
     """Quick health check — returns OK if the server is up."""
@@ -198,8 +204,10 @@ def api_health():
         db_ok = kdb.has_seeds()
     except Exception:
         pass
+    from services.storage_health import storage_state
     return {
         "status": "ok",
+        "storage": storage_state(kdb.DB_PATH,os.environ.get('VALIDATION_DB_PATH',str(BACKEND_DIR))),
         "database": "connected" if db_ok else "empty",
         "dashboard_reporting": getattr(getattr(app.state, 'dashboard_worker', None), 'state', {'enabled': False}),
         "boot_id": _PROCESS_BOOT_ID,

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
+import {installReadRecovery} from './lib/readRecovery'
 import {AuthProvider} from './lib/auth'
 import ErrorBoundary from './components/ErrorBoundary'
 import { installChunkRecovery } from './chunkRecovery'
@@ -28,6 +29,8 @@ if (window.location.hostname === 'etgen.netlify.app') {
       },
     },
   })
+
+  installReadRecovery(queryClient)
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>

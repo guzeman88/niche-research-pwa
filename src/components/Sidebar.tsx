@@ -1,3 +1,4 @@
+import {recoveryInterval} from '../lib/readRecovery'
 import {useQuery} from '@tanstack/react-query'
 import {productionRequest} from '../lib/production'
 import type {ProductionOverview} from '../lib/production'
@@ -23,8 +24,8 @@ export default function Sidebar({local=false}:{local?:boolean}){
  const auth=useAuth(),open=usePipelineDrawer(),location=useLocation()
 
  const {isUserMode}=useAppMode(),enabled=Boolean(readConnection().url)&&(local||auth.profile?.role==='admin'&&!isUserMode)
- const projects=useQuery({queryKey:['product-validation',0],queryFn:()=>validationRequest<ValidationOverview>(),enabled,staleTime:30000,refetchInterval:60000,retry:false})
- const production=useQuery({queryKey:['production'],queryFn:()=>productionRequest<ProductionOverview>(),enabled,staleTime:30000,refetchInterval:60000,retry:false})
+ const projects=useQuery({queryKey:['product-validation',0],queryFn:()=>validationRequest<ValidationOverview>(),enabled,staleTime:30000,refetchInterval:recoveryInterval(60000),retry:false})
+ const production=useQuery({queryKey:['production'],queryFn:()=>productionRequest<ProductionOverview>(),enabled,staleTime:30000,refetchInterval:recoveryInterval(60000),retry:false})
  const badge=(path:string)=>enabled&&path==='/validation'&&Array.isArray(projects.data?.projects)?<span className="count">{projects.data!.projects.length}</span>:enabled&&path==='/production'&&Array.isArray(production.data?.jobs)?<span className="count">{new Set(production.data!.jobs.map(j=>j.product_id)).size}</span>:null
  const visible=items.filter(([path])=>local||auth.profile?.role==='admin'||!privatePages.includes(path))
 

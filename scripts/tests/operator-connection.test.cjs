@@ -7,7 +7,8 @@ const ts = require('typescript');
 function fixture() {
   const storage = new Map();
   const location = {hostname: '127.0.0.1', pathname: '/validation'};
-  const context = {exports: {}, URL, location, sessionStorage: {
+  const contracts={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/dataContracts.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,contracts);
+  const context = {exports: {}, require:()=>contracts.exports, URL, location, sessionStorage: {
     getItem: key => storage.get(key) || null,
     setItem: (key, value) => storage.set(key, value),
     removeItem: key => storage.delete(key),

@@ -15,7 +15,9 @@ export function backendPath(path, method='GET') {
 export async function activeBackend(service, secret, at=Date.now()) {
   const result=await service.from('app_backend_connections').select('*').eq('id','active').maybeSingle();
   const updated=Date.parse(result.data?.updated_at);
-  if(result.error||!result.data?.enabled||!Number.isFinite(updated)||updated>at+5000||at-updated>150000)throw new Error('The local research service is offline. Keep the EtGen computer running and retry.');
+  if(result.error)throw new Error('The private connection status could not be checked. Please retry.');
+  if(!result.data?.enabled)throw new Error('The private connector is reconnecting. Keep the EtGen computer running.');
+  if(!Number.isFinite(updated)||updated>at+5000||at-updated>150000)throw new Error('The connection heartbeat is delayed. Reconnecting to the EtGen computer.');
   const endpoint=new URL(result.data.endpoint);
   if(endpoint.protocol!=='https:'||!endpoint.hostname.endsWith('.trycloudflare.com')||endpoint.username||endpoint.password||endpoint.search||endpoint.hash||endpoint.pathname!=='/')throw new Error('The research connection failed verification.');
   const {token}=unseal(result.data.credential,secret,'private-backend');
