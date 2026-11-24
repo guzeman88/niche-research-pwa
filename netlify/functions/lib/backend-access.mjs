@@ -7,7 +7,7 @@ export function backendPath(path, method='GET') {
   const url=new URL(path,'https://backend.invalid');
   const decoded=decodeURIComponent(url.pathname);
   if(url.origin!=='https://backend.invalid'||decoded.includes('..')||decoded.includes('\\')||decoded.includes('//')||decoded.includes('%')||[...decoded].some(c=>c.charCodeAt(0)<32))throw new Error('Invalid research action.');
-  if(!/^\/api\/(stats|health|dashboard|scheduler|settings|stream|stores|workspace|evidence|research|keywords|gaps|designs|export|store-ideas|validation|product-validation|selling-products|sales-intelligence|production)(\/|$)/.test(decoded))throw new Error('Unsupported research action.');
+  if(!/^\/api\/(startup|stats|health|dashboard|scheduler|settings|stream|stores|workspace|evidence|research|keywords|gaps|designs|export|store-ideas|validation|product-validation|selling-products|sales-intelligence|production)(\/|$)/.test(decoded))throw new Error('Unsupported research action.');
   if(!['GET','POST','PUT','DELETE'].includes(method))throw new Error('Unsupported research method.');
   return {url,path:decoded,method};
 }

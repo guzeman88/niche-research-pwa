@@ -5,6 +5,7 @@ import { ValidationError, hash, seal, unseal, trustedMutation, validatePassword,
 import { dashboardEtag, normalizeDashboardSnapshot, normalizeOperationalSnapshot } from './lib/dashboard-summary.mjs';
 import {activeBackend, accessTicket, backendPath} from './lib/backend-access.mjs';
 import {sellerRequest,verifiedAuthorization,callbackFields} from './lib/seller-connection.mjs';
+import {bootstrapData,normalizeStartup} from './lib/startup.mjs';
 
 const options = {global:{fetch:(input, init = {}) => fetch(input, {...init, signal: init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000)})},auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}};
 class Failure extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -43,6 +44,19 @@ export default async function handler(request, context = {}) {
     };
     if (request.method === 'POST') await limit(`ip:${context.ip || 'local'}:${route}`, ['/workspace','/backend','/backend/access'].includes(route) ? 1200 : 40);
 
+    let reportPromise;
+    const operationalRow=()=>reportPromise ||= Promise.resolve(service.from('app_dashboard_state').select('*').eq('id','active').maybeSingle());
+    const readReport=async()=>{
+      const {data,error}=await operationalRow();
+      if(error||!data)throw new Failure(503,'Saved dashboard is unavailable.');
+      const report=normalizeOperationalSnapshot(data);
+      // The service-only table is not a general private-record export.
+      delete report.startup;
+      try{report.startup=normalizeStartup(data.payload?.startup)}catch{/* Older publishers remain compatible. */}
+      return report;
+    };
+    const readWorkspace=async owner=>check(await service.from('app_workspaces').select('payload,revision,updated_at').eq('owner_id',owner).single());
+
     async function startSession(tokens, recovery = false) {
       const user = check(await auth.auth.getUser(tokens.access_token)).user;
       const profile = check(await service.from('app_profiles').select('*').eq('id', user.id).maybeSingle());
@@ -54,7 +68,7 @@ export default async function handler(request, context = {}) {
         expires_at:new Date(Date.now() + 7 * 86400000).toISOString()}));
       headers['Set-Cookie'] = sessionCookie(raw, origin);
       await audit(user.id, recovery ? 'recovery_started' : 'signed_in');
-      return {user:{id:user.id,email:user.email}, mfa_required:verifiedFactors(user).length > 0 && assurance(tokens.access_token) !== 'aal2', recovery};
+      return bootstrapData({user,profile,mfa:verifiedFactors(user).length > 0 && assurance(tokens.access_token) !== 'aal2',recovery,readWorkspace,readReport});
     }
     if (request.method === 'POST' && ['/login','/signup','/recover','/email'].includes(route)) {
       const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
@@ -121,7 +135,7 @@ export default async function handler(request, context = {}) {
 
     const raw = readSessionCookie(request, origin);
     if (!/^[A-Za-z0-9_-]{43}$/.test(raw)) {
-      if (route === '/session' && request.method === 'GET') return response({user:null});
+      if (['/session','/bootstrap'].includes(route) && request.method === 'GET') return response({user:null});
       throw new Failure(401, 'Sign in to continue.');
     }
     const sessionId = hash(raw);
@@ -152,6 +166,7 @@ export default async function handler(request, context = {}) {
     await persist();
     const needsMfa = verifiedFactors(user).length > 0 && assurance(tokens.access_token) !== 'aal2';
     if (route === '/session' && request.method === 'GET') return response({user:{id:user.id,email:user.email},profile:needsMfa ? null : profile,mfa_required:needsMfa,recovery:Boolean(saved.recovery),factors:verifiedFactors(user).map(f=>({id:f.id,friendly_name:f.friendly_name}))});
+    if (route === '/bootstrap' && request.method === 'GET') return response(await bootstrapData({user,profile,mfa:needsMfa,recovery:saved.recovery,workspace:url.searchParams.get('workspace')!=='0',readWorkspace,readReport}));
     if (route === '/logout' && request.method === 'POST') {
       let query = service.from('app_login_sessions').update({revoked_at:new Date().toISOString()}).eq('user_id',user.id);
       if (!body.all) query = query.eq('id',sessionId);
@@ -172,11 +187,11 @@ export default async function handler(request, context = {}) {
     if (saved.recovery && route !== '/password') throw new Failure(403, 'Set your password to finish account recovery.');
     async function readDashboardSnapshot(refresh = false) {
       if (profile.role !== 'admin') throw new Failure(403,'Administrator access required.');
-      const operational = await service.from('app_dashboard_state').select('*').eq('id','active').maybeSingle();
+      const operational = await operationalRow();
       if (!operational.error && operational.data?.payload?.schema_version === 2) {
         const row=operational.data;
         headers.ETag=dashboardEtag(row);
-        try{return normalizeOperationalSnapshot(row)}catch{throw new Failure(503,'The latest research report failed consistency checks. Previously loaded data may be shown.')}
+        try{return await readReport()}catch{throw new Failure(503,'The latest research report failed consistency checks. Previously loaded data may be shown.')}
       }
       let row;
       if (refresh) {
@@ -196,6 +211,19 @@ export default async function handler(request, context = {}) {
     }
     if (route === '/dashboard/summary' && request.method === 'GET') {
       return response(await readDashboardSnapshot(false));
+    }
+    if (route === '/startup' && request.method === 'GET') {
+      if(profile.role!=='admin')throw new Failure(403,'Administrator access required.');
+      if(url.searchParams.get('refresh')!=='1'){
+        try{const report=await readReport();if(report.startup&&Date.now()-Date.parse(report.startup.generated_at)<150000)return response(report.startup)}catch{/* Try the bounded operator projection, never a full evidence export. */}
+      }
+      try{
+        const backend=await activeBackend(service,process.env.DASHBOARD_BRIDGE_SECRET);
+        const ticket=accessTicket(backend,backendPath('/api/startup'),user.id);
+        const result=await fetch(ticket.url,{headers:{Authorization:`Bearer ${ticket.token}`},signal:AbortSignal.timeout(5000)});
+        if(!result.ok)throw new Error('Startup unavailable');
+        return response(normalizeStartup(await result.json()));
+      }catch{throw new Failure(503,'The current product summary is unavailable. Previously loaded data may be shown.');}
     }
     if (route === '/dashboard/refresh' && request.method === 'POST') {
       const dashboard = await readDashboardSnapshot(true);

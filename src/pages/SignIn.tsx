@@ -2,6 +2,7 @@ import {useState} from 'react'
 import {Link, Navigate, useSearchParams} from 'react-router-dom'
 import BrandLogo from '../components/BrandLogo'
 import {useAuth} from '../lib/auth'
+import type {AccountBootstrap} from '../lib/auth'
 import {accountRequest} from '../lib/accountApi'
 
 export default function SignIn() {
@@ -15,7 +16,7 @@ export default function SignIn() {
     e.preventDefault();setBusy(true);setError('');setMessage('')
     try {
       if(mode==='mfa'){await accountRequest('/mfa/verify',{factor_id:auth.factors?.[0]?.id,code});await auth.refresh()}
-      else {const result=await accountRequest<{message?:string}>(`/${mode}`,{email,password});if(mode==='login')await auth.refresh();else setMessage(result.message || 'Check your email for the next step.')}
+      else {const result=await accountRequest<AccountBootstrap&{message?:string}>(`/${mode}`,{email,password});if(mode==='login')await auth.establish(result);else setMessage(result.message || 'Check your email for the next step.')}
       setPassword('');setCode('')
     } catch(error){setError(error instanceof Error ? error.message : 'Unable to continue.')}finally{setBusy(false)}
   }

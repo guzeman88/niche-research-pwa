@@ -19,8 +19,9 @@ const browser=await chromium.launch({headless:true}),context=await browser.newCo
 await context.route(qaOrigin+'/**',async route=>{const u=new URL(route.request().url());return route.fulfill({response:await context.request.get(origin+u.pathname+u.search)})})
 await context.route('**/api/account/**',async route=>{
  const req=route.request(),p=new URL(req.url()).pathname.replace('/api/account','')
- if(p==='/session')return route.fulfill({json:{user:{id:authIdentity,email:'qa@example.test'},profile:{id:authIdentity,display_name:'QA owner',business_name:'QA studio',timezone:'America/New_York',currency:'USD',role},mfa_required:false}})
+ if((p==='/session'||p==='/bootstrap'))return route.fulfill({json:{user:{id:authIdentity,email:'qa@example.test'},profile:{id:authIdentity,display_name:'QA owner',business_name:'QA studio',timezone:'America/New_York',currency:'USD',role},mfa_required:false}})
  if(p==='/workspace')return route.fulfill({json:req.method()==='GET'?{payload:{},revision:1}:{revision:2}})
+ if(p==='/startup')return route.fulfill({json:{schema_version:1,generated_at:at,input_fingerprint:'qa',projects:{status:'ready',total:1,has_more:false,projects:[{id:project.id,name:project.name,product_type:project.product_type,updated_at:at}]},production:{status:'ready',total:1,has_more:false,paused:false,human_approval_required:true,jobs:[{id:job.id,product_id:job.product_id,revision:job.revision,status:job.status,updated_at:at,spec:{name:job.spec.name,family:job.spec.family},has_preview:true}]}}})
  if(p==='/dashboard/summary')return route.fulfill({json:summary})
  if(p==='/backend/access'){const body=req.postDataJSON();requests.push(body.path);if(privateOutage)return route.fulfill({status:503,json:{error:'The connection heartbeat is delayed. Reconnecting to the EtGen computer.'}});return route.fulfill({json:{url:'https://pipeline-qa.test'+body.path,token:'qa-only-ticket'}})}
  return route.fulfill({status:404,json:{error:'Unknown fixture account route'}})
@@ -31,7 +32,8 @@ await context.route('https://pipeline-qa.test/**',route=>{
  if(p==='/api/product-validation')return route.fulfill({json:invalidProjects?{projects:null}:{projects:[project],pending_sync:0}})
  if(p==='/api/product-validation/supported-keywords')return route.fulfill({json:{status:'tracking',target:3000,qualified_this_month:1,drafts:[],blockers:[],candidates:[{keyword:'wedding binder',status:'google_supported',automated_relevance:0.8,google_monthly_searches:1000,etsy_listing_count:1200,sample_count:100,human_relevance_review_required:true}]}})
  if(p==='/api/production/launch-recipes')return route.fulfill({json:{recipes:[{id:'qa-recipe',name:'QA binder recipe',spec}]}})
- if(p==='/api/production')return route.fulfill({json:{jobs:[job],paused:false,capabilities:{},profiles:[],models:{}}})
+ if((p==='/api/production'||p==='/api/production/jobs-overview'))return route.fulfill({json:{jobs:[job],paused:false,capabilities:{},profiles:[],models:{}}})
+ if(p==='/api/production/jobs/qa-job')return route.fulfill({json:job})
  if(p.startsWith('/api/production/jobs/'))return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aH1sAAAAASUVORK5CYII=','base64')})
  if(p==='/api/dashboard/keywords')return route.fulfill({json:{items:url.searchParams.get('q')==='missing'?[]:[keyword],total:url.searchParams.get('q')==='missing'?0:201,limit:20}})
  if(p==='/api/sales-intelligence/estimates')return route.fulfill({json:{items:[estimate],summary:{tracked:1,estimated:1}}})

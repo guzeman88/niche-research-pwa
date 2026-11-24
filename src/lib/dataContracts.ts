@@ -17,9 +17,11 @@ export function validateReadData(path:string,data:unknown):void {
  if(route==='/api/product-validation'){
   const rows=list('projects','id')
   if(rows.some(row=>typeof row.name!=='string'||!Array.isArray(row.keywords)||!object(row.outcomes)||!finite(row.outcomes.orders)||!finite(row.outcomes.revenue)||!finite(row.outcomes.net_profit)))fail()
- }else if(route==='/api/production'){
+ }else if(route==='/api/production'||route==='/api/production/jobs-overview'){
   const rows=list('jobs','id')
   if(rows.some(row=>typeof row.revision!=='string'||!object(row.spec)||typeof row.spec.name!=='string'||!finite(row.spec.price)))fail()
+ }else if(/^\/api\/production\/jobs\/[^/]+$/.test(route)){
+  if(!object(data)||data.id!==decodeURIComponent(route.split('/').pop()!)||typeof data.revision!=='string'||typeof data.status!=='string'||!object(data.spec)||typeof data.spec.name!=='string'||!finite(data.spec.price)||!Array.isArray(data.history)||(data.result!==null&&!object(data.result)))fail()
  }else if(route==='/api/dashboard/keywords'){
   const rows=list('items','keyword')
   if(!object(data)||!count(data.total)||(data.total as number)<rows.length||rows.some(row=>(row.listing_count!=null&&!count(row.listing_count))||(row.sampled_listing_count!=null&&!count(row.sampled_listing_count))||!finite(row.avg_price_usd)||(typeof row.avg_price_usd==='number'&&row.avg_price_usd<0)))fail()

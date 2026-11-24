@@ -37,7 +37,7 @@ const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({ serviceWorkers: 'block' })
 await context.route('**/api/account/**', async route => {
   const path = new URL(route.request().url()).pathname.replace('/api/account', '')
-  if (path === '/session') return route.fulfill({ json: {
+  if ((path === '/session' || path === '/bootstrap')) return route.fulfill({ json: {
     user: { id: 'dashboard-qa', email: 'qa@example.test' },
     profile: { id: 'dashboard-qa', display_name: 'QA Owner', business_name: 'EtGen QA', timezone: 'America/New_York', currency: 'USD', role: 'admin' },
     mfa_required: false, recovery: false,

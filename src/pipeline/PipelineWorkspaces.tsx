@@ -1,5 +1,6 @@
 import type {BackendHealth} from '../lib/dataContracts'
 import useNetworkOnline from '../hooks/useNetworkOnline'
+import useClock from '../hooks/useClock'
 import {recoveryInterval} from '../lib/readRecovery'
 import {date,number,text,money} from './format'
 
@@ -30,7 +31,9 @@ import {validationRequest, download} from '../lib/productValidation'
 
 import type {ValidationOverview, ValidationProject} from '../lib/productValidation'
 
-import {artifactBlob, productionRequest} from '../lib/production'
+import {thumbnailBlob, productionRequest} from '../lib/production'
+import {getStartup} from '../lib/startup'
+import type {StartupJob} from '../lib/startup'
 
 import type {ProductionOverview, ProductionJob, ProductionSpec, LaunchRecipe} from '../lib/production'
 
@@ -67,33 +70,33 @@ const titles:Record<PipelinePage,string>={keywords:'Keywords',selling:'Selling p
 
 function usePrivateResearch(allowUserMode=false){const [,setRevision]=useState(0);useEffect(()=>{const changed=()=>setRevision(v=>v+1);window.addEventListener('etgen:connection-updated',changed);window.addEventListener('storage',changed);return()=>{window.removeEventListener('etgen:connection-updated',changed);window.removeEventListener('storage',changed)}},[]);const auth=useAuth(),{isUserMode}=useAppMode();return Boolean(readConnection().url)&&(accountConnectionAvailable()?auth.profile?.role==='admin'&&(!isUserMode||allowUserMode):true)}
 
-function latestProducts(jobs:ProductionJob[]){const seen=new Set<string>();return jobs.filter(job=>{if(seen.has(job.product_id))return false;seen.add(job.product_id);return true})}
+function latestProducts<T extends {product_id:string}>(jobs:T[]){const seen=new Set<string>();return jobs.filter(job=>{if(seen.has(job.product_id))return false;seen.add(job.product_id);return true})}
 
 function useProjects(enabled=true){return useQuery({queryKey:['product-validation',0],queryFn:()=>validationRequest<ValidationOverview>(),enabled,refetchInterval:recoveryInterval(60000),retry:false})}
 
-function useProduction(enabled=true){return useQuery({queryKey:['production'],queryFn:()=>productionRequest<ProductionOverview>(),enabled,refetchInterval:recoveryInterval(5000),retry:false})}
+function useProduction(enabled=true){return useQuery({queryKey:['production'],queryFn:()=>productionRequest<ProductionOverview>('/jobs-overview'),enabled,refetchInterval:recoveryInterval(5000),retry:false})}
 
-export function ArtifactPreview({job,kind='inside'}:{job:ProductionJob;kind?:'cover'|'inside'}){
-
- const names=job.result?.manifest?.render?.previews||['preview.png'],name=kind==='inside'?(names[1]||names[0]):names[0]
+export function ArtifactPreview({job,kind='inside'}:{job:ProductionJob|StartupJob;kind?:'cover'|'inside'}){
 
  const [src,setSrc]=useState('')
 
- const query=useQuery({queryKey:['pipeline-artifact',job.id,job.revision,name],queryFn:()=>artifactBlob(job.id,name),enabled:Boolean(job.result?.manifest),staleTime:Infinity,retry:false})
+ const query=useQuery({queryKey:['pipeline-artifact',job.id,job.revision,'thumbnail',kind],queryFn:()=>thumbnailBlob(job.id,kind),enabled:'has_preview' in job?job.has_preview:Boolean(job.result?.manifest),staleTime:Infinity,retry:false})
 
  useEffect(()=>{if(!query.data)return;const url=URL.createObjectURL(query.data);setSrc(url);return()=>URL.revokeObjectURL(url)},[query.data])
 
- return src?<img src={src} alt={`Actual ${kind} page of ${job.spec.name}`}/>:<PipelineIcon name="file"/>
+ return src?<img src={src} loading="lazy" decoding="async" alt={`Actual ${kind} page of ${job.spec.name}`}/>:<PipelineIcon name="file"/>
 
 }
 
-function useReview(){const open=usePipelineDrawer();return (job:ProductionJob)=>open(job.spec.name,<ReviewPanel initial={job}/>)}
+function useReview(){const open=usePipelineDrawer();return (job:ProductionJob|StartupJob)=>open(job.spec.name,<ReviewPanel initial={job}/>)}
 
-function ReviewPanel({initial}:{initial:ProductionJob}){
+function ReviewPanel({initial}:{initial:ProductionJob|StartupJob}){
 
- const online=useNetworkOnline(),query=useProduction(),open=usePipelineDrawer(),client=useQueryClient(),job=query.data?.jobs.find(j=>j.id===initial.id)||initial
+ const online=useNetworkOnline(),query=useQuery({queryKey:['production-job',initial.id],queryFn:()=>productionRequest<ProductionJob>('/jobs/'+encodeURIComponent(initial.id)),retry:false,staleTime:0}),open=usePipelineDrawer(),client=useQueryClient(),job=query.data||('history' in initial?initial:undefined)
 
- const refresh=()=>{void client.invalidateQueries({queryKey:['production']});void client.invalidateQueries({queryKey:['product-validation']})}
+ const refresh=()=>{void client.invalidateQueries({queryKey:['production']});void client.invalidateQueries({queryKey:['product-validation']});void query.refetch()}
+
+ if(!job)return <QueryState pending={query.isPending} error={query.error} retry={query.refetch}/>
 
  const revise=(spec:ProductionSpec)=>open('Revise specification',<ProductionSpecForm initial={spec} productId={job.product_id} refresh={refresh} close={()=>open(job.spec.name,<ReviewPanel initial={job}/>)}/>)
 
@@ -126,15 +129,17 @@ function RecipePicker(){
 
 export function PipelineHome({userWorkspace}:{userWorkspace:ReactNode}){
 
- const enabled=usePrivateResearch(),{isUserMode}=useAppMode(),open=usePipelineDrawer(),review=useReview()
+ const enabled=usePrivateResearch(),{isUserMode}=useAppMode(),open=usePipelineDrawer(),review=useReview(),client=useQueryClient(),now=useClock()
 
- const projects=useProjects(enabled),production=useProduction(enabled),summary=useQuery({queryKey:['dashboard-summary'],queryFn:getDashboardSummary,enabled:!isUserMode,staleTime:30000,refetchInterval:recoveryInterval(60000),retry:false})
+ const starter=useQuery({queryKey:['startup'],queryFn:async()=>{const next=await getStartup(),previous=client.getQueryData<Awaited<ReturnType<typeof getStartup>>>(['startup']);return previous&&Date.parse(previous.generated_at)>Date.parse(next.generated_at)?previous:next},enabled,staleTime:60000,refetchInterval:recoveryInterval(60000),retry:false})
+ const state=(part:'projects'|'production')=>({...starter,error:starter.error||(starter.data?.[part].status==='unavailable'?new Error(starter.data[part].error):starter.data&&now-Date.parse(starter.data.generated_at)>150000?new Error('Saved summary is delayed. Retry to refresh.'):null),dataUpdatedAt:starter.data?Date.parse(starter.data.generated_at):0})
+ const projects={...state('projects'),data:starter.data?.projects.status==='ready'?starter.data.projects:undefined},production={...state('production'),data:starter.data?.production.status==='ready'?starter.data.production:undefined},summary=useQuery({queryKey:['dashboard-summary'],queryFn:getDashboardSummary,enabled:!isUserMode,staleTime:30000,refetchInterval:recoveryInterval(60000),retry:false})
 
  const stores=useQuery({queryKey:['stores'],queryFn:getStores,enabled:isUserMode})
 
  const products=latestProducts(production.data?.jobs||[])
 
- return <><Heading title="Dashboard" actions={<Link className="button primary" to={isUserMode?'/stores':'/production'}>{isUserMode?'Open stores':'Review products'}</Link>}/><div className="pipeline dashboard-board"><section className="stage"><div className="section-heading"><h2>Research <span className="count">{enabled?number(projects.data?.projects.length):number(stores.data?.length)}</span></h2></div>{enabled?<><QueryState pending={projects.isPending} error={projects.error} retry={projects.refetch} retained={projects.data!==undefined} lastUpdated={projects.dataUpdatedAt}/>{projects.data?.projects.map(p=><Link className="pipeline-task" key={p.id} to={'/validation?project='+encodeURIComponent(p.id)}><PipelineIcon name="file"/><h3>{p.name}</h3><PipelineIcon name="next"/></Link>)}<div className="stage-action"><Link className="button" to="/validation">Open validation</Link></div></>:<><QueryState pending={stores.isPending} error={stores.error} retry={stores.refetch} retained={stores.data!==undefined} lastUpdated={stores.dataUpdatedAt}/>{stores.data?.map(store=><Link className="pipeline-task" key={store.slug} to={'/stores?store='+encodeURIComponent(store.slug)}><PipelineIcon name="file"/><h3>{store.name}</h3><PipelineIcon name="next"/></Link>)}<div className="stage-action"><Link className="button" to="/keywords">Keywords</Link></div></>}</section><section className="stage"><div className="section-heading"><h2>Review <span className="count">{enabled?number(production.data?products.length:null):'Account'}</span></h2></div>{enabled?<><QueryState pending={production.isPending} error={production.error} retry={production.refetch} retained={production.data!==undefined} lastUpdated={production.dataUpdatedAt}/>{products.map(job=><article className="pipeline-product" key={job.id}><div className="pipeline-thumb"><ArtifactPreview job={job}/></div><h3>{job.spec.name}</h3><button className="button primary" onClick={()=>review(job)}>Review</button></article>)}</>:<Link className="button" to="/stores">Products and listings</Link>}</section><section className="stage"><div className="section-heading"><h2>Launch</h2></div><div className="launch-state"><PipelineIcon name="lock"/><h3>{enabled&&production.data&&!products.length?'No current products':products.length&&products.every(j=>['approved','exported'].includes(j.status))?'Approved packages':'Owner approval required'}</h3><Link className="button" to={isUserMode?'/stores':'/launch'}>{isUserMode?'My Stores':'Launch Lab'}</Link></div></section></div>{!isUserMode?<section className="section-block"><div className="section-heading"><h2>Collection</h2><Pill warning>{text(summary.data?.feed?.status)}</Pill></div><QueryState pending={summary.isPending} error={summary.error} retry={summary.refetch} retained={summary.data!==undefined} lastUpdated={summary.dataUpdatedAt}/><Table known={Array.isArray(summary.data?.sources)} heads={['Source','Keywords','Observations','Last observed']} rows={(summary.data?.sources||[]).slice(0,5).map(s=>[<button className="text-link" onClick={()=>open(text(s.source),<Facts rows={[["Source",text(s.source)],["Keywords",number(s.keywords)],["Observations",number(s.rows)],["Last observed",date(s.latest)],["Sales","Unverified"]]}/>)}>{text(s.source)}</button>,number(s.keywords),number(s.rows),date(s.latest)])}/></section>:<details className="pipeline-tools"><summary>Account research</summary>{userWorkspace}</details>}</>
+ return <><Heading title="Dashboard" actions={<Link className="button primary" to={isUserMode?'/stores':'/production'}>{isUserMode?'Open stores':'Review products'}</Link>}/><div className="pipeline dashboard-board"><section className="stage"><div className="section-heading"><h2>Research <span className="count">{enabled?number(projects.data?.total):number(stores.data?.length)}</span></h2></div>{enabled?<><QueryState pending={projects.isPending} error={projects.error} retry={projects.refetch} retained={projects.data!==undefined} lastUpdated={projects.dataUpdatedAt}/>{projects.data?.projects.map(p=><Link className="pipeline-task" key={p.id} to={'/validation?project='+encodeURIComponent(p.id)}><PipelineIcon name="file"/><h3>{p.name}</h3><PipelineIcon name="next"/></Link>)}<div className="stage-action"><Link className="button" to="/validation">Open validation</Link></div></>:<><QueryState pending={stores.isPending} error={stores.error} retry={stores.refetch} retained={stores.data!==undefined} lastUpdated={stores.dataUpdatedAt}/>{stores.data?.map(store=><Link className="pipeline-task" key={store.slug} to={'/stores?store='+encodeURIComponent(store.slug)}><PipelineIcon name="file"/><h3>{store.name}</h3><PipelineIcon name="next"/></Link>)}<div className="stage-action"><Link className="button" to="/keywords">Keywords</Link></div></>}</section><section className="stage"><div className="section-heading"><h2>Review <span className="count">{enabled?number(production.data?.total):'Account'}</span></h2></div>{enabled?<><QueryState pending={production.isPending} error={production.error} retry={production.refetch} retained={production.data!==undefined} lastUpdated={production.dataUpdatedAt}/>{products.map(job=><article className="pipeline-product" key={job.id}><div className="pipeline-thumb"><ArtifactPreview job={job}/></div><h3>{job.spec.name}</h3><button className="button primary" onClick={()=>review(job)}>Review</button></article>)}</>:<Link className="button" to="/stores">Products and listings</Link>}</section><section className="stage"><div className="section-heading"><h2>Launch</h2></div><div className="launch-state"><PipelineIcon name="lock"/><h3>{enabled&&production.data&&!products.length?'No current products':products.length&&products.every(j=>['approved','exported'].includes(j.status))?'Approved packages':'Owner approval required'}</h3><Link className="button" to={isUserMode?'/stores':'/launch'}>{isUserMode?'My Stores':'Launch Lab'}</Link></div></section></div>{!isUserMode?<section className="section-block"><div className="section-heading"><h2>Collection</h2><Pill warning>{text(summary.data?.feed?.status)}</Pill></div><QueryState pending={summary.isPending} error={summary.error} retry={summary.refetch} retained={summary.data!==undefined} lastUpdated={summary.dataUpdatedAt}/><Table known={Array.isArray(summary.data?.sources)} heads={['Source','Keywords','Observations','Last observed']} rows={(summary.data?.sources||[]).slice(0,5).map(s=>[<button className="text-link" onClick={()=>open(text(s.source),<Facts rows={[["Source",text(s.source)],["Keywords",number(s.keywords)],["Observations",number(s.rows)],["Last observed",date(s.latest)],["Sales","Unverified"]]}/>)}>{text(s.source)}</button>,number(s.keywords),number(s.rows),date(s.latest)])}/></section>:<details className="pipeline-tools"><summary>Account research</summary>{userWorkspace}</details>}</>
 
 }
 

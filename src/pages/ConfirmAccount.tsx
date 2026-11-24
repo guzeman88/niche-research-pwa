@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react'
 import {Link,useNavigate} from 'react-router-dom'
 import {accountRequest} from '../lib/accountApi'
 import {useAuth} from '../lib/auth'
+import type {AccountBootstrap} from '../lib/auth'
 
 export default function ConfirmAccount(){
   const [link]=useState(()=>{const p=new URLSearchParams(window.location.search);return {token_hash:p.get('token_hash'),type:p.get('type'),code:p.get('code')}})
@@ -10,7 +11,7 @@ export default function ConfirmAccount(){
   useEffect(()=>{window.history.replaceState(null,'','/auth/confirm')},[])
   async function confirm(){
     if(submitted.current)return;submitted.current=true;setBusy(true)
-    try{await accountRequest('/confirm',link);await auth.refresh();navigate('/account',{replace:true})}
+    try{const result=await accountRequest<AccountBootstrap>('/confirm',link);await auth.establish(result);navigate('/account',{replace:true})}
     catch(e){setError(e instanceof Error?e.message:'Unable to verify this link.');submitted.current=false}finally{setBusy(false)}
   }
   return <main className="page max-w-lg mx-auto pt-12"><section className="panel p-6 space-y-5">

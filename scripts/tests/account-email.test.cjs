@@ -49,6 +49,8 @@ test('standard email callbacks keep tokens server-side and preserve password/MFA
     }
     if(url.pathname==='/auth/v1/user')return ok(user());
     if(url.pathname.endsWith('/app_profiles'))return ok({id:user().id,active:true,role:'admin'});
+    if(url.pathname.endsWith('/app_workspaces')){assert.equal(url.searchParams.get('owner_id'),'eq.'+user().id);return ok({payload:{},revision:1});}
+    if(url.pathname.endsWith('/app_dashboard_state'))return ok(null);
     if(url.pathname.endsWith('/app_login_sessions')){storedSession=data;return ok(null);}
     if(url.pathname.endsWith('/app_security_events'))return ok(null);
     throw new Error('Unexpected test request '+url.pathname);

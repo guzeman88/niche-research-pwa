@@ -32,7 +32,7 @@ page.on('pageerror', error => errors.push(error.message))
 await context.route('**/api/account/**', async route => {
   const request = route.request()
   const path = new URL(request.url()).pathname.replace('/api/account', '')
-  if (path === '/session') return route.fulfill({ json: {
+  if ((path === '/session' || path === '/bootstrap')) return route.fulfill({ json: {
     user: { id: 'candidate-qa-user', email: 'qa@example.test' },
     profile: { id: 'candidate-qa-user', display_name: 'QA Owner', business_name: 'EtGen QA', timezone: 'America/New_York', currency: 'USD', role: 'admin', created_at: now },
     mfa_required: false, recovery: false,

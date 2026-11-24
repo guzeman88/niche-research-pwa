@@ -1,4 +1,6 @@
-"""Opt-in bounded aggregate publisher. Never collects evidence or exports private records."""
+"""Service-only aggregate publisher with allowlisted operator startup headers.
+Never exports raw evidence, customer inputs, artwork or credentials in its payload.
+"""
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -118,6 +120,8 @@ def build_snapshot():
             supported = {k:value[k] for k in ('status','target','qualified_this_month','baseline_groups','available_supported_groups','etsy_demand_backed_groups','as_of') if k in value}
     from services.storage_health import storage_state
     data['storage']=storage_state(native_database(),ledger.db_path())
+    from services.startup import summary as startup_summary
+    data['startup']=startup_summary()
     data.update(schema_version=2, generated_at=now(), snapshot_version=int(time.time()*1000),
         data_status='degraded' if feed.get('status') not in ('completed','ok') else 'healthy',
         feed={k:feed.get(k) for k in ('status','last_attempt','last_completed','last_success','errors','optimization')},

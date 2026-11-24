@@ -50,6 +50,12 @@ export interface ProductionOverview {
 }
 export const productionRequest = <T,>(path = '', body?: unknown) => operatorRequest<T>(`/api/production${path}`, body)
 
+export async function thumbnailBlob(job:string,kind:'cover'|'inside'){
+  const response=await operatorFetch(`/api/production/jobs/${encodeURIComponent(job)}/thumbnail?kind=${kind}`)
+  if(!response.ok)throw new Error('This preview is unavailable or failed integrity verification.')
+  return response.blob()
+}
+
 export async function artifactBlob(job: string, name: string) {
   const response = await operatorFetch(`/api/production/jobs/${encodeURIComponent(job)}/files/${encodeURIComponent(name)}`)
   if (!response.ok) throw new Error('This artifact is unavailable or failed integrity verification.')

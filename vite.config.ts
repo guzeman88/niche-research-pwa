@@ -1,7 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import {realpathSync} from 'node:fs'
+import {fileURLToPath} from 'node:url'
 
 export default defineConfig({
+  // Keep Rollup's root and resolved entry on the same drive through junctions.
+  root: realpathSync(fileURLToPath(new URL('.',import.meta.url))),
   plugins: [react()],
   build: {
     rollupOptions: {
