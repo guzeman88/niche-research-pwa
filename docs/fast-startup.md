@@ -3,6 +3,8 @@
 The Pipeline design and existing detail/export routes remain unchanged. Initial
 dashboard rendering does not fetch the raw product-validation ledger or probe
 production providers.
+Sidebar badges share the same compact query as the dashboard; they never fetch
+full evidence or production capabilities merely to count navigation items.
 
 - `/api/startup` is an authenticated read-only projection of authoritative SQLite
   project headers and latest product revisions. It caps the preview at 50 projects

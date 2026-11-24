@@ -1,5 +1,6 @@
 import {accountRequest} from './accountApi'
 import {accountConnectionAvailable,operatorRequest} from './operatorConnection'
+import type {QueryClient} from '@tanstack/react-query'
 
 export interface StartupJob {id:string;product_id:string;revision:string;status:string;updated_at:string;spec:{name:string;family:string};has_preview:boolean}
 export interface StartupProject {id:string;name:string;product_type?:string;updated_at:string}
@@ -31,4 +32,12 @@ export async function getStartup():Promise<StartupSummary>{
   if(!validStartup(value))throw new Error('The product summary failed consistency checks. Previously loaded data may be shown.')
   if(refresh)refreshed=Math.max(refreshed,version)
   return value
+}
+
+export function startupQuery(client:QueryClient){
+  return {queryKey:['startup'],staleTime:60000,retry:false,queryFn:async()=>{
+    const next=await getStartup(),previous=client.getQueryData<StartupSummary>(['startup'])
+    if(previous&&(['projects','production'] as const).some(key=>next[key].status==='unavailable'&&previous[key].status==='ready'))throw new Error('The latest product summary is incomplete. Previously loaded records have been retained.')
+    return previous&&Date.parse(previous.generated_at)>Date.parse(next.generated_at)?previous:next
+  }}
 }

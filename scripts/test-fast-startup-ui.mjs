@@ -12,6 +12,7 @@ const browser=await chromium.launch({headless:true}),context=await browser.newCo
 await context.route(host+'/**',async route=>{const u=new URL(route.request().url());return route.fulfill({response:await context.request.get(origin+u.pathname+u.search)})})
 await context.route('**/api/account/**',async route=>{
  const p=new URL(route.request().url()).pathname.replace('/api/account','');requests.push(p)
+ if(p==='/backend/access')requests.push(route.request().postDataJSON().path)
  if(p==='/bootstrap'){
    if(signedIn&&omitSnapshot)await new Promise(resolve=>{allowBootstrap=resolve})
    return route.fulfill({json:signedIn?packet():{user:null}})
@@ -28,7 +29,7 @@ try{
  await page.getByRole('button',{name:'Sign in',exact:true}).click()
  await page.getByRole('link',{name:'Startup reference binder'}).waitFor()
  assert.equal(requests.slice(before).filter(p=>['/bootstrap','/session','/workspace','/startup','/dashboard/summary'].includes(p)).length,0,'Inline verified login packet must avoid dependent account reads')
- assert(!requests.some(p=>p==='/api/product-validation'||p==='/api/production'),'Startup must not download full evidence or probe providers')
+ assert(!requests.some(p=>['/api/product-validation','/api/production','/api/production/jobs-overview'].includes(p)),'The dashboard and sidebar must not request full evidence or probe providers, including through scoped-ticket requests')
  for(const width of [1440,390]){await page.setViewportSize({width,height:1000});await page.screenshot({path:`work/fast-startup-qa/dashboard-${width}.png`,fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))}
  assert.equal(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('etgen:startup:v1:')).length),1)
  omitSnapshot=true

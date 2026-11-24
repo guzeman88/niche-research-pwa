@@ -32,7 +32,7 @@ import {validationRequest, download} from '../lib/productValidation'
 import type {ValidationOverview, ValidationProject} from '../lib/productValidation'
 
 import {thumbnailBlob, productionRequest} from '../lib/production'
-import {getStartup} from '../lib/startup'
+import {startupQuery} from '../lib/startup'
 import type {StartupJob} from '../lib/startup'
 
 import type {ProductionOverview, ProductionJob, ProductionSpec, LaunchRecipe} from '../lib/production'
@@ -131,7 +131,7 @@ export function PipelineHome({userWorkspace}:{userWorkspace:ReactNode}){
 
  const enabled=usePrivateResearch(),{isUserMode}=useAppMode(),open=usePipelineDrawer(),review=useReview(),client=useQueryClient(),now=useClock()
 
- const starter=useQuery({queryKey:['startup'],queryFn:async()=>{const next=await getStartup(),previous=client.getQueryData<Awaited<ReturnType<typeof getStartup>>>(['startup']);return previous&&Date.parse(previous.generated_at)>Date.parse(next.generated_at)?previous:next},enabled,staleTime:60000,refetchInterval:recoveryInterval(60000),retry:false})
+ const starter=useQuery({...startupQuery(client),enabled,refetchInterval:recoveryInterval(60000)})
  const state=(part:'projects'|'production')=>({...starter,error:starter.error||(starter.data?.[part].status==='unavailable'?new Error(starter.data[part].error):starter.data&&now-Date.parse(starter.data.generated_at)>150000?new Error('Saved summary is delayed. Retry to refresh.'):null),dataUpdatedAt:starter.data?Date.parse(starter.data.generated_at):0})
  const projects={...state('projects'),data:starter.data?.projects.status==='ready'?starter.data.projects:undefined},production={...state('production'),data:starter.data?.production.status==='ready'?starter.data.production:undefined},summary=useQuery({queryKey:['dashboard-summary'],queryFn:getDashboardSummary,enabled:!isUserMode,staleTime:30000,refetchInterval:recoveryInterval(60000),retry:false})
 
