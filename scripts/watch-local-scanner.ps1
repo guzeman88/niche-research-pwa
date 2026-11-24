@@ -22,8 +22,9 @@ function Write-ScannerLog([string]$Message) {
 
 function Test-BackendHealth {
   try {
-    Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/stats/health" -TimeoutSec 10 | Out-Null
-    return $true
+    # Liveness must not run the database-wide integrity scan on every probe.
+    $response = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/" -TimeoutSec 10
+    return ($response.app -eq "Niche Research PWA")
   } catch {
     return $false
   }
