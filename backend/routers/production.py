@@ -2,7 +2,7 @@
 import base64
 import httpx
 from fastapi import APIRouter,Body,Depends,HTTPException,Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from services import production as service
 
 def require_engine():
@@ -31,6 +31,12 @@ def customer_invoke(method,*args):
 
 @router.get('')
 def overview():return service.overview()
+
+
+@router.get('/jobs-overview')
+def jobs_overview():
+    # Provider/model probes are deferred until operations tools request them.
+    return service.engine().status()
 
 
 @router.get('/capabilities')
@@ -145,6 +151,25 @@ def action(job_id:str,data:dict=Body(...)):return mutate(job_id,service.engine()
 def file(job_id:str,name:str):
     path=invoke(service.engine().file,job_id,name)
     return FileResponse(path,filename=name,headers={'Cache-Control':'private, no-store'})
+
+
+@router.get('/jobs/{job_id}/thumbnail')
+def thumbnail(job_id:str,kind:str='inside'):
+    from io import BytesIO
+    from PIL import Image, ImageOps
+    if kind not in ('cover','inside'):raise HTTPException(400,'Invalid preview kind')
+    engine=service.engine()
+    job=invoke(engine.job,job_id)
+    manifest=(job.get('result') or {}).get('manifest') or {}
+    names=manifest.get('render',{}).get('previews') or ['preview.png']
+    name=names[min(1,len(names)-1)] if kind=='inside' else names[0]
+    # Always retain the engine's package/path/integrity validation before reading.
+    path=invoke(engine.file,job_id,name)
+    with Image.open(path) as image:
+        image=ImageOps.exif_transpose(image).convert('RGB')
+        image.thumbnail((480,600))
+        output=BytesIO();image.save(output,format='WEBP',quality=82,method=4)
+    return Response(output.getvalue(),media_type='image/webp',headers={'Cache-Control':'private, no-store'})
 
 
 @router.get('/customers')

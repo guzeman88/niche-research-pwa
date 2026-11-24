@@ -2,6 +2,7 @@ import {operatorRequest,readConnection} from '../lib/operatorConnection'
 import type {BackendHealth} from '../lib/dataContracts'
 import useNetworkOnline from '../hooks/useNetworkOnline'
 import {recoveryInterval} from '../lib/readRecovery'
+import {markStartupChanged} from '../lib/startup'
 import {date,number} from '../pipeline/format'
 
 import {usePipelineDrawer} from '../pipeline/drawerContext'
@@ -38,7 +39,7 @@ export default function Layout({content,local=false}:{content?:ReactNode;local?:
 function PipelineLayout({children,local}:{children:ReactNode;local:boolean}){
  const client=useQueryClient(),[,connectionChanged]=useState(0)
  useEffect(()=>{const changed=()=>{connectionChanged(v=>v+1);void client.resetQueries({predicate:q=>['pipeline-artifact','production-launch-recipes','supported-keyword-goal','pipeline-reference-coverage','pipeline-health','product-validation','production','pipeline-keywords','selling-products','selling-discovery','automatic-sales-estimates'].includes(String(q.queryKey[0]))})};window.addEventListener('etgen:connection-updated',changed);return()=>window.removeEventListener('etgen:connection-updated',changed)},[client])
- useEffect(()=>{const changed=(event:Event)=>{const path=(event as CustomEvent<string>).detail;const keys=path.startsWith('/api/product-validation')?['product-validation','supported-keyword-goal']:path.startsWith('/api/production')?['production','product-validation']:path.startsWith('/api/selling-products')?['selling-products','selling-discovery']:path.startsWith('/api/sales-intelligence')?['automatic-sales-estimates','pipeline-reference-coverage']:[];for(const key of keys)void client.invalidateQueries({queryKey:[key]})};window.addEventListener('etgen:research-updated',changed);return()=>window.removeEventListener('etgen:research-updated',changed)},[client])
+ useEffect(()=>{const changed=(event:Event)=>{const path=(event as CustomEvent<string>).detail;const keys=path.startsWith('/api/product-validation')?['startup','product-validation','supported-keyword-goal']:path.startsWith('/api/production')?['startup','production-job','production','product-validation']:path.startsWith('/api/selling-products')?['selling-products','selling-discovery']:path.startsWith('/api/sales-intelligence')?['automatic-sales-estimates','pipeline-reference-coverage']:[];if(keys.includes('startup'))markStartupChanged();for(const key of keys)void client.invalidateQueries({queryKey:[key]})};window.addEventListener('etgen:research-updated',changed);return()=>window.removeEventListener('etgen:research-updated',changed)},[client])
  const now=useClock(),online=useNetworkOnline()
  const auth=useAuth(),{isUserMode}=useAppMode(),location=useLocation(),open=usePipelineDrawer()
  const accountScope=['/account','/workspace','/stores'].includes(location.pathname)

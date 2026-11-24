@@ -11,7 +11,7 @@ const context = await browser.newContext({ serviceWorkers: 'block' })
 const mutations = []
 await context.route('**/api/account/**', route => {
   const path = new URL(route.request().url()).pathname
-  if (path.endsWith('/session')) return route.fulfill({ json: {
+  if ((path.endsWith('/session')||path.endsWith('/bootstrap'))) return route.fulfill({ json: {
     user: { id: 'rights-qa', email: 'qa@example.test' },
     profile: { id: 'rights-qa', display_name: 'QA', role: 'admin' },
   } })
