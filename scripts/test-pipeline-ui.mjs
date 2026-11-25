@@ -72,6 +72,7 @@ try{
  for(const width of [1440,390,320]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Seller drawer overflows at ${width}`);if(width!==320)await page.screenshot({path:`work/pipeline-qa/etsy-connection-${width}.png`,fullPage:true})}
  await page.keyboard.press('Escape');await page.locator('.detail-panel').waitFor({state:'detached'});assert(await sellerAction.evaluate(el=>el===document.activeElement),'Closing seller connection restores the trigger focus')
 
+ await page.setViewportSize({width:1440,height:1000})
  // Keep the same authenticated document/cache through failures and recovery.
  const focusCycle=()=>page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});window.dispatchEvent(new Event('visibilitychange'));Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});window.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('focus'))})
  await page.goto(qaOrigin+'/production');await page.getByRole('button',{name:'QA coordination binder',exact:true}).waitFor();await page.locator('.primary-nav a[href="/validation"]').click();await page.getByRole('button',{name:'QA wedding binder',exact:true}).waitFor()
