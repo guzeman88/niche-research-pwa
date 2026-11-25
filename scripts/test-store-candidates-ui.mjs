@@ -24,6 +24,8 @@ await mkdir('work/candidate-qa', { recursive: true })
 const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({ serviceWorkers: 'block' })
 const page = await context.newPage()
+// Keep the controlled compatibility-file fixtures independent of build data.
+await context.route('**/data/release.json*', route => route.fulfill({json:{source:'qa_fixture'}}))
 await context.route('**/data/test-candidates.json*', route => route.fulfill({json:snapshot}))
 await context.route('**/data/store-ideas.json*', route => route.fulfill({json:[]}))
 const errors = []

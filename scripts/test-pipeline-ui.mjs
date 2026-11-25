@@ -17,6 +17,9 @@ const candidate={id:'qa-candidate',name:'QA binder studio',focus:'QA printable t
 const estimate={listing_id:'qa-listing',status:'uncalibrated_review_scenario',collection:{title:'QA printable',shop:'QA shop'},review_scenarios:{'30':{value:10,low:3.33,high:50,review_count:1}},captured_at:at}
 const browser=await chromium.launch({headless:true}),context=await browser.newContext({serviceWorkers:'block'})
 await context.route(qaOrigin+'/**',async route=>{const u=new URL(route.request().url());return route.fulfill({response:await context.request.get(origin+u.pathname+u.search)})})
+// These fixtures exercise the compatibility-file contract. Never inherit the
+// deployment's current package manifest and bypass these controlled responses.
+await context.route('**/data/release.json*',r=>r.fulfill({json:{source:'qa_fixture'}}))
 await context.route('**/api/account/**',async route=>{
  const req=route.request(),p=new URL(req.url()).pathname.replace('/api/account','')
  if((p==='/session'||p==='/bootstrap'))return route.fulfill({json:{user:{id:authIdentity,email:'qa@example.test'},profile:{id:authIdentity,display_name:'QA owner',business_name:'QA studio',timezone:'America/New_York',currency:'USD',role},mfa_required:false}})

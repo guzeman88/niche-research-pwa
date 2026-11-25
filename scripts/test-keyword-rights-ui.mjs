@@ -8,6 +8,8 @@ const origin = process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'
 const keywords = ['ted baker london shirt', 'baker mayfield shirt', 'basketball goodie bags']
 const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({ serviceWorkers: 'block' })
+// Keep the controlled compatibility-file fixtures independent of build data.
+await context.route('**/data/release.json*', route => route.fulfill({json:{source:'qa_fixture'}}))
 const mutations = []
 await context.route('**/api/account/**', route => {
   const path = new URL(route.request().url()).pathname
