@@ -5,7 +5,7 @@ import {mkdir,writeFile} from 'node:fs/promises'
 import {chromium} from 'playwright'
 const origin=process.env.DASHBOARD_UI_ORIGIN||'http://127.0.0.1:4173'
 const qaOrigin='http://etgen.test'
-let role='admin',authIdentity='pipeline-qa',privateOutage=false,invalidProjects=false,invalidCandidates=false
+let sellerConnected=false;let role='admin',authIdentity='pipeline-qa',privateOutage=false,invalidProjects=false,invalidCandidates=false
 let health={status:'ok',database:'connected',collection_scheduler:{enabled:true,interval_minutes:15}}
 const at=new Date().toISOString(),requests=[],errors=[],results=[]
 const project={id:'qa-project',name:'QA wedding binder',product_type:'wedding_binder',keywords:[],status:'needs_evidence',records:[],queue:[],economics:null,economics_currency:null,sync_pending:0,model_version:'qa',input_fingerprint:'qa',outcomes:{status:'not_started',periods:0,orders:null,revenue:null,net_profit:null,contribution:null,visits:null,currencies:[]}}
@@ -20,6 +20,7 @@ await context.route(qaOrigin+'/**',async route=>{const u=new URL(route.request()
 await context.route('**/api/account/**',async route=>{
  const req=route.request(),p=new URL(req.url()).pathname.replace('/api/account','')
  if((p==='/session'||p==='/bootstrap'))return route.fulfill({json:{user:{id:authIdentity,email:'qa@example.test'},profile:{id:authIdentity,display_name:'QA owner',business_name:'QA studio',timezone:'America/New_York',currency:'USD',role},mfa_required:false}})
+ if(p==='/health')return route.fulfill({json:{checks:[{id:'account_storage',status:'healthy',checked_at:at,stale:false,details:{database_bytes:12000000,warning_bytes:350000000}},{id:'private_backend',status:'healthy',checked_at:at,stale:false,details:{}},{id:'public_research',status:'warning',checked_at:at,stale:false,details:{source_data_as_of:at,keyword_count:200000}}]}})
  if(p==='/workspace')return route.fulfill({json:req.method()==='GET'?{payload:{},revision:1}:{revision:2}})
  if(p==='/startup')return route.fulfill({json:{schema_version:1,generated_at:at,input_fingerprint:'qa',projects:{status:'ready',total:1,has_more:false,projects:[{id:project.id,name:project.name,product_type:project.product_type,updated_at:at}]},production:{status:'ready',total:1,has_more:false,paused:false,human_approval_required:true,jobs:[{id:job.id,product_id:job.product_id,revision:job.revision,status:job.status,updated_at:at,spec:{name:job.spec.name,family:job.spec.family},has_preview:true}]}}})
  if(p==='/dashboard/summary')return route.fulfill({json:summary})
@@ -28,7 +29,9 @@ await context.route('**/api/account/**',async route=>{
 })
 await context.route('https://pipeline-qa.test/**',route=>{
  const url=new URL(route.request().url()),p=url.pathname
- if(p==='/api/production/etsy/status')return route.fulfill({json:{configured:true,connected:false,expected_shop:'QA studio'}})
+ if(p==='/api/production/etsy/status')return route.fulfill({json:{configured:true,connected:sellerConnected,expected_shop:'QA studio',shop_name:sellerConnected?'QA studio':null}})
+ if(p==='/api/production/etsy/orders')return route.fulfill({json:{status:'completed',receipts:0,paid_receipts:0,gross_paid_units:0,support_minutes_per_order:null,sample_orders:[]}})
+ if(p==='/api/production/etsy/validation')return route.fulfill({json:{status:'awaiting_comparable_frozen_predictions',matched:0,general_accuracy:null}})
  if(p==='/api/health')return route.fulfill({json:health})
  if(p==='/api/product-validation')return route.fulfill({json:invalidProjects?{projects:null}:{projects:[project],pending_sync:0}})
  if(p==='/api/product-validation/supported-keywords')return route.fulfill({json:{status:'tracking',target:3000,qualified_this_month:1,drafts:[],blockers:[],candidates:[{keyword:'wedding binder',status:'google_supported',automated_relevance:0.8,google_monthly_searches:1000,etsy_listing_count:1200,sample_count:100,human_relevance_review_required:true}]}})
@@ -73,6 +76,9 @@ try{
  await page.keyboard.press('Escape');await page.locator('.detail-panel').waitFor({state:'detached'});assert(await sellerAction.evaluate(el=>el===document.activeElement),'Closing seller connection restores the trigger focus')
 
  await page.setViewportSize({width:1440,height:1000})
+ await page.goto(qaOrigin+'/evidence');await page.getByRole('button',{name:'System health',exact:true}).click();await page.locator('.detail-panel').getByRole('heading',{name:'Account storage',exact:true}).waitFor();await page.locator('.detail-panel').getByText('350 MB',{exact:true}).waitFor()
+ for(const width of [1440,390]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:`work/pipeline-qa/system-health-${width}.png`,fullPage:true})}await page.keyboard.press('Escape')
+ sellerConnected=true;await page.goto(qaOrigin+'/production');await page.getByRole('button',{name:'Etsy connection',exact:true}).click();await page.locator('.detail-panel').getByText('Own orders and cost measurements',{exact:true}).click();await page.locator('.detail-panel').getByRole('heading',{name:'Sales validation',exact:true}).waitFor();await page.locator('.detail-panel').getByText('Unproved',{exact:true}).waitFor();for(const width of [1440,390]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:`work/pipeline-qa/seller-validation-${width}.png`,fullPage:true})}await page.keyboard.press('Escape');sellerConnected=false;await page.setViewportSize({width:1440,height:1000})
  // Keep the same authenticated document/cache through failures and recovery.
  const focusCycle=()=>page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});window.dispatchEvent(new Event('visibilitychange'));Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});window.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('focus'))})
  await page.goto(qaOrigin+'/production');await page.getByRole('button',{name:'QA coordination binder',exact:true}).waitFor();await page.locator('.primary-nav a[href="/validation"]').click();await page.getByRole('button',{name:'QA wedding binder',exact:true}).waitFor()
