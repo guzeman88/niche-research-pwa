@@ -17,12 +17,25 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from urllib.parse import urlparse
+from starlette.middleware.gzip import GZipMiddleware
 
 FILES = frozenset(('stats.json','opportunities.json','store-ideas.json','gaps.json',
                    'breakouts.json','reports.json','test-candidates.json'))
 MAX_FILE = 8 * 1024 * 1024
 MAX_TOTAL = 512 * 1024 * 1024
 INTERVAL = 6 * 3600
+
+
+class PublicExportCompression:
+    """Compress public JSON export streams before the home uplink, not artwork."""
+    def __init__(self, app):
+        self.app=app
+        self.compressed=GZipMiddleware(app,minimum_size=1024,compresslevel=5)
+
+    async def __call__(self,scope,receive,send):
+        path=scope.get('path','')
+        selected=scope['type']=='http' and (path=='/api/export/public-snapshot' or path.startswith('/api/export/public-snapshot/'))
+        await (self.compressed if selected else self.app)(scope,receive,send)
 
 
 def now():

@@ -73,3 +73,21 @@ def test_aggregate_summary_does_not_start_a_slow_scan(monkeypatch):
     monkeypatch.setattr(public_collection,'_cache',None)
     monkeypatch.setattr(public_collection,'measure',lambda *_:pytest.fail('Reads must not start a full scan'))
     assert public_collection.summary()['data_status']=='unavailable'
+
+
+def test_public_export_compression_preserves_decoded_checksums_without_touching_other_media(tmp_path,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.responses import Response
+    from fastapi.testclient import TestClient
+    from routers.export import router
+    worker=generator(tmp_path,monkeypatch);monkeypatch.setenv('TEST_ROWS','500');worker.refresh()
+    _,manifest=public_exports.current_package();name=manifest['resources']['keywords.json']['parts'][0]
+    app=FastAPI();app.add_middleware(public_exports.PublicExportCompression);app.include_router(router)
+    @app.get('/artwork')
+    def artwork():return Response(b'x'*4096,media_type='image/png')
+    with TestClient(app) as client:
+        response=client.get('/api/export/public-snapshot/'+manifest['id']+'/'+name,headers={'accept-encoding':'gzip'})
+        assert response.status_code==200 and response.headers['content-encoding']=='gzip'
+        import hashlib
+        assert hashlib.sha256(response.content).hexdigest()==manifest['files'][name]['sha256']
+        assert 'content-encoding' not in client.get('/artwork').headers

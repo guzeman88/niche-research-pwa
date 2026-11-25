@@ -68,6 +68,8 @@ app.include_router(product_validation.router)
 app.include_router(selling_products.router)
 app.include_router(sales_intelligence.router)
 app.include_router(dashboard.router)
+from services.public_exports import PublicExportCompression
+app.add_middleware(PublicExportCompression)
 app.include_router(startup.router)
 
 
