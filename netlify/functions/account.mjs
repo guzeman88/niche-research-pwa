@@ -7,6 +7,7 @@ import {activeBackend, accessTicket, backendPath} from './lib/backend-access.mjs
 import {sellerRequest,verifiedAuthorization,callbackFields} from './lib/seller-connection.mjs';
 import {bootstrapData,normalizeStartup} from './lib/startup.mjs';
 import {accountServiceProblem} from './lib/account-availability.mjs';
+import {accountServiceConfig} from './lib/account-service-config.mjs';
 
 const options = {global:{fetch:(input, init = {}) => fetch(input, {...init, signal: init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000)})},auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}};
 class Failure extends Error { constructor(status, message, details = {}) { super(message); this.status = status; this.code=details.code;this.reason=details.reason; } }
@@ -34,10 +35,11 @@ export default async function handler(request, context = {}) {
     const text = request.method === 'POST' ? await request.text() : '{}';
     if (Buffer.byteLength(text) > 4.5 * 1024 * 1024) throw new Failure(413, 'Request is too large.');
     let body; try { body = JSON.parse(text); } catch { throw new Failure(400, 'Invalid request.'); }
-    const supabaseUrl = required(process.env.SUPABASE_URL, 'Account service');
-    const anonKey = required(process.env.SUPABASE_ANON_KEY, 'Account public key');
+    const accountConfig = accountServiceConfig(process.env);
+    const supabaseUrl = required(accountConfig.url, 'Account service');
+    const anonKey = required(accountConfig.anonKey, 'Account public key');
     const secret = required(process.env.AUTH_COOKIE_SECRET, 'Account encryption');
-    const service = createClient(supabaseUrl, required(process.env.SUPABASE_SERVICE_ROLE_KEY, 'Account service key'), options);
+    const service = createClient(supabaseUrl, required(accountConfig.serviceKey, 'Account service key'), options);
     const auth = createClient(supabaseUrl, anonKey, options);
     const audit = async (userId, event) => { check(await service.from('app_security_events').insert({user_id:userId, event})); };
     const limit = async (key, max = 20, window = 900) => {

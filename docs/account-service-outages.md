@@ -29,3 +29,14 @@ These public snapshots contain research exports, not private account/workspace
 rows. Restoring hosted account availability remains a separate provider-capacity
 or tested migration task. Preserve the account archive and bulk research before
 any data cleanup or cutover; the restriction is not permission to reset a database.
+
+The account function and scheduled operational freshness check can use a dedicated
+hosted account project through server-only `ACCOUNT_SUPABASE_URL`,
+`ACCOUNT_SUPABASE_ANON_KEY` and `ACCOUNT_SUPABASE_SERVICE_ROLE_KEY`. Configure all
+three together. Any dedicated value selects that whole namespace; missing values
+fail closed instead of mixing research and account credentials. Without these
+settings, the existing `SUPABASE_*` configuration remains compatible. Public
+research exports keep their separate source settings and must never upload bulk
+observations to the account project. The installed publisher uses its existing
+`REPORTING_SUPABASE_*` settings to publish bounded operational summaries there.
+Actual migration/cutover evidence belongs in the canonical desktop handoff.

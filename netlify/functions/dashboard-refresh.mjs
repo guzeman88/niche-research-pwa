@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import {accountServiceConfig} from './lib/account-service-config.mjs';
 
 const options = {
   global: {
@@ -16,10 +17,11 @@ export default async function handler() {
   const startedAt = Date.now();
   const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
   try {
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const accountConfig=accountServiceConfig(process.env);
+    if (!accountConfig.url || !accountConfig.serviceKey) {
       throw new Error('Dashboard refresh is not configured.');
     }
-    const service = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, options);
+    const service = createClient(accountConfig.url, accountConfig.serviceKey, options);
     const operational=await service.from('app_dashboard_state').select('snapshot_version,generated_at').eq('id','active').maybeSingle();
     if(!operational.error && operational.data){
       const stale=Date.now()-Date.parse(operational.data.generated_at)>150000;
