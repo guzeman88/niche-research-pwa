@@ -384,14 +384,15 @@ function generateTestCandidates(rows) {
     throw new Error('This release requires Supabase build credentials.');
   }
   const requestedSource = process.env.SNAPSHOT_SOURCE || '';
-  if (requestedSource && !['supabase', 'api', 'bundled'].includes(requestedSource)) {
+  if (requestedSource && !['supabase', 'api', 'bundled','released'].includes(requestedSource)) {
     throw new Error(`Unsupported SNAPSHOT_SOURCE: ${requestedSource}`);
   }
   const source = requestedSource || (hasSupabaseSource() ? 'supabase' : API ? 'api' : 'bundled');
+  const previous=source==='released'?await require('./released-snapshot.cjs').readReleasedSnapshot(process.env.RELEASED_SNAPSHOT_URL,process.env.RELEASED_SNAPSHOT_COMMIT):null;
   const snapshots = {};
   for (const [filename, endpoint] of endpoints) {
     // Never combine new and fallback snapshots in one release.
-    const data = source === 'supabase' ? await generateSupabaseSnapshot(filename)
+    const data = previous ? previous.data[filename] : source === 'supabase' ? await generateSupabaseSnapshot(filename)
       : source === 'api' ? await fetch(`${API}${endpoint}`)
       : JSON.parse(fs.readFileSync(path.join(FALLBACK, filename), 'utf8'));
     snapshots[filename] = data;
@@ -403,15 +404,15 @@ function generateTestCandidates(rows) {
   const googleVolumeCount = snapshots['keywords.json'].filter((row) =>
     row.observed_search_volume_source === 'google_ads_keyword_planner'
     && numeric(row.observed_search_volume) != null).length;
-  if (source === 'supabase' && googleVolumeCount < minimumGoogleVolumes) {
+  if ((source === 'supabase'||previous) && googleVolumeCount < minimumGoogleVolumes) {
     throw new Error(`Google monthly volumes missing from snapshot: ${googleVolumeCount} < ${minimumGoogleVolumes}`);
   }
-  snapshots['test-candidates.json'] = generateTestCandidates(snapshots['keywords.json']);
+  snapshots['test-candidates.json'] = previous?previous.data['test-candidates.json']:generateTestCandidates(snapshots['keywords.json']);
   const { validateStoreIdeas } = require('./snapshot-contract.cjs');
   validateStoreIdeas(snapshots['store-ideas.json']);
   for (const [filename, data] of Object.entries(snapshots)) {
     const target = path.join(OUT, filename);
-    fs.writeFileSync(target + '.tmp', JSON.stringify(data));
+    fs.writeFileSync(target + '.tmp', previous?previous.raw[filename]:JSON.stringify(data));
     fs.renameSync(target + '.tmp', target);
     console.log(`${filename}: ${Array.isArray(data) ? data.length : Object.keys(data).length} entries`);
   }
@@ -421,9 +422,11 @@ function generateTestCandidates(rows) {
     createHash('sha256').update(fs.readFileSync(path.join(OUT, name))).digest('hex')]));
   const watermarks=source==='supabase' ? await supabaseFetch('research_dashboard_current',{select:'source_watermarks',limit:1}) : [];
   fs.writeFileSync(path.join(OUT, 'release.json'), JSON.stringify({
-    schema_version: 1, source, pipeline_commit: process.env.PIPELINE_COMMIT || null, generated_at: new Date().toISOString(),
+    schema_version: 1, source:previous?'supabase':source, snapshot_mode:previous?'last_verified_release':'generated',
+    ...(previous?{reused_snapshot:{commit:previous.release.commit,generated_at:previous.release.generated_at,url:previous.origin}}:{}),
+    pipeline_commit: process.env.PIPELINE_COMMIT || null, generated_at: new Date().toISOString(),
     commit: execFileSync('git', ['rev-parse', 'HEAD'], {cwd:path.join(__dirname,'..'),encoding:'utf8'}).trim(), files,
-    source_data_as_of:watermarks[0]?.source_watermarks?.observations_at || null,
+    source_data_as_of:previous?(previous.release.source_data_as_of||previous.release.generated_at):(watermarks[0]?.source_watermarks?.observations_at || null),
   }, null, 2));
 })().catch(error => { console.error(error.message); process.exitCode = 1; });
 

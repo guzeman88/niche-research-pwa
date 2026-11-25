@@ -2,6 +2,17 @@ name: Refresh PWA Data And Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      reuse_verified_snapshot:
+        description: 'Incident recovery only: keep all eight snapshots from a pinned prior deployment'
+        type: boolean
+        default: false
+      snapshot_url:
+        description: 'Immutable https://<deploy-id>--etgen.netlify.app URL, required for recovery'
+        type: string
+      snapshot_commit:
+        description: 'Exact 40-character source commit of that deployment'
+        type: string
   schedule:
     - cron: '17 */6 * * *'
 
@@ -17,6 +28,9 @@ jobs:
       VITE_BACKUP_API_URLS: ${{ vars.VITE_BACKUP_API_URLS }}
       VITE_WAKE_BACKEND: ${{ vars.VITE_WAKE_BACKEND }}
       REQUIRE_SUPABASE: '1'
+      SNAPSHOT_SOURCE: ${{ inputs.reuse_verified_snapshot && 'released' || 'supabase' }}
+      RELEASED_SNAPSHOT_URL: ${{ inputs.snapshot_url }}
+      RELEASED_SNAPSHOT_COMMIT: ${{ inputs.snapshot_commit }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       MIN_KEYWORD_SNAPSHOT_COUNT: '13000'
