@@ -6,11 +6,13 @@ import { dashboardEtag, normalizeDashboardSnapshot, normalizeOperationalSnapshot
 import {activeBackend, accessTicket, backendPath} from './lib/backend-access.mjs';
 import {sellerRequest,verifiedAuthorization,callbackFields} from './lib/seller-connection.mjs';
 import {bootstrapData,normalizeStartup} from './lib/startup.mjs';
+import {accountServiceProblem} from './lib/account-availability.mjs';
 
 const options = {global:{fetch:(input, init = {}) => fetch(input, {...init, signal: init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000)})},auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}};
-class Failure extends Error { constructor(status, message) { super(message); this.status = status; } }
+class Failure extends Error { constructor(status, message, details = {}) { super(message); this.status = status; this.code=details.code;this.reason=details.reason; } }
 function required(value, label) { if (!value) throw new Failure(503, `${label} is not configured.`); return value; }
-function check(result) { if (result.error) throw new Failure(['40001','PT409'].includes(result.error.code) ? 409 : 400, ['40001','PT409'].includes(result.error.code) ? 'This workspace changed on another device. Download your current work before reloading.' : result.error.message); return result.data; }
+function available(result){const problem=accountServiceProblem(result);if(problem)throw new Failure(problem.status,problem.message,problem);}
+function check(result) { available(result);if (result.error) throw new Failure(['40001','PT409'].includes(result.error.code) ? 409 : 400, ['40001','PT409'].includes(result.error.code) ? 'This workspace changed on another device. Download your current work before reloading.' : result.error.message); return result.data; }
 const verifiedFactors = user => (user.factors || []).filter(f => f.status === 'verified');
 const assurance = token => { try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).aal; } catch { return ''; } };
 
@@ -76,6 +78,7 @@ export default async function handler(request, context = {}) {
       await limit(`${route}:${email}`, route === '/recover' ? 5 : 10, route === '/recover' ? 3600 : 900);
       if (route === '/login') {
         const result = await auth.auth.signInWithPassword({email, password:String(body.password || '')});
+        available(result);
         if (result.error || !result.data.session) throw new Failure(401, 'Unable to sign in. Check your email, password, and email verification.');
         return response(await startSession(result.data.session));
       }
@@ -143,9 +146,11 @@ export default async function handler(request, context = {}) {
     if (!stored || stored.revoked_at || Date.parse(stored.expires_at) <= Date.now() || Date.parse(stored.last_seen_at) < Date.now() - 12 * 3600000) throw new Failure(401, 'Your session has expired. Sign in again.');
     const saved = unseal(stored.encrypted_tokens, secret, sessionId);
     const restored = await auth.auth.setSession({access_token:saved.access_token,refresh_token:saved.refresh_token});
+    available(restored);
     if (restored.error || !restored.data.session) throw new Failure(401, 'Your session has expired. Sign in again.');
     const tokens = restored.data.session;
     const result = await auth.auth.getUser();
+    available(result);
     if (result.error || !result.data.user || result.data.user.id !== stored.user_id) throw new Failure(401, 'Sign in again.');
     const user = result.data.user;
     const profile = check(await service.from('app_profiles').select('*').eq('id',user.id).maybeSingle());
@@ -334,7 +339,7 @@ export default async function handler(request, context = {}) {
     throw new Failure(404, 'Account action not found.');
   } catch (error) {
     if (error.status === 401) headers['Set-Cookie'] = sessionCookie('', origin, true);
-    return response({error:error instanceof Failure || error instanceof ValidationError ? error.message : 'The account service could not complete this request. Please try again.'},error.status || 400);
+    return response({error:error instanceof Failure || error instanceof ValidationError ? error.message : 'The account service could not complete this request. Please try again.',...(error.code?{code:error.code,reason:error.reason}:{})},error.status || 400);
   }
 }
 
