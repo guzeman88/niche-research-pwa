@@ -63,16 +63,19 @@ async function resource(m:Manifest,name:string):Promise<unknown>{
   const stats=await resource(m,'stats.json');if(!object(stats)||stats.total_seeds!==rows.length)return fail()
   return rows
 }
-export async function readPublicResearch(name:string):Promise<unknown>{
+export async function readPublicResearchWithMetadata(name:string){
   if(!names.includes(name))return fail()
   const first=await manifest()
-  if(!first){const response=await read('/data/'+name);if(!response.ok)return null;return parse(await bytes(response,64*1024*1024))}
-  try{return await resource(first,name)}catch(error){
+  if(!first){const response=await read('/data/'+name);if(!response.ok)return {data:null,manifest:null};return {data:parse(await bytes(response,64*1024*1024)),manifest:null}}
+  try{return {data:await resource(first,name),manifest:first}}catch(error){
     // An atomic deployment can remove the previous family's files mid-read.
     // Restart once only when the release identity actually changed.
     pending=undefined
     const next=await manifest()
-    if(next&&next.id!==first.id)return resource(next,name)
+    if(next&&next.id!==first.id)return {data:await resource(next,name),manifest:next}
     throw error
   }
+}
+export async function readPublicResearch(name:string):Promise<unknown>{
+  return (await readPublicResearchWithMetadata(name)).data
 }
