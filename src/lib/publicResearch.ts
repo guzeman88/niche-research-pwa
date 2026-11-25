@@ -25,7 +25,7 @@ export async function validatePublicManifest(value:unknown):Promise<Manifest>{
   const entries=Object.entries(m.files),required:string[]=[]
   if(!entries.length||entries.length>512||Object.keys(m.resources).length!==names.length)return fail()
   for(const name of names){const r=m.resources[name];if(!object(r))return fail();if(name==='keywords.json'){
-    if(!Array.isArray(r.parts)||!r.parts.length||!Number.isSafeInteger(r.items)||r.items!<0||r.parts.some((p,i)=>p!==`keywords/part-${String(i).padStart(5,'0')}.json`))return fail()
+    if(!Array.isArray(r.parts)||!r.parts.length||!Number.isSafeInteger(r.items)||(r.items as number)<0||r.parts.some((p,i)=>p!==`keywords/part-${String(i).padStart(5,'0')}.json`))return fail()
     required.push(...r.parts)
   }else{if(r.path!==name)return fail();required.push(name)}}
   if(required.length!==entries.length||entries.some(([name,r])=>!required.includes(name)||!object(r)||!Number.isSafeInteger(r.bytes)||r.bytes<2||r.bytes>8*1024*1024||!/^[a-f0-9]{64}$/.test(r.sha256))||entries.reduce((s,[,r])=>s+r.bytes,0)>512*1024*1024)return fail()

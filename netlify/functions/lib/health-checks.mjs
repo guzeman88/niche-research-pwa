@@ -1,5 +1,12 @@
 const finite=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
 const age=(value,now)=>{const time=Date.parse(value);return Number.isFinite(time)&&time<=now+60000?Math.max(0,now-time):Infinity};
+async function smallJson(response){
+ const reader=response.body?.getReader();if(!reader)throw new Error();
+ const chunks=[];let size=0;
+ try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>262144)throw new Error();chunks.push(value)}}finally{await reader.cancel().catch(()=>{})}
+ const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length}
+ return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+}
 export async function sampleHealth(service,read=fetch,now=Date.now()){
  const checks=await Promise.all([
   (async()=>{try{
@@ -16,7 +23,7 @@ export async function sampleHealth(service,read=fetch,now=Date.now()){
   (async()=>{try{
    const response=await read('https://etgen.xyz/data/current/release.json?health='+now,{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(12000)});
    if(!response.ok||!response.headers.get('content-type')?.includes('application/json')||Number(response.headers.get('content-length')||0)>262144)throw new Error();
-   const text=await response.text();if(text.length>262144)throw new Error();const m=JSON.parse(text);
+   const m=await smallJson(response);
    if(m.schema_version!==1||m.source!=='supabase_local'||m.scope!=='local_research_projection'||!/^[a-f0-9]{64}$/.test(m.id)||!Number.isSafeInteger(m.resources?.['keywords.json']?.items)||m.resources['keywords.json'].items<0)throw new Error();
    const fresh=age(m.generated_at,now)<=13*3600000&&age(m.source_data_as_of,now)<=48*3600000;
    return {id:'public_research',status:fresh?'healthy':'warning',details:{reason:fresh?'published_current':'publication_or_source_delayed',generated_at:m.generated_at,source_data_as_of:m.source_data_as_of,keyword_count:m.resources['keywords.json'].items}};
