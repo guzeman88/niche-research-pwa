@@ -20,6 +20,7 @@ body{background:var(--bg)}.pipeline-app{min-height:100vh;background:var(--bg);co
 .pipeline-app h1[tabindex="-1"]:focus{outline:none}.pipeline-functional-account .account-access{margin-bottom:24px}.pipeline-functional-account .account-access>summary{cursor:pointer;font-size:13px}.pipeline-functional-account .member-access>summary{cursor:pointer;font-size:13px;min-height:36px}.pipeline-functional-workspace .earlier-work{grid-column:1/-1;border-top:1px solid var(--line);padding-top:16px}.pipeline-functional-workspace .earlier-work>summary{cursor:pointer;font-size:13px}
 
 .pipeline-functional-account form{max-width:600px}.pipeline-app .btn-primary{font-weight:600}
+.account-signin .btn-primary{color:var(--on-accent)}.account-signin .btn-primary:disabled{opacity:1;background:var(--soft);color:var(--muted);border-color:var(--line)}
 
 .pipeline-functional label{font-weight:500}.pipeline-functional-account form>.grid{grid-template-columns:1fr}
 

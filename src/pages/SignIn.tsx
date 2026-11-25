@@ -30,7 +30,7 @@ export default function SignIn() {
     setError(field.name==='email'?(field.validity.valueMissing?'Enter your email address.':'Enter a valid email address.'):field.name==='code'?'Enter the six-digit authenticator code.':field.validity.valueMissing?'Enter your password.':'Use a password between 12 and 128 characters.')
   }
   function switchMode(next:string){setParams(next==='login'?{}:{mode:next});setError('');setMessage('');setPassword('')}
-  return <main className="min-h-screen bg-surface-950 px-4 py-10 sm:py-16">
+  return <main className="account-signin min-h-screen bg-surface-950 px-4 py-10 sm:py-16">
     <div className="mx-auto max-w-md">
       <BrandLogo subtitle="Your research. Your stores."/>
       <section className="panel mt-8 p-6 sm:p-8">

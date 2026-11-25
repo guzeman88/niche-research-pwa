@@ -25,12 +25,26 @@ await context.route('**/api/account/**',async route=>{
 })
 const page=await context.newPage()
 page.on('pageerror',error=>errors.push(error.message))
+async function buttonContrast(button){
+ const ratio=await button.evaluate(el=>{
+  const style=getComputedStyle(el)
+  const luminance=color=>{
+   const channels=color.match(/[\d.]+/g).slice(0,3).map(v=>Number(v)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4)
+   return channels[0]*.2126+channels[1]*.7152+channels[2]*.0722
+  }
+  if(style.opacity!=='1')return 0
+  const values=[luminance(style.color),luminance(style.backgroundColor)].sort((a,b)=>a-b)
+  return (values[1]+.05)/(values[0]+.05)
+ })
+ assert(ratio>=4.5,`Sign-in button text contrast is ${ratio.toFixed(2)}:1`)
+}
 try{
  await mkdir('work/signin-feedback-qa',{recursive:true})
  await page.goto(origin+'/signin')
  const checking=page.getByRole('button',{name:'Checking account…',exact:true})
  await checking.waitFor()
  assert(await checking.isDisabled(),'Pending session verification must be explicit, not an inert Sign in button')
+ await buttonContrast(checking)
  assert.equal(await page.locator('form').getAttribute('aria-busy'),'true')
  await page.screenshot({path:'work/signin-feedback-qa/checking.png',fullPage:true})
  releaseBootstrap()
@@ -38,6 +52,7 @@ try{
  await submit.waitFor()
  await page.getByRole('alert').filter({hasText:unavailable}).waitFor()
  assert(await submit.isEnabled())
+ await buttonContrast(submit)
  await submit.click()
  await page.getByRole('alert').filter({hasText:'Enter your email address.'}).waitFor()
  await page.getByLabel('Email address',{exact:true}).fill('invalid')
