@@ -67,3 +67,9 @@ def test_native_collection_counts_measure_one_window_without_fabricating_missing
     assert result['counts']['erank_observations_total']==0
     assert 'etsy_listings_total' not in result['counts']
     assert result['data_status']=='partial'
+
+
+def test_aggregate_summary_does_not_start_a_slow_scan(monkeypatch):
+    monkeypatch.setattr(public_collection,'_cache',None)
+    monkeypatch.setattr(public_collection,'measure',lambda *_:pytest.fail('Reads must not start a full scan'))
+    assert public_collection.summary()['data_status']=='unavailable'

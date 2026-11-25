@@ -4,7 +4,7 @@ test('health checks record all three bounded results and separate warnings from 
  const {sampleHealth,publicHealthRows}=await import('../../netlify/functions/lib/health-checks.mjs');
  const now=Date.parse('2026-11-25T18:00:00Z'),at=new Date(now).toISOString();let recorded;
  const service={rpc:async(name,body)=>{if(name==='app_record_health_checks'){recorded=body.checks;return {error:null}}return {data:{database_bytes:360000000,warning_bytes:350000000}}},from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{enabled:true,updated_at:at}})})})})};
- const read=async()=>Response.json({schema_version:1,source:'supabase_local',scope:'local_research_projection',id:'a'.repeat(64),generated_at:at,source_data_as_of:at,resources:{'keywords.json':{items:123}}});
+ const read=async url=>url.includes('/data/release.json')?Response.json({generated_at:at,current_public:{id:'a'.repeat(64)}}):Response.json({schema_version:1,source:'supabase_local',scope:'local_research_projection',id:'a'.repeat(64),generated_at:'2026-11-25T00:00:00Z',source_data_as_of:at,resources:{'keywords.json':{items:123}}});
  const result=await sampleHealth(service,read,now);
  assert.deepEqual(result.map(r=>r.status),['warning','healthy','healthy']);assert.deepEqual(recorded,result);
  assert.equal(result[0].details.database_bytes,360000000);

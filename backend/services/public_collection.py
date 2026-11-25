@@ -3,6 +3,9 @@ from contextlib import closing
 from datetime import datetime, timedelta, timezone
 import threading
 import time
+import asyncio
+import os
+import sqlite3
 
 SPECS = {
     'etsy_listings':('keyword_listing_snapshots','etsy_open_api','observed_at'),
@@ -24,42 +27,78 @@ SPECS = {
 }
 _lock=threading.Lock()
 _cache=None
-_checked=0
 
 
-def measure(path, at=None):
-    from services.dashboard_integration import connection
+def unavailable():
+    return {'schema_version':1,'scope':'native_collection_library','generated_at':datetime.now(timezone.utc).isoformat(),
+            'window_hours':24,'counts':{},'latest':{},'data_status':'unavailable','rate_basis':'observed_storage'}
+
+
+def measure(path, at=None, stopping=None):
     at=at or datetime.now(timezone.utc)
     since=(at-timedelta(days=1)).isoformat()
     counts={};failed=[];sources={}
-    with closing(connection(path)) as con:
+    con=sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True,timeout=5)
+    con.row_factory=sqlite3.Row
+    deadline=time.monotonic()+600
+    con.set_progress_handler(lambda: time.monotonic()>deadline or bool(stopping and stopping.is_set()),10000)
+    with closing(con):
+        con.execute('PRAGMA query_only=ON')
         con.execute('BEGIN')
         for table,column in sorted({(t,c) for t,_,c in SPECS.values()}):
+            providers=sorted({provider for name,(t,ps,_) in SPECS.items() if t==table for provider in (ps if isinstance(ps,tuple) else (ps,))})
+            # One streaming aggregate per table. GROUP BY sorts millions of
+            # input rows into a temporary B-tree, potentially on the system disk.
+            # These fixed-source CASE aggregates need no sort or schema change.
+            expressions=[];parameters=[]
+            for i,provider in enumerate(providers):
+                expressions.extend([f'count(case when source=? then 1 end) total_{i}',
+                    f'count(case when source=? and julianday({column})>=julianday(?) and julianday({column})<=julianday(?) then 1 end) recent_{i}',
+                    f'max(case when source=? then {column} end) latest_{i}'])
+                parameters.extend([provider,provider,since,at.isoformat(),provider])
             try:
-                groups={row['source']:dict(row) for row in con.execute(
-                    f'SELECT source,count(*) total,sum(julianday({column})>=julianday(?) AND julianday({column})<=julianday(?)) recent,max({column}) latest FROM {table} GROUP BY source', (since,at.isoformat()))}
-                for name,(source_table,providers,_) in SPECS.items():
+                row=con.execute('SELECT '+','.join(expressions)+' FROM '+table,parameters).fetchone()
+                groups={provider:{'total':row[f'total_{i}'],'recent':row[f'recent_{i}'],'latest':row[f'latest_{i}']} for i,provider in enumerate(providers)}
+                for name,(source_table,ps,_) in SPECS.items():
                     if source_table!=table:continue
-                    providers=providers if isinstance(providers,tuple) else (providers,)
-                    counts[name+'_total']=sum(groups.get(p,{}).get('total',0) for p in providers)
-                    counts[name+'_24h']=sum(groups.get(p,{}).get('recent',0) or 0 for p in providers)
-                    for provider in providers:
-                        latest=groups.get(provider,{}).get('latest')
+                    ps=ps if isinstance(ps,tuple) else (ps,)
+                    counts[name+'_total']=sum(groups[p]['total'] for p in ps)
+                    counts[name+'_24h']=sum(groups[p]['recent'] for p in ps)
+                    for provider in ps:
+                        latest=groups[provider]['latest']
                         if latest:sources[provider]=max(sources.get(provider,''),latest)
-            except Exception:
-                failed.append(table)
+            except sqlite3.Error:failed.append(table)
     return {'schema_version':1,'scope':'native_collection_library','generated_at':at.isoformat(),
             'window_start':since,'window_hours':24,'counts':counts,'latest':sources,
-            'data_status':'partial' if failed else 'complete','rate_basis':'observed_storage'}
+            'data_status':('partial' if counts else 'unavailable') if failed else 'complete','rate_basis':'observed_storage'}
 
 
-def summary(path):
-    global _cache,_checked
-    with _lock:
-        if _cache is not None and time.monotonic()-_checked<3600:return _cache
-        try:value=measure(path)
-        except Exception:
-            value={'schema_version':1,'scope':'native_collection_library','generated_at':datetime.now(timezone.utc).isoformat(),
-                   'window_hours':24,'counts':{},'latest':{},'data_status':'unavailable','rate_basis':'observed_storage'}
-        _cache=value;_checked=time.monotonic()
-        return value
+def summary(_path=None):
+    # A dashboard read never starts or waits for a library-wide scan.
+    with _lock:return dict(_cache) if _cache is not None else unavailable()
+
+
+class Worker:
+    def __init__(self):
+        self.task=None;self.stopping=threading.Event();self.wake=asyncio.Event()
+
+    def start(self):self.task=asyncio.create_task(self.run())
+
+    async def stop(self):
+        self.stopping.set();self.wake.set()
+        if self.task:await self.task
+
+    async def run(self):
+        global _cache
+        from services.dashboard_integration import native_database
+        while not self.stopping.is_set():
+            try:value=await asyncio.to_thread(measure,native_database(),None,self.stopping)
+            except Exception:value=unavailable()
+            if self.stopping.is_set():return
+            with _lock:_cache=value
+            try:await asyncio.wait_for(self.wake.wait(),timeout=3600 if value['data_status']=='complete' else 300)
+            except asyncio.TimeoutError:pass
+
+
+def configured_worker():
+    return Worker() if os.environ.get('APP_DASHBOARD_REPORTING_ENABLED')=='1' else None
