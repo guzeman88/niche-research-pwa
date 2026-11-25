@@ -26,13 +26,18 @@ try {
   browser = await chromium.launch({headless: true}); const page = await browser.newPage(); const errors = []
   page.on('pageerror', error => errors.push(error.message))
 
+  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/validation`); await openPipelineTools(page)
+
+  await page.getByLabel('Research server address').fill(api)
+  await page.getByRole('button', {name: 'Connect workspace', exact: true}).click()
   // Production's quick list and full tools run together on a query-string URL.
   // Their different response shapes must never share or overwrite a cache entry.
   await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/production?release=qa`); await openPipelineTools(page)
 
-  await page.getByLabel('Research server address').fill(api)
-  await page.getByRole('button', {name: 'Connect workspace', exact: true}).click()
   await page.getByRole('heading', {name: 'Production queue', exact: true}).waitFor()
+  await page.getByText('Local models, artwork import and quality feedback',{exact:true}).waitFor()
+  await delay(5500)
+  assert.equal(await page.getByText('Local models, artwork import and quality feedback',{exact:true}).count(),1,'Quick-record polling cannot replace full tool capabilities')
   await page.getByRole('button', {name: 'Create product specification'}).click()
   const form = page.getByRole('form', {name: 'Production specification'})
   await form.getByLabel('Product name', {exact: true}).fill('Workday Planning Sheets')
