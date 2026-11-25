@@ -6,6 +6,8 @@ import time
 import asyncio
 import os
 import sqlite3
+import json
+import hashlib
 
 SPECS = {
     'etsy_listings':('keyword_listing_snapshots','etsy_open_api','observed_at'),
@@ -57,7 +59,7 @@ def measure(path, at=None, stopping=None):
                     f'max(case when source=? then {column} end) latest_{i}'])
                 parameters.extend([provider,provider,since,at.isoformat(),provider])
             try:
-                row=con.execute('SELECT '+','.join(expressions)+' FROM '+table,parameters).fetchone()
+                row=con.execute('SELECT '+','.join(expressions)+' FROM '+table+' NOT INDEXED',parameters).fetchone()
                 groups={provider:{'total':row[f'total_{i}'],'recent':row[f'recent_{i}'],'latest':row[f'latest_{i}']} for i,provider in enumerate(providers)}
                 for name,(source_table,ps,_) in SPECS.items():
                     if source_table!=table:continue
@@ -73,9 +75,47 @@ def measure(path, at=None, stopping=None):
             'data_status':('partial' if counts else 'unavailable') if failed else 'complete','rate_basis':'observed_storage'}
 
 
-def summary(_path=None):
+def cache_path():
+    from services.product_validation import db_path
+    return db_path().parent/'public-collection-cache.json'
+
+
+def source_identity(path):
+    path=path.resolve();stat=path.stat()
+    return hashlib.sha256(f'{path}|{stat.st_dev}|{stat.st_ino}'.encode()).hexdigest()
+
+
+def read_cache(path):
+    try:
+        file=cache_path()
+        if file.stat().st_size>64000:return None
+        record=json.loads(file.read_text(encoding='utf-8'));value=record['data']
+        age=(datetime.now(timezone.utc)-datetime.fromisoformat(value['generated_at'])).total_seconds()
+        if (record['source']!=source_identity(path) or not -60<=age<=4500 or value['schema_version']!=1
+                or value['scope']!='native_collection_library' or value['rate_basis']!='observed_storage'
+                or value['data_status'] not in ('complete','partial') or not isinstance(value['counts'],dict)
+                or not value['counts'] or len(value['counts'])>2*len(SPECS)
+                or any(name not in {key+'_'+suffix for key in SPECS for suffix in ('total','24h')}
+                       or type(number) is not int or number<0 for name,number in value['counts'].items())):
+            return None
+        return value
+    except (OSError,ValueError,KeyError,TypeError):return None
+
+
+def save_cache(path,value):
+    if value['data_status'] not in ('complete','partial') or not value['counts']:return
+    file=cache_path();file.parent.mkdir(parents=True,exist_ok=True)
+    temporary=file.with_suffix('.json.tmp')
+    temporary.write_text(json.dumps({'source':source_identity(path),'data':value}),encoding='utf-8')
+    os.replace(temporary,file)
+
+
+def summary(path=None):
+    global _cache
     # A dashboard read never starts or waits for a library-wide scan.
-    with _lock:return dict(_cache) if _cache is not None else unavailable()
+    with _lock:
+        if _cache is None and path is not None:_cache=read_cache(path)
+        return dict(_cache) if _cache is not None else unavailable()
 
 
 class Worker:
@@ -91,11 +131,19 @@ class Worker:
     async def run(self):
         global _cache
         from services.dashboard_integration import native_database
+        path=native_database();cached=summary(path)
+        if cached['data_status']=='complete':
+            age=(datetime.now(timezone.utc)-datetime.fromisoformat(cached['generated_at'])).total_seconds()
+            delay=max(0,3600-age)
+            try:await asyncio.wait_for(self.wake.wait(),timeout=delay)
+            except asyncio.TimeoutError:pass
         while not self.stopping.is_set():
-            try:value=await asyncio.to_thread(measure,native_database(),None,self.stopping)
+            try:value=await asyncio.to_thread(measure,path,None,self.stopping)
             except Exception:value=unavailable()
             if self.stopping.is_set():return
             with _lock:_cache=value
+            try:await asyncio.to_thread(save_cache,path,value)
+            except OSError:pass  # A memory result remains usable; no raw store is changed.
             try:await asyncio.wait_for(self.wake.wait(),timeout=3600 if value['data_status']=='complete' else 300)
             except asyncio.TimeoutError:pass
 

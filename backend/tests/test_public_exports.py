@@ -75,6 +75,17 @@ def test_aggregate_summary_does_not_start_a_slow_scan(monkeypatch):
     assert public_collection.summary()['data_status']=='unavailable'
 
 
+def test_materialized_counts_survive_restart_and_reject_another_database(tmp_path,monkeypatch):
+    first=tmp_path/'first.sqlite';second=tmp_path/'second.sqlite'
+    first.write_bytes(b'first');second.write_bytes(b'second')
+    monkeypatch.setattr(public_collection,'cache_path',lambda:tmp_path/'counts.json')
+    value={**public_collection.unavailable(),'data_status':'complete','counts':{'etsy_observations_total':0,'etsy_observations_24h':0}}
+    public_collection.save_cache(first,value)
+    monkeypatch.setattr(public_collection,'_cache',None)
+    assert public_collection.summary(first)['counts']['etsy_observations_total']==0
+    assert public_collection.read_cache(second) is None
+
+
 def test_public_export_compression_preserves_decoded_checksums_without_touching_other_media(tmp_path,monkeypatch):
     from fastapi import FastAPI
     from fastapi.responses import Response
