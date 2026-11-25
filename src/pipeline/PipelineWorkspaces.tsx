@@ -110,7 +110,8 @@ function ReviewPanel({initial}:{initial:ProductionJob|StartupJob}){
 
 export default function PipelineWorkspace({id,children}:{id:PipelinePage;children:ReactNode}){
  const open=usePipelineDrawer(),client=useQueryClient(),location=useLocation()
- const tools=useRef<HTMLDetailsElement>(null),[mounted,setMounted]=useState(Boolean(location.search))
+ const autoTools=Array.from(new URLSearchParams(location.search).keys()).some(key=>!['release','v','startup'].includes(key))
+ const tools=useRef<HTMLDetailsElement>(null),[mounted,setMounted]=useState(autoTools)
  const showTools=()=>{setMounted(true);requestAnimationFrame(()=>{if(tools.current){tools.current.open=true;tools.current.scrollIntoView({block:'start'});tools.current.querySelector<HTMLElement>('summary')?.focus()}})}
  if(['account','workspace'].includes(id))return <div className={`pipeline-functional pipeline-functional-${id}`}>{children}</div>
  const primary=()=>{if(id==='validation')open('Add a product concept',<CreateValidation refresh={async()=>{await client.invalidateQueries({queryKey:['product-validation']})}}/>);else if(id==='production')open('Starting recipes',<RecipePicker/>);else showTools()}
@@ -118,7 +119,7 @@ export default function PipelineWorkspace({id,children}:{id:PipelinePage;childre
  return <>
   {id!=='keywords'&&<Heading title={titles[id]} actions={<>{id==='production'&&<button className="button" onClick={()=>open('Etsy connection',<ProductionSellerConnection compact/>)}>Etsy connection</button>}{id==='evidence'&&<button className="button" onClick={()=>open('System health',<SystemHealth/>)}>System health</button>}<button className="button" onClick={primary}>{action}</button></>}/>}
   {id==='production'?<ProductionPage tools={showTools}/>:id==='validation'?<ValidationPage tools={showTools}/>:id==='keywords'?<KeywordsPage/>:id==='selling'?<SellingPage tools={showTools}/>:id==='stores'?<StoresPage/>:id==='launch'?<LaunchPage/>:id==='evidence'?<EvidencePage/>:<GeneratorPage tools={showTools}/>}
-  <details className="pipeline-tools" ref={tools} open={Boolean(location.search)} onToggle={ev=>{if(ev.currentTarget.open)setMounted(true)}}><summary>Workspace tools</summary>{mounted&&<div className="pipeline-functional">{children}</div>}</details>
+  <details className="pipeline-tools" ref={tools} open={autoTools} onToggle={ev=>{if(ev.currentTarget.open)setMounted(true)}}><summary>Workspace tools</summary>{mounted&&<div className="pipeline-functional">{children}</div>}</details>
  </>
 }
 

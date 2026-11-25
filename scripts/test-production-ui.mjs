@@ -32,7 +32,7 @@ try {
   await page.getByRole('button', {name: 'Connect workspace', exact: true}).click()
   // Production's quick list and full tools run together on a query-string URL.
   // Their different response shapes must never share or overwrite a cache entry.
-  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/production?release=qa`); await openPipelineTools(page)
+  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/production?release=qa`); await page.locator('details.pipeline-tools').waitFor(); assert.equal(await page.locator('details.pipeline-tools').getAttribute('open'),null,'A release cache-buster must not expand all tools'); await openPipelineTools(page)
 
   await page.getByRole('heading', {name: 'Production queue', exact: true}).waitFor()
   await page.getByText('Local models, artwork import and quality feedback',{exact:true}).waitFor()
