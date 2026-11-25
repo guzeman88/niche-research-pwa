@@ -6,7 +6,8 @@ export default function ProductionTools({overview, refresh, productId}: {overvie
   const [result, setResult] = useState('')
   const mutation = useMutation({mutationFn: ({path, body}: {path: string; body: unknown}) => productionRequest(path, body), onSuccess: data => {setResult(JSON.stringify(data, null, 2)); refresh()}})
   const run = (path: string, body: unknown) => mutation.mutate({path, body})
-  const local = overview.capabilities.text; const models = typeof local === 'object' ? local.models || [] : []
+  if(!overview.capabilities||!overview.models)return <div role="status" className="mt-5 space-y-3"><p>Production model settings are unavailable.</p><button className="btn-secondary" onClick={refresh}>Retry production tools</button></div>
+  const local = overview.capabilities.text; const models = local&&typeof local === 'object' ? local.models || [] : []
   return <details className="mt-5 rounded border border-surface-600 p-4">
     <summary className="cursor-pointer text-sm">Local models, artwork import and quality feedback</summary>
     {overview.renderer_capabilities && <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold">Product builder readiness</summary><ul className="mt-3 divide-y divide-surface-600">{overview.renderer_capabilities.map(item=><li key={item.family} className="py-3 text-sm"><p className="font-semibold">{item.family.replace(/_/g,' ')} · {item.implemented ? 'Builder available' : 'Not available'}</p><p className="mt-1 text-surface-200">{item.prerequisite || 'Exact-file review required'}. Outputs: {item.outputs?.join(', ') || 'Not verified'}.</p><p className="mt-1 text-xs text-surface-200">Provider and commercial results require separate evidence.</p></li>)}</ul></details>}

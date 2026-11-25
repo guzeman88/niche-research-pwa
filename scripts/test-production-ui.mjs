@@ -26,7 +26,9 @@ try {
   browser = await chromium.launch({headless: true}); const page = await browser.newPage(); const errors = []
   page.on('pageerror', error => errors.push(error.message))
 
-  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/validation`); await openPipelineTools(page)
+  // Production's quick list and full tools run together on a query-string URL.
+  // Their different response shapes must never share or overwrite a cache entry.
+  await page.goto(`${process.env.VALIDATION_UI_ORIGIN || 'http://127.0.0.1:4173'}/production?release=qa`); await openPipelineTools(page)
 
   await page.getByLabel('Research server address').fill(api)
   await page.getByRole('button', {name: 'Connect workspace', exact: true}).click()

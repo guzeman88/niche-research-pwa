@@ -76,7 +76,7 @@ function latestProducts<T extends {product_id:string}>(jobs:T[]){const seen=new 
 
 function useProjects(enabled=true){return useQuery({queryKey:['product-validation',0],queryFn:()=>validationRequest<ValidationOverview>(),enabled,refetchInterval:recoveryInterval(60000),retry:false})}
 
-function useProduction(enabled=true){return useQuery({queryKey:['production'],queryFn:()=>productionRequest<ProductionOverview>('/jobs-overview'),enabled,refetchInterval:recoveryInterval(5000),retry:false})}
+function useProduction(enabled=true){return useQuery({queryKey:['production','jobs-overview'],queryFn:()=>productionRequest<Pick<ProductionOverview,'jobs'|'paused'>>('/jobs-overview'),enabled,refetchInterval:recoveryInterval(5000),retry:false})}
 
 export function ArtifactPreview({job,kind='inside'}:{job:ProductionJob|StartupJob;kind?:'cover'|'inside'}){
 
