@@ -19,6 +19,7 @@ def compare(prediction,coverage,receipts,shop_id):
         predicted=prediction['value'];unit=prediction['unit'];target=TARGETS.get(unit)
         if (not target or prediction.get('target_definition')!=target):return pending('target_definition_not_comparable')
         if prediction.get('shop_id')!=shop_id:return pending('listing_ownership_not_verified')
+        if store.stamp(prediction['trained_at']).timestamp()>start:return pending('window_not_held_out_from_training')
         if (isinstance(predicted,bool) or not isinstance(predicted,(int,float)) or not math.isfinite(predicted)
                 or predicted<0 or end<=start or abs((end-start)-prediction['days']*86400)>1):return pending('invalid_prediction')
         if not coverage or coverage['since']>start or coverage['cutoff']<end:return pending('incomplete_order_window')

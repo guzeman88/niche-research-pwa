@@ -257,7 +257,7 @@ def prediction(listing_id, days=30, unit='purchases', as_of=None, lane='consensu
         if (vector['metadata'].get('category', '') not in model['categories'] or
                 vector['metadata'].get('product_type', 'unknown') not in model['types']):
             return {'status': 'outside_training_domain', 'value': None}
-        result = {'listing_id': listing_id, 'shop_id':vector['metadata'].get('shop_id'), 'model_id': identity, 'as_of': at.isoformat(),
+        result = {'listing_id': listing_id, 'shop_id':vector['metadata'].get('shop_id'), 'model_id': identity, 'trained_at':model['trained_at'], 'as_of': at.isoformat(),
                   'period_start': (at - timedelta(days=days)).isoformat(), 'period_end': at.isoformat(),
                   'days': days, 'unit': unit, 'value': predict(model, vector['values']),
                   'status': 'outcome_tested_estimate' if lane == 'actual_outcome' else 'experimental_consensus_prediction',
