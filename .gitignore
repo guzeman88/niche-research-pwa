@@ -29,3 +29,6 @@ gha-creds-*.json
 
 # Local design-review captures; keep source and review notes in docs.
 /.impeccable/review/
+
+# Verified public research parts are generated during the build.
+/public/data/current/
