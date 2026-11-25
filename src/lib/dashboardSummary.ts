@@ -1,6 +1,7 @@
 import type {QueryClient} from '@tanstack/react-query'
 import type { DashboardSummary, StatsResponse } from '../types/api'
 import { accountRequest } from './accountApi'
+import {readPublicResearchWithMetadata} from './publicResearch'
 
 interface StaticRelease {
   generated_at?: string
@@ -15,20 +16,21 @@ export async function getDashboardSummary(context?:{client?:QueryClient;queryKey
     const previous=context?.queryKey?context.client?.getQueryData<DashboardSummary>(context.queryKey):undefined
     if(previous?.delivery.mode==='live')throw liveFailure // Keep the last atomic live result and its error visible.
 
-    const [statsResponse, releaseResponse] = await Promise.all([
-      fetch('/data/stats.json', { cache: 'no-store' }),
-      fetch('/data/release.json', { cache: 'no-store' }),
-    ])
-    if (!statsResponse.ok) throw liveFailure
-    const stats = await statsResponse.json() as StatsResponse
-    const release = releaseResponse.ok ? await releaseResponse.json() as StaticRelease : {}
+    const published=await readPublicResearchWithMetadata('stats.json')
+    if(!published.data)throw liveFailure
+    const stats=published.data as StatsResponse
+    let release:StaticRelease={}
+    if(!published.manifest){const response=await fetch('/data/release.json',{cache:'no-store'});if(response.ok)release=await response.json() as StaticRelease}
+    const manifest=published.manifest
+    const version=manifest?.id||release.commit||'static'
+    const generated=manifest?.generated_at||release.generated_at
     return {
       schema_version: 1,
-      scope: 'historical_static_release',
-      snapshot_version: release.commit || 'static',
-      generated_at: release.source_data_as_of || release.generated_at || new Date(0).toISOString(),
+      scope: manifest?'local_research_projection':'historical_static_release',
+      snapshot_version: version,
+      generated_at: manifest?.source_data_as_of || release.source_data_as_of || generated || new Date(0).toISOString(),
       data_status: 'degraded',
-      input_fingerprint: release.commit || 'static-fallback',
+      input_fingerprint: version,
       source_watermarks: {},
       duration_ms: 0,
       stats,
@@ -43,7 +45,7 @@ export async function getDashboardSummary(context?:{client?:QueryClient;queryKey
       delivery: {
         mode: 'fallback',
         refresh_interval_seconds: 60,
-        fallback_generated_at: release.generated_at,
+        fallback_generated_at: generated,
         reason: liveFailure instanceof Error ? liveFailure.message : 'Live dashboard unavailable.',
       },
     }
