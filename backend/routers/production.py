@@ -79,6 +79,13 @@ def seller_orders(request:Request):
     return invoke(lambda:OrderCapture(configured_store()).summary(account_id(request)))
 
 
+@router.get('/etsy/validation')
+def seller_validation(request:Request):
+    from services.seller_connection import account_id
+    from services.sales_intelligence.actual_validation import report
+    return invoke(report,account_id(request))
+
+
 @router.post('/etsy/orders/sync')
 def sync_seller_orders(request:Request):
     from services.seller_connection import configured_store,account_id

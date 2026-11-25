@@ -140,7 +140,7 @@ function rateFor(source, state) {
   return {basis:'configured_schedule', value:null, numerator:null, denominator:null, detail:'No numeric EtGen maximum exists, so a utilization percentage does not apply.', target_status:'not_applicable'};
 }
 
-export function buildCollectionReport({counts = {}, states = [], events = [], now = new Date(), dataStatus = 'complete'} = {}) {
+export function buildCollectionReport({counts = {}, states = [], events = [], now = new Date(), dataStatus = 'complete', measuredStorage=false, latest={}} = {}) {
   const stateMap = Object.fromEntries((states || []).filter(row => row?.provider).map(row => [row.provider, row]));
   const totals = eventTotals(events);
   const rows = SOURCES.map(source => {
@@ -151,8 +151,10 @@ export function buildCollectionReport({counts = {}, states = [], events = [], no
       id:source.id, name:source.name, purpose:source.purpose,
       stored_24h:sumParts(source, counts, '24h'), stored_24h_parts:detailParts(source, counts, '24h'),
       total_stored:sumParts(source, counts, 'total'), total_parts:detailParts(source, counts, 'total'),
-      maximum:maximum(source, state, providerTotals), rate, state:stateFor(source, state),
+      maximum:measuredStorage?{headline:'Not established',detail:'No verified maximum is available for the active collector.'}:maximum(source, state, providerTotals),
+      rate:measuredStorage?{basis:'observed_storage',value:null,numerator:null,denominator:null,target_status:'not_applicable',detail:'Stored rows in the last 24 hours; this does not measure provider capacity or product sales.'}:rate,
+      state:measuredStorage?{label:latest[source.id]?'Recorded':'Unknown',tone:'neutral',detail:'Latest saved observation',last_attempt_at:latest[source.id]||null}:stateFor(source, state),
     };
   });
-  return {generated_at:new Date(now).toISOString(), window_hours:24, refresh_seconds:3600, target_min_pct:TARGET_MIN_PCT, rate_basis:'configured_schedule', data_status:dataStatus, sources:rows};
+  return {generated_at:new Date(now).toISOString(), window_hours:24, refresh_seconds:3600, target_min_pct:measuredStorage?null:TARGET_MIN_PCT, rate_basis:measuredStorage?'observed_storage':'configured_schedule', data_status:dataStatus, sources:rows};
 }

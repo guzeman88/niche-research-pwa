@@ -1,18 +1,22 @@
 import {useMutation,useQuery} from '@tanstack/react-query'
+import {useId} from 'react'
 import {accountRequest} from '../lib/accountApi'
 import {productionRequest} from '../lib/production'
 
 interface ConnectionStatus {configured:boolean;connected:boolean;expected_shop?:string;shop_name?:string;reason?:string;status?:string;draft_upload_verified?:boolean}
 interface OwnOrders {status:string;receipts:number|null;paid_receipts:number|null;gross_paid_units:number|null;support_minutes_per_order:number|null;checked_at:number|null;sample_orders:Array<{order_key:string;support_minutes:number|null}>}
-export default function ProductionSellerConnection(){
-  const status=useQuery({queryKey:['production-seller'],queryFn:()=>productionRequest<ConnectionStatus>('/etsy/status'),retry:false,refetchInterval:30000})
+export default function ProductionSellerConnection({compact=false}:{compact?:boolean}){
+  const heading=useId(),local=['localhost','127.0.0.1','[::1]'].includes(location.hostname)
+  const status=useQuery({queryKey:['production-seller'],queryFn:()=>productionRequest<ConnectionStatus>('/etsy/status'),enabled:!local,retry:false,refetchInterval:30000})
   const orders=useQuery({queryKey:['production-own-orders'],queryFn:()=>productionRequest<OwnOrders>('/etsy/orders'),enabled:status.data?.connected===true,retry:false,refetchInterval:60000})
+  const validation=useQuery({queryKey:['production-sales-validation'],queryFn:()=>productionRequest<{status:string;matched:number;wape_percent?:number|null;general_accuracy:null}>('/etsy/validation'),enabled:status.data?.connected===true,retry:false,refetchInterval:60000})
   const connect=useMutation({mutationFn:()=>accountRequest<{authorize_url:string}>('/etsy/start',{}),onSuccess:data=>{window.location.assign(data.authorize_url)}})
   const sync=useMutation({mutationFn:()=>productionRequest('/etsy/orders/sync',{}),onSuccess:()=>{void orders.refetch()}})
   const support=useMutation({mutationFn:(body:unknown)=>productionRequest('/etsy/orders/support',body),onSuccess:()=>{void orders.refetch()}})
   const callback=new URLSearchParams(location.search).get('etsy_connection')
-  return <section aria-labelledby="seller-connection-heading" className="mt-8 space-y-4 border-y border-surface-600 py-6">
-    <h2 id="seller-connection-heading" className="text-xl font-semibold">Etsy connection</h2>
+  if(local)return <section className={compact?'space-y-4':'mt-8 space-y-4 py-6'} aria-label="Etsy connection"><a className="btn-secondary" href="https://etgen.xyz/production?tools=1">Connect Etsy seller on EtGen</a><p className="text-sm">Seller authorization uses your signed-in hosted account.</p></section>
+  return <section aria-labelledby={compact?undefined:heading} aria-label={compact?'Etsy connection':undefined} className={compact?'space-y-4':'mt-8 space-y-4 border-y border-surface-600 py-6'}>
+    {!compact&&<h2 id={heading} className="text-xl font-semibold">Etsy connection</h2>}
     {status.isPending&&<p role="status" className="text-sm text-surface-200">Checking the private seller connection…</p>}
     {status.data&&<><p className="max-w-prose text-sm">{status.data.connected?`Connected to ${status.data.shop_name}. Own-order reading is verified. Draft upload still follows exact-product approval.`:status.data.configured?`Connect the seller who owns ${status.data.expected_shop}. Etsy will show the requested permissions.`:'Seller connection needs operator setup. Your saved products remain available.'}</p>
       {!status.data.connected&&<button className="btn-secondary" disabled={!status.data.configured||connect.isPending} onClick={()=>connect.mutate()}>{connect.isPending?'Opening Etsy…':'Connect Etsy seller'}</button>}
@@ -30,7 +34,9 @@ export default function ProductionSellerConnection(){
         <p className="text-xs text-surface-200">Enter zero only when you know no support was needed. Include every paid order when measuring average support cost.</p><button className="btn-secondary" disabled={support.isPending}>Save observed support time</button>
       </form>:<p className="text-sm text-surface-200">No captured paid orders are available for support logging.</p>}
       <p className="max-w-prose text-sm text-surface-200">Receipt capture does not establish actual profit, net units after refunds, or sales-estimator accuracy. Payment charges still need reconciliation.</p>
+      <h3 className="font-semibold">Sales validation</h3><dl className="grid gap-4 sm:grid-cols-2"><div><dt className="text-sm text-surface-200">Matched frozen estimates</dt><dd>{validation.data?.matched??'Unknown'}</dd></div><div><dt className="text-sm text-surface-200">General accuracy</dt><dd>Unproved</dd></div></dl>
+      {validation.data&&<p className="max-w-prose text-sm text-surface-200">{validation.data.matched?'Complete own-shop receipt windows are matched to estimates recorded before the order check. Results do not establish competitor accuracy.':'Waiting for complete receipt windows and frozen estimates with matching listing ownership, dates, units and target definitions.'}</p>}
     </div></details>}
-    {[status.error,connect.error,orders.error,sync.error,support.error].filter(Boolean).map((error,index)=><p role="alert" className="text-sm" key={index}>{error?.message}</p>)}
+    {[status.error,connect.error,orders.error,validation.error,sync.error,support.error].filter(Boolean).map((error,index)=><p role="alert" className="text-sm" key={index}>{error?.message}</p>)}
   </section>
 }

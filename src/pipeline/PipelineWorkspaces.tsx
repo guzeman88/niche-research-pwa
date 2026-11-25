@@ -50,6 +50,8 @@ import type {KeywordItem} from '../types/api'
 import {readSupportedGoal} from '../lib/supportedKeywords'
 
 import ProductionJobReview from '../components/ProductionJobReview'
+import ProductionSellerConnection from '../components/ProductionSellerConnection'
+import SystemHealth from '../components/SystemHealth'
 
 import ProductionSpecForm from '../components/ProductionSpecForm'
 
@@ -114,7 +116,7 @@ export default function PipelineWorkspace({id,children}:{id:PipelinePage;childre
  const primary=()=>{if(id==='validation')open('Add a product concept',<CreateValidation refresh={async()=>{await client.invalidateQueries({queryKey:['product-validation']})}}/>);else if(id==='production')open('Starting recipes',<RecipePicker/>);else showTools()}
  const action=id==='production'?'Starting recipes':id==='validation'?'Add product concept':id==='launch'?'New workflow':id==='stores'?'Store workspace':id==='evidence'?'Operations tools':'Workspace tools'
  return <>
-  {id!=='keywords'&&<Heading title={titles[id]} actions={<button className="button" onClick={primary}>{action}</button>}/>}
+  {id!=='keywords'&&<Heading title={titles[id]} actions={<>{id==='production'&&<button className="button" onClick={()=>open('Etsy connection',<ProductionSellerConnection compact/>)}>Etsy connection</button>}{id==='evidence'&&<button className="button" onClick={()=>open('System health',<SystemHealth/>)}>System health</button>}<button className="button" onClick={primary}>{action}</button></>}/>}
   {id==='production'?<ProductionPage tools={showTools}/>:id==='validation'?<ValidationPage tools={showTools}/>:id==='keywords'?<KeywordsPage/>:id==='selling'?<SellingPage tools={showTools}/>:id==='stores'?<StoresPage/>:id==='launch'?<LaunchPage/>:id==='evidence'?<EvidencePage/>:<GeneratorPage tools={showTools}/>}
   <details className="pipeline-tools" ref={tools} open={Boolean(location.search)} onToggle={ev=>{if(ev.currentTarget.open)setMounted(true)}}><summary>Workspace tools</summary>{mounted&&<div className="pipeline-functional">{children}</div>}</details>
  </>

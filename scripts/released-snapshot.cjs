@@ -17,6 +17,11 @@ async function readReleasedSnapshot(origin,expectedCommit,read=fetch){
   data[name]=JSON.parse(raw[name].toString('utf8'));
  }
  if(!Array.isArray(data['keywords.json'])||data['keywords.json'].length!==data['stats.json'].total_seeds)throw new Error('Published keyword count and statistics disagree.');
- return {raw,data,release,origin:url.origin};
+ let current=null;
+ if(release.current_public){
+  current=await require('./public-research-package.cjs').readPackage((name,identity)=>read(url.origin+'/data/current/'+(name==='release.json'?'release.json':identity+'/'+name),{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(30000)}));
+  if(current.manifest.id!==release.current_public.id)throw new Error('Published current research identity differs.');
+ }
+ return {raw,data,release,origin:url.origin,current};
 }
 module.exports={readReleasedSnapshot};

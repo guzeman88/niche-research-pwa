@@ -22,6 +22,11 @@ async function verifyRelease(baseUrl, directory = path.join(__dirname, '..', 'di
     const actual = createHash('sha256').update(await read(name)).digest('hex');
     if (actual !== expected) throw new Error(`Live snapshot hash mismatch: ${name}`);
   }
+  if(local.current_public){
+    const current=await require('./public-research-package.cjs').readPackage((name,identity)=>fetch(`${baseUrl.replace(/\/$/,'')}/data/current/${name==='release.json'?'release.json':identity+'/'+name}?verify=${Date.now()}`,{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(30000)}));
+    if(current.manifest.id!==local.current_public.id)throw new Error('Live current research differs from this build.');
+    console.log(`Verified ${current.manifest.resources['keywords.json'].items} current keywords in ${Object.keys(current.manifest.files).length} bounded files.`);
+  }
   console.log(`Verified ${Object.keys(local.files).length} live snapshot files at commit ${local.commit}`);
 }
 

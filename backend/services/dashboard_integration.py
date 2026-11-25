@@ -122,6 +122,10 @@ def build_snapshot():
     data['storage']=storage_state(native_database(),ledger.db_path())
     from services.startup import summary as startup_summary
     data['startup']=startup_summary()
+    from services.public_exports import status as public_export_status
+    data['public_export']=public_export_status()
+    from services.public_collection import summary as public_collection_summary
+    data['public_collection']=public_collection_summary(native_database())
     data.update(schema_version=2, generated_at=now(), snapshot_version=int(time.time()*1000),
         data_status='degraded' if feed.get('status') not in ('completed','ok') else 'healthy',
         feed={k:feed.get(k) for k in ('status','last_attempt','last_completed','last_success','errors','optimization')},

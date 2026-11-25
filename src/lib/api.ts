@@ -1,3 +1,4 @@
+import {readPublicResearch} from './publicResearch'
 import {validateCandidatePortfolio,DataIntegrityError} from './dataContracts'
 /// <reference types="vite/client" />
 
@@ -59,15 +60,14 @@ async function fetchStatic(path: string): Promise<any | null> {
   const staticPath = STATIC_MAP[path] || (path.startsWith('/api/keywords?') ? '/data/keywords.json' : null);
   if (!staticPath) return null;
   try {
-    const sep = staticPath.includes('?') ? '&' : '?';
-    const res = await fetch(`${staticPath}${sep}_t=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await readPublicResearch(staticPath.replace('/data/',''));
+    if(data===null)return null;
     if (path === '/api/keywords/domains' && Array.isArray(data)) {
       return Array.from(new Set(data.map((kw) => kw.domain).filter(Boolean))).sort();
     }
     return data;
-  } catch {
+  } catch(error) {
+    if(error instanceof DataIntegrityError)throw error
     // Static data is an optional fast path; callers fall back to the API.
   }
   return null;
@@ -346,8 +346,8 @@ export interface TestCandidatePortfolio {
 
 export async function getTestCandidatePortfolio(): Promise<TestCandidatePortfolio> {
   try {
-    const response = await fetch(`/data/test-candidates.json?_t=${Date.now()}`, { cache: 'no-store' });
-    if (response.ok) {const data=await response.json();validateCandidatePortfolio(data);return data as TestCandidatePortfolio;}
+    const data=await readPublicResearch('test-candidates.json');
+    if(data!==null){validateCandidatePortfolio(data);return data as TestCandidatePortfolio;}
   } catch(error) {
     if(error instanceof DataIntegrityError)throw error
     // Fall through to the live report when the atomic static release is unavailable.

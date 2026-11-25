@@ -60,7 +60,9 @@ class OrderCapture:
               CREATE TABLE IF NOT EXISTS seller_order_sync(account TEXT PRIMARY KEY,since REAL NOT NULL,cutoff REAL NOT NULL,
               offset INTEGER NOT NULL,status TEXT NOT NULL,checked REAL);
               CREATE TABLE IF NOT EXISTS seller_support(account TEXT NOT NULL,identity TEXT NOT NULL,minutes REAL NOT NULL,
-              updated REAL NOT NULL,PRIMARY KEY(account,identity));''')
+              updated REAL NOT NULL,PRIMARY KEY(account,identity));
+              CREATE TABLE IF NOT EXISTS seller_order_coverage(account TEXT PRIMARY KEY,since REAL NOT NULL,
+              cutoff REAL NOT NULL,checked REAL NOT NULL);''')
 
     def sync(self,account,max_pages=3):
         from etgen_production.marketplace import lock
@@ -70,6 +72,10 @@ class OrderCapture:
                 row=c.execute('SELECT * FROM seller_order_sync WHERE account=?',(account,)).fetchone()
                 if not row:
                     c.execute('INSERT INTO seller_order_sync VALUES(?,?,?,?,?,?)',(account,now-90*86400,now,0,'pending',None))
+                elif row['status']=='completed' and not c.execute('SELECT 1 FROM seller_order_coverage WHERE account=?',(account,)).fetchone():
+                    # Existing captured rows do not prove a complete historical
+                    # scan. Re-read the initial range without deleting them.
+                    c.execute("UPDATE seller_order_sync SET since=?,cutoff=?,offset=0,status='pending' WHERE account=?",(now-90*86400,now,account))
                 elif row['status']=='completed':
                     c.execute("UPDATE seller_order_sync SET since=?,cutoff=?,offset=0,status='pending' WHERE account=?",(max(946684800,row['cutoff']-86400),now,account))
                 state=dict(c.execute('SELECT * FROM seller_order_sync WHERE account=?',(account,)).fetchone())
@@ -78,7 +84,7 @@ class OrderCapture:
                     for _ in range(min(3,max(1,int(max_pages)))):
                         response=client.get(API+f'/shops/{credentials["shop_id"]}/receipts',
                             params={'min_last_modified':int(state['since']),'max_last_modified':int(state['cutoff']),
-                                    'limit':100,'offset':state['offset']},headers=self.store.headers(credentials['access_token']))
+                                    'sort_on':'receipt_id','sort_order':'asc','limit':100,'offset':state['offset']},headers=self.store.headers(credentials['access_token']))
                         response.raise_for_status();body=response.json()
                         rows=body.get('results');count=body.get('count')
                         if not isinstance(rows,list) or len(rows)>100 or type(count) is not int or count<0 or (not rows and state['offset']<count):
@@ -93,6 +99,11 @@ class OrderCapture:
                             state['offset']+=len(rows);complete=state['offset']>=count
                             c.execute('UPDATE seller_order_sync SET offset=?,status=?,checked=? WHERE account=?',
                                       (state['offset'],'completed' if complete else 'pending',now,account))
+                            if complete:
+                                old=c.execute('SELECT since,cutoff FROM seller_order_coverage WHERE account=?',(account,)).fetchone()
+                                beginning=min(old['since'],state['since']) if old and state['since']<=old['cutoff'] else state['since']
+                                c.execute('INSERT INTO seller_order_coverage VALUES(?,?,?,?) ON CONFLICT(account) DO UPDATE SET since=excluded.since,cutoff=excluded.cutoff,checked=excluded.checked',
+                                          (account,beginning,state['cutoff'],now))
                         if complete:break
             except (httpx.HTTPError,ValueError,KeyError,TypeError):
                 with closing(self.store.connect()) as c,c:c.execute("UPDATE seller_order_sync SET status='needs_attention' WHERE account=?",(account,))
