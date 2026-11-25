@@ -21,12 +21,18 @@ export async function sampleHealth(service,read=fetch,now=Date.now()){
    return {id:'private_backend',status:fresh?'healthy':'warning',details:{reason:fresh?'heartbeat_current':'heartbeat_delayed',last_heartbeat:data.updated_at}};
   }catch{return {id:'private_backend',status:'unavailable',details:{reason:'heartbeat_unavailable'}}}})(),
   (async()=>{try{
-   const response=await read('https://etgen.xyz/data/current/release.json?health='+now,{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(12000)});
-   if(!response.ok||!response.headers.get('content-type')?.includes('application/json')||Number(response.headers.get('content-length')||0)>262144)throw new Error();
-   const m=await smallJson(response);
+   const document=async path=>{
+    const response=await read('https://etgen.xyz/data/'+path+'?health='+now,{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(12000)});
+    if(!response.ok||!response.headers.get('content-type')?.includes('application/json')||Number(response.headers.get('content-length')||0)>262144)throw new Error();
+    return smallJson(response);
+   };
+   const [release,m]=await Promise.all([document('release.json'),document('current/release.json')]);
    if(m.schema_version!==1||m.source!=='supabase_local'||m.scope!=='local_research_projection'||!/^[a-f0-9]{64}$/.test(m.id)||!Number.isSafeInteger(m.resources?.['keywords.json']?.items)||m.resources['keywords.json'].items<0)throw new Error();
-   const fresh=age(m.generated_at,now)<=13*3600000&&age(m.source_data_as_of,now)<=48*3600000;
-   return {id:'public_research',status:fresh?'healthy':'warning',details:{reason:fresh?'published_current':'publication_or_source_delayed',generated_at:m.generated_at,source_data_as_of:m.source_data_as_of,keyword_count:m.resources['keywords.json'].items}};
+   if(release.current_public?.id!==m.id)throw new Error();
+   // A verified unchanged content family retains its immutable generation date.
+   // Publication cadence comes from the release that actually references it.
+   const fresh=age(release.generated_at,now)<=13*3600000&&age(m.source_data_as_of,now)<=48*3600000;
+   return {id:'public_research',status:fresh?'healthy':'warning',details:{reason:fresh?'published_current':'publication_or_source_delayed',generated_at:release.generated_at,source_data_as_of:m.source_data_as_of,keyword_count:m.resources['keywords.json'].items}};
   }catch{return {id:'public_research',status:'unavailable',details:{reason:'published_package_unavailable'}}}})(),
  ]);
  const result=await service.rpc('app_record_health_checks',{checks});

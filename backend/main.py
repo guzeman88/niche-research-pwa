@@ -68,6 +68,8 @@ app.include_router(product_validation.router)
 app.include_router(selling_products.router)
 app.include_router(sales_intelligence.router)
 app.include_router(dashboard.router)
+from services.public_exports import PublicExportCompression
+app.add_middleware(PublicExportCompression)
 app.include_router(startup.router)
 
 
@@ -144,6 +146,10 @@ async def startup():
     if worker:
         worker.start()
         safe_log('[startup] App-owned keyword collection started')
+    from services.public_collection import configured_worker as public_collection_worker
+    app.state.public_collection_worker=public_collection_worker()
+    if app.state.public_collection_worker:
+        app.state.public_collection_worker.start()
     from services.dashboard_integration import configured_worker as dashboard_worker
     app.state.dashboard_worker = dashboard_worker()
     if app.state.dashboard_worker:
@@ -160,6 +166,9 @@ async def shutdown():
     public_export_worker = getattr(app.state,'public_export_worker',None)
     if public_export_worker:
         await public_export_worker.stop()
+    collection_worker=getattr(app.state,'public_collection_worker',None)
+    if collection_worker:
+        await collection_worker.stop()
     dashboard_worker = getattr(app.state, 'dashboard_worker', None)
     if dashboard_worker:
         await dashboard_worker.stop()

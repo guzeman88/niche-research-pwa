@@ -67,3 +67,38 @@ def test_native_collection_counts_measure_one_window_without_fabricating_missing
     assert result['counts']['erank_observations_total']==0
     assert 'etsy_listings_total' not in result['counts']
     assert result['data_status']=='partial'
+
+
+def test_aggregate_summary_does_not_start_a_slow_scan(monkeypatch):
+    monkeypatch.setattr(public_collection,'_cache',None)
+    monkeypatch.setattr(public_collection,'measure',lambda *_:pytest.fail('Reads must not start a full scan'))
+    assert public_collection.summary()['data_status']=='unavailable'
+
+
+def test_materialized_counts_survive_restart_and_reject_another_database(tmp_path,monkeypatch):
+    first=tmp_path/'first.sqlite';second=tmp_path/'second.sqlite'
+    first.write_bytes(b'first');second.write_bytes(b'second')
+    monkeypatch.setattr(public_collection,'cache_path',lambda:tmp_path/'counts.json')
+    value={**public_collection.unavailable(),'data_status':'complete','counts':{'etsy_observations_total':0,'etsy_observations_24h':0}}
+    public_collection.save_cache(first,value)
+    monkeypatch.setattr(public_collection,'_cache',None)
+    assert public_collection.summary(first)['counts']['etsy_observations_total']==0
+    assert public_collection.read_cache(second) is None
+
+
+def test_public_export_compression_preserves_decoded_checksums_without_touching_other_media(tmp_path,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.responses import Response
+    from fastapi.testclient import TestClient
+    from routers.export import router
+    worker=generator(tmp_path,monkeypatch);monkeypatch.setenv('TEST_ROWS','500');worker.refresh()
+    _,manifest=public_exports.current_package();name=manifest['resources']['keywords.json']['parts'][0]
+    app=FastAPI();app.add_middleware(public_exports.PublicExportCompression);app.include_router(router)
+    @app.get('/artwork')
+    def artwork():return Response(b'x'*4096,media_type='image/png')
+    with TestClient(app) as client:
+        response=client.get('/api/export/public-snapshot/'+manifest['id']+'/'+name,headers={'accept-encoding':'gzip'})
+        assert response.status_code==200 and response.headers['content-encoding']=='gzip'
+        import hashlib
+        assert hashlib.sha256(response.content).hexdigest()==manifest['files'][name]['sha256']
+        assert 'content-encoding' not in client.get('/artwork').headers
