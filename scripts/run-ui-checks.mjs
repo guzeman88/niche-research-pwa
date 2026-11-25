@@ -35,6 +35,7 @@ try {
   for (const script of [
     'scripts/test-dashboard-ui.mjs',
     'scripts/test-fast-startup-ui.mjs',
+    'scripts/test-signin-feedback-ui.mjs',
     'scripts/test-pipeline-ui.mjs',
     'scripts/test-store-candidates-ui.mjs',
     'scripts/test-launch-ui.mjs',
