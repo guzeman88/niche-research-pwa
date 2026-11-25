@@ -141,7 +141,8 @@ def commit(data):
 
 def import_outcomes(data):
     rows = rows_from(data)
-    values = [Outcome.model_validate(row).model_dump(mode='json') for row in rows]
+    # Preserve the identities of legacy imports whose target was unspecified.
+    values = [Outcome.model_validate(row).model_dump(mode='json',exclude_none=True) for row in rows]
     for item in values:
         for key in ('period_start', 'period_end', 'available_at'):
             item[key] = store.stamp(item[key]).isoformat()

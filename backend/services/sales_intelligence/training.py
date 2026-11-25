@@ -40,10 +40,12 @@ def outcome_dataset(days=30, unit='purchases'):
                 continue
             samples.append({'id': row['id'], 'listing_id': item['listing_id'], 'shop': item['shop_id'],
                 'start': start.isoformat(), 'end': end.isoformat(), 'label': item['actual'],
-                'feature': feature, 'teacher_sources': []})
+                'feature': feature, 'teacher_sources': [],'target_definition':item.get('target_definition')})
+        definitions={sample['target_definition'] for sample in samples}
         result = {'feature_version': features.VERSION, 'days': days, 'unit': unit, 'objective': 'actual_sales',
             'samples': samples, 'policy_fingerprint': store.digest({}),
-            'correction_epoch': store.get_control(con, 'outcome_epoch', 0)}
+            'correction_epoch': store.get_control(con, 'outcome_epoch', 0),
+            'target_definition':next(iter(definitions)) if len(definitions)==1 else None}
     return persist_dataset(result)
 
 
@@ -165,7 +167,7 @@ def fit(days=30, unit='purchases', objective='consensus'):
         report['guardrails'] = guardrails(tests, test_predictions, baseline)
         validation_report['guardrails'] = guardrails(validation, valid_predictions, baseline)
         qualified = qualified and report['guardrails']['passed'] and validation_report['guardrails']['passed']
-    artifact.update(version=VERSION, lane='actual_outcome' if actual else 'consensus_student', days=days, unit=unit, dataset_id=frozen['id'],
+    artifact.update(version=VERSION, lane='actual_outcome' if actual else 'consensus_student', days=days, unit=unit, dataset_id=frozen['id'],target_definition=frozen.get('target_definition'),
                     feature_version=features.VERSION, policy_fingerprint=frozen['policy_fingerprint'], correction_epoch=frozen['correction_epoch'],
                     training_cases=len(train), baseline=baseline, validation=validation_report, evaluation=report,
                     source_ids=sorted({s for r in frozen['samples'] for s in r['teacher_sources']}),
@@ -255,7 +257,7 @@ def prediction(listing_id, days=30, unit='purchases', as_of=None, lane='consensu
         if (vector['metadata'].get('category', '') not in model['categories'] or
                 vector['metadata'].get('product_type', 'unknown') not in model['types']):
             return {'status': 'outside_training_domain', 'value': None}
-        result = {'listing_id': listing_id, 'model_id': identity, 'as_of': at.isoformat(),
+        result = {'listing_id': listing_id, 'shop_id':vector['metadata'].get('shop_id'), 'model_id': identity, 'trained_at':model['trained_at'], 'as_of': at.isoformat(),
                   'period_start': (at - timedelta(days=days)).isoformat(), 'period_end': at.isoformat(),
                   'days': days, 'unit': unit, 'value': predict(model, vector['values']),
                   'status': 'outcome_tested_estimate' if lane == 'actual_outcome' else 'experimental_consensus_prediction',
@@ -266,8 +268,11 @@ def prediction(listing_id, days=30, unit='purchases', as_of=None, lane='consensu
         if store.get_control(con, active_key(model)) != identity or not eligible(model):
             return {'status': 'model_changed_during_prediction', 'value': None}
         con.execute('INSERT OR IGNORE INTO predictions VALUES(?,?,?,?,?)',
-                    (ident, listing_id, identity, at.isoformat(), store.encoded(result)))
-        return result
+                    (ident, listing_id, identity, at.isoformat(), store.encoded({**result,'recorded_at':store.now().isoformat(),
+                     'target_definition':model.get('target_definition')})))
+        # Preserve the first actual recording time. Old rows without that proof
+        # remain ineligible for a prospective audit; never backdate them.
+        return json.loads(con.execute('SELECT payload FROM predictions WHERE id=?',(ident,)).fetchone()[0])
 
 
 def evaluate_actual(identity):

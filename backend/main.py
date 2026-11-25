@@ -148,11 +148,18 @@ async def startup():
     app.state.dashboard_worker = dashboard_worker()
     if app.state.dashboard_worker:
         app.state.dashboard_worker.start()
+    from services.public_exports import configured_worker as public_export_worker
+    app.state.public_export_worker = public_export_worker()
+    if app.state.public_export_worker:
+        app.state.public_export_worker.start()
 
 
 @app.on_event("shutdown")
 async def shutdown():
     """Gracefully stop the scheduler if running."""
+    public_export_worker = getattr(app.state,'public_export_worker',None)
+    if public_export_worker:
+        await public_export_worker.stop()
     dashboard_worker = getattr(app.state, 'dashboard_worker', None)
     if dashboard_worker:
         await dashboard_worker.stop()
@@ -211,6 +218,7 @@ def api_health():
         "storage": storage_state(kdb.DB_PATH,os.environ.get('VALIDATION_DB_PATH',str(BACKEND_DIR))),
         "database": "connected" if db_ok else "empty",
         "dashboard_reporting": getattr(getattr(app.state, 'dashboard_worker', None), 'state', {'enabled': False}),
+        "public_exports": getattr(getattr(app.state,'public_export_worker',None),'state',{'enabled':False}),
         "boot_id": _PROCESS_BOOT_ID,
         "started_at": _PROCESS_STARTED_AT,
         "revision": os.environ.get("RENDER_GIT_COMMIT") or None,

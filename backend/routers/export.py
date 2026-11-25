@@ -4,10 +4,32 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException, Request
 from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api/export", tags=["export"])
+
+
+@router.get('/public-snapshot')
+def public_snapshot():
+    from services.public_exports import current_package
+    try:return current_package()[1]
+    except (OSError,ValueError,KeyError):raise HTTPException(503,'No complete public research package is ready.') from None
+
+
+@router.get('/public-snapshot/{identity}/{name:path}')
+def public_snapshot_file(identity:str,name:str):
+    from services.public_exports import package_file
+    try:path=package_file(identity,name)
+    except (OSError,ValueError,KeyError):raise HTTPException(404,'Public research package file is unavailable.') from None
+    return FileResponse(path,media_type='application/json',headers={'Cache-Control':'private, no-store'})
+
+
+@router.post('/public-snapshot/refresh',status_code=202)
+def refresh_public_snapshot(request:Request):
+    worker=getattr(request.app.state,'public_export_worker',None)
+    if not worker:raise HTTPException(503,'Public research exports are not enabled.')
+    return worker.request()
 
 
 def _ensure_db():

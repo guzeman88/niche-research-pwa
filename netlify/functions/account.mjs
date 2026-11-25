@@ -1,3 +1,4 @@
+import {publicHealthRows} from './lib/health-checks.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'node:crypto';
 import {createEmailFlow, readEmailFlow, emailFlowCookie, emailRecipientAllowed, authEmailRequest} from './lib/account-email.mjs';
@@ -267,6 +268,11 @@ export default async function handler(request, context = {}) {
       if (assurance(tokens.access_token) !== 'aal2') throw new Failure(403,'Verify your authenticator first.');
       await reauthenticate(); check(await auth.auth.mfa.unenroll({factorId:String(body.factor_id)}));
       await audit(user.id,'mfa_removed'); return response({ok:true});
+    }
+    if (route === '/health' && request.method === 'GET') {
+      if (profile.role !== 'admin') throw new Failure(403,'Administrator access required.');
+      const rows=check(await service.from('app_health_status').select('id,status,checked_at,first_seen_at,resolved_at,details'));
+      return response({checks:publicHealthRows(rows)});
     }
     if (route === '/sessions' && request.method === 'GET') {
       const rows = check(await service.from('app_login_sessions').select('id,device,created_at,last_seen_at,expires_at').eq('user_id',user.id).is('revoked_at',null).gt('expires_at',new Date().toISOString()).order('created_at',{ascending:false}));

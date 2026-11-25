@@ -380,15 +380,17 @@ function generateTestCandidates(rows) {
     ['gaps.json', '/api/gaps?limit=500'], ['keywords.json', '/api/keywords?limit=25000'],
     ['breakouts.json', '/api/keywords/breakouts?limit=100'], ['reports.json', '/api/research/reports?limit=50'],
   ];
-  if (process.env.REQUIRE_SUPABASE === '1' && !hasSupabaseSource()) {
+  if (process.env.REQUIRE_SUPABASE === '1' && !hasSupabaseSource() && !['private-export','released'].includes(process.env.SNAPSHOT_SOURCE)) {
     throw new Error('This release requires Supabase build credentials.');
   }
   const requestedSource = process.env.SNAPSHOT_SOURCE || '';
-  if (requestedSource && !['supabase', 'api', 'bundled','released'].includes(requestedSource)) {
+  if (requestedSource && !['supabase', 'api', 'bundled','released','private-export'].includes(requestedSource)) {
     throw new Error(`Unsupported SNAPSHOT_SOURCE: ${requestedSource}`);
   }
   const source = requestedSource || (hasSupabaseSource() ? 'supabase' : API ? 'api' : 'bundled');
-  const previous=source==='released'?await require('./released-snapshot.cjs').readReleasedSnapshot(process.env.RELEASED_SNAPSHOT_URL,process.env.RELEASED_SNAPSHOT_COMMIT):null;
+  const watermarkBefore=source==='supabase'?await publicSourceWatermarks():null;
+  const previous=['released','private-export'].includes(source)?await require('./released-snapshot.cjs').readReleasedSnapshot(process.env.RELEASED_SNAPSHOT_URL,process.env.RELEASED_SNAPSHOT_COMMIT):null;
+  const currentPackage=source==='private-export'?await (await import('./private-public-export.mjs')).readPrivatePackage():previous?.current||null;
   const snapshots = {};
   for (const [filename, endpoint] of endpoints) {
     // Never combine new and fallback snapshots in one release.
@@ -410,25 +412,50 @@ function generateTestCandidates(rows) {
   snapshots['test-candidates.json'] = previous?previous.data['test-candidates.json']:generateTestCandidates(snapshots['keywords.json']);
   const { validateStoreIdeas } = require('./snapshot-contract.cjs');
   validateStoreIdeas(snapshots['store-ideas.json']);
+  const watermarks=source==='supabase'?await publicSourceWatermarks():null;
+  if(watermarkBefore&&JSON.stringify(watermarkBefore)!==JSON.stringify(watermarks))throw new Error('Research changed during export; retain the previous complete snapshot and retry.');
+  const sourceDataAsOf=previous?(previous.release.source_data_as_of||previous.release.generated_at):watermarks?.observations_at||null;
+  if(process.env.SNAPSHOT_LAYOUT==='sharded-v1'){
+    if(source!=='supabase')throw new Error('Sharded publication requires the complete research projection.');
+    const manifest=require('./public-research-package.cjs').writePackage(OUT,snapshots,{commit:snapshotCommit(),sourceDataAsOf});
+    console.log(`Verified public research package: ${manifest.resources['keywords.json'].items} keywords in ${manifest.resources['keywords.json'].parts.length} bounded parts.`);
+    return;
+  }
   for (const [filename, data] of Object.entries(snapshots)) {
     const target = path.join(OUT, filename);
     fs.writeFileSync(target + '.tmp', previous?previous.raw[filename]:JSON.stringify(data));
     fs.renameSync(target + '.tmp', target);
     console.log(`${filename}: ${Array.isArray(data) ? data.length : Object.keys(data).length} entries`);
   }
-  const { execFileSync } = require('child_process');
   const { createHash } = require('crypto');
   const files = Object.fromEntries(Object.keys(snapshots).map(name => [name,
     createHash('sha256').update(fs.readFileSync(path.join(OUT, name))).digest('hex')]));
-  const watermarks=source==='supabase' ? await supabaseFetch('research_dashboard_current',{select:'source_watermarks',limit:1}) : [];
+  if(currentPackage){
+    const directory=path.join(OUT,'current',currentPackage.manifest.id);
+    for(const [name,bytes] of Object.entries(currentPackage.raw)){const target=path.join(directory,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,bytes)}
+    fs.mkdirSync(path.join(OUT,'current'),{recursive:true});
+    fs.writeFileSync(path.join(OUT,'current/release.json'),JSON.stringify(currentPackage.manifest,null,2));
+  }
   fs.writeFileSync(path.join(OUT, 'release.json'), JSON.stringify({
-    schema_version: 1, source:previous?'supabase':source, snapshot_mode:previous?'last_verified_release':'generated',
+    schema_version: 1, source:previous?'supabase':source, snapshot_mode:currentPackage?'compatibility_archive':previous?'last_verified_release':'generated',
+    ...(currentPackage?{current_public:{id:currentPackage.manifest.id,source_data_as_of:currentPackage.manifest.source_data_as_of,generated_at:currentPackage.manifest.generated_at,keyword_count:currentPackage.manifest.resources['keywords.json'].items}}:{}),
     ...(previous?{reused_snapshot:{commit:previous.release.commit,generated_at:previous.release.generated_at,url:previous.origin}}:{}),
     pipeline_commit: process.env.PIPELINE_COMMIT || null, generated_at: new Date().toISOString(),
-    commit: execFileSync('git', ['rev-parse', 'HEAD'], {cwd:path.join(__dirname,'..'),encoding:'utf8'}).trim(), files,
-    source_data_as_of:previous?(previous.release.source_data_as_of||previous.release.generated_at):(watermarks[0]?.source_watermarks?.observations_at || null),
+    commit: snapshotCommit(), files,
+    source_data_as_of:sourceDataAsOf,
   }, null, 2));
 })().catch(error => { console.error(error.message); process.exitCode = 1; });
+
+function snapshotCommit(){
+  const commit=process.env.SNAPSHOT_COMMIT||require('child_process').execFileSync('git',['rev-parse','HEAD'],{cwd:path.join(__dirname,'..'),encoding:'utf8'}).trim();
+  if(!/^[a-f0-9]{40}$/.test(commit))throw new Error('An exact source commit is required for publication.');
+  return commit;
+}
+
+async function publicSourceWatermarks(){
+  const specs=[['observations_at','keyword_observations','observed_at'],['seeds_synced_at','keyword_seeds','synced_at'],['collection_updated_at','keyword_collection_state','updated_at'],['attempts_at','keyword_latest_attempts','scanned_at'],['evidence_at','keyword_latest_evidence','scanned_at']];
+  return Object.fromEntries(await Promise.all(specs.map(async([key,table,column])=>{const rows=await supabaseFetch(table,{select:column,order:column+'.desc.nullslast',limit:1});if(!Array.isArray(rows))throw new Error('Research watermark is unavailable.');return[key,rows[0]?.[column]||null]})));
+}
 
 async function generateSupabaseSnapshot(filename) {
   switch (filename) {

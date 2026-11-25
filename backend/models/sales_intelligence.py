@@ -112,6 +112,7 @@ class Outcome(Input):
     available_at: datetime
     actual: int = Field(ge=0, le=1_000_000_000, strict=True)
     unit: Literal['units', 'purchases']
+    target_definition: Literal['gross_paid_units_by_receipt_creation','gross_paid_purchases_by_receipt_creation'] | None = None
     source_ref: str = Field(min_length=3, max_length=500)
     attestation: str = Field(min_length=20, max_length=1000)
 
@@ -124,4 +125,6 @@ class Outcome(Input):
     def complete_period(self):
         if not self.period_start < self.period_end <= self.available_at <= datetime.now(timezone.utc):
             raise ValueError('Actual outcomes need a completed period and known availability')
+        if self.target_definition and self.target_definition != f'gross_paid_{self.unit}_by_receipt_creation':
+            raise ValueError('Outcome target definition must match its units')
         return self
