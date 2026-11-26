@@ -46,3 +46,10 @@ jobs:
           path: work/pipeline-qa
           if-no-files-found: ignore
           retention-days: 5
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: product-viewer-qa
+          path: work/product-viewer-qa
+          if-no-files-found: ignore
+          retention-days: 5
