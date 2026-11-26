@@ -44,7 +44,7 @@ try{
  let full=page.getByRole('dialog',{name:'Complete product viewer',exact:true});await full.waitFor()
  assert.equal(await full.getByLabel('Page',{exact:true}).inputValue(),'10');assert.equal(await full.getByLabel('Zoom',{exact:true}).inputValue(),'200')
  for(const width of [1440,390,320]){
-  await page.setViewportSize({width,height:1000});const box=await full.boundingBox();assert(Math.abs(box.x)<1&&Math.abs(box.y)<1&&Math.abs(box.width-width)<1&&Math.abs(box.height-1000)<1,`Full-screen document fills ${width}`)
+  await page.setViewportSize({width,height:1000});const box=await full.boundingBox();assert(Math.abs(box.x)<1&&Math.abs(box.y)<1&&Math.abs(box.width-width)<1&&Math.abs(box.height-1000)<1,`Full-screen document fills ${width}: ${JSON.stringify(box)}`)
   if(width!==320)await page.screenshot({path:`work/product-viewer-qa/fullscreen-document-${width}.png`,fullPage:true})
  }
  for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert(await page.evaluate(()=>document.querySelector('.product-viewer-expanded')?.contains(document.activeElement)||document.activeElement?.classList.contains('product-viewer-exit')))}
