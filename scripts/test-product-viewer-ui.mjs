@@ -6,7 +6,7 @@ const origin=process.env.VALIDATION_UI_ORIGIN||'http://127.0.0.1:4173',site='htt
 const fingerprint='viewer-fixture',files=['customer.xlsx','instructions.txt','customer.zip']
 const job={id:'viewer-job',product_id:'viewer-product',revision:'fixture-revision',status:'needs_review',history:[],spec:{name:'QA complete product',family:'wedding_workbook',purpose:'Controlled viewer fixture',research:{}},result:{manifest:{artifact_fingerprint:fingerprint,files:files.map(name=>({name,bytes:20})),render:{preview_kind:'rasterized_actual_customer_pdf',customer_files:files,previews:Array.from({length:11},(_,i)=>`preview-${i+1}.png`)}},quality:{checks:[]},listing:{blockers:[],description:'QA listing',tags:[]},listing_images:['listing.png']}}
 const cell=(address,value,formula=null)=>({address,value,formula,format:'General',bold:false,fill:null})
-const sheets=[{name:'Budget',state:'visible',columns:2,merged:[],rows:Array.from({length:201},(_,i)=>[cell('A'+(i+1),i===200?'Final customer row':i===0?'Budget item':i),cell('B'+(i+1),i===1?null:0,i===1?'=SUM(A3:A201)':null)])},{name:'Last worksheet',state:'hidden',columns:1,merged:[],rows:[[cell('A1','All worksheets available')]]}]
+const sheets=[{name:'Budget',state:'visible',columns:7,merged:[],rows:Array.from({length:201},(_,i)=>[cell('A'+(i+1),i===200?'Final customer row':i===0?'Budget item':i),cell('B'+(i+1),i===1?null:0,i===1?'=SUM(A3:A201)':null),...Array.from({length:5},(_,col)=>cell(String.fromCharCode(67+col)+(i+1),'Worksheet data'))])},{name:'Last worksheet',state:'hidden',columns:1,merged:[],rows:[[cell('A1','All worksheets available')]]}]
 const browser=await chromium.launch({headless:true}),context=await browser.newContext({serviceWorkers:'block'})
 let failView=true,downloads=0;const errors=[]
 await context.route(site+'/**',async route=>{const u=new URL(route.request().url());return route.fulfill({response:await context.request.get(origin+u.pathname+u.search)})})
@@ -45,8 +45,9 @@ try{
  await viewer.locator('td[data-cell="1-1"]').click();assert.equal(await viewer.getByLabel('Cell contents').innerText(),'=SUM(A3:A201)')
  await page.keyboard.press('ArrowDown');assert.equal(await viewer.locator('td[data-cell="2-1"]').evaluate(e=>e===document.activeElement),true)
  assert.equal(await viewer.getByText('Not calculated',{exact:true}).count(),1)
- await viewer.getByRole('button',{name:'Next rows'}).click();await viewer.getByRole('button',{name:'Next rows'}).click();await viewer.getByText('Final customer row',{exact:true}).waitFor()
- await viewer.getByLabel('Worksheet',{exact:true}).selectOption('1');await viewer.getByText('All worksheets available',{exact:true}).waitFor()
+ await viewer.getByRole('button',{name:'Next rows'}).click();await viewer.getByRole('button',{name:'Next rows'}).click();await viewer.getByRole('gridcell',{name:'Final customer row',exact:true}).waitFor()
+ await viewer.getByLabel('Worksheet',{exact:true}).selectOption('1');await viewer.getByRole('gridcell',{name:'All worksheets available',exact:true}).waitFor()
+ await viewer.getByLabel('Worksheet',{exact:true}).selectOption('0')
  for(const width of [1440,390,320]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Viewer fits ${width}`);if(width!==320)await page.screenshot({path:`work/product-viewer-qa/workbook-${width}.png`,fullPage:true})}
  await viewer.getByLabel('View',{exact:true}).selectOption('instructions.txt');await viewer.getByText('Complete customer instructions, without a download.',{exact:true}).waitFor()
  await viewer.getByLabel('View',{exact:true}).selectOption('customer.zip');await viewer.getByText('customer.xlsx',{exact:true}).first().waitFor()
