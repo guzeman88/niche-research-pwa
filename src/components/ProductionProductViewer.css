@@ -10,3 +10,7 @@
 .product-package{list-style:none;margin:0;padding:16px;max-height:70vh;overflow:auto}.product-package li{display:flex;justify-content:space-between;gap:16px;padding:8px 0;overflow-wrap:anywhere;border-bottom:1px solid var(--line)}.product-package li span:first-child{min-width:0}
 .product-downloads{padding:12px;border-top:1px solid var(--line)}.product-downloads summary{cursor:pointer;font-size:12px}.product-downloads ul{padding:0;list-style:none}.product-downloads button{background:none;border:0;color:var(--accent);padding:8px 0;text-align:left;overflow-wrap:anywhere}.product-viewer>p,.product-viewer>[role=alert]{padding:16px}.product-viewer [role=alert] button{display:block;margin-top:12px}.product-workbook>details{padding:12px;overflow-wrap:anywhere;font-size:12px}
 @media(max-width:600px){.product-viewer-controls{gap:8px}.product-viewer-controls label:first-child{width:100%}.product-viewer-controls label:first-child select{flex:1}.product-page-scroll{padding:8px;height:65vh}.product-text{padding:12px}}
+
+.pipeline-app .product-viewer .product-sheet-scroll td{background:white;color:hsl(220 20% 16%)}
+.pipeline-app .product-viewer .product-sheet-scroll td[aria-selected=true]{background:hsl(215 80% 97%)}
+.product-viewer-controls button,.product-viewer [role=alert] button{border:1px solid var(--line);border-radius:5px;padding:8px 12px;min-height:36px;background:var(--paper);color:var(--ink)}
