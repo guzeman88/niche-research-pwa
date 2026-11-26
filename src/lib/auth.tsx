@@ -1,6 +1,6 @@
 import {createContext, useCallback, useContext, useEffect, useRef, useState} from 'react'
 import type {ReactNode} from 'react'
-import {Navigate, useLocation} from 'react-router-dom'
+import {Link, Navigate, useLocation} from 'react-router-dom'
 import {useQueryClient} from '@tanstack/react-query'
 import {accountRequest, AccountError} from './accountApi'
 import {activateWorkspace, clearAccountWorkspace, flushAccountWorkspace, hasInterruptedEdits, subscribeWorkspace, workspaceStatus} from './accountWorkspace'
@@ -12,7 +12,7 @@ import type {StartupSummary} from './startup'
 export interface Profile {id:string; display_name:string; business_name:string; timezone:string; currency:string; role:'admin'|'member'; created_at:string}
 export interface AccountSession {user:{id:string;email:string}|null;profile?:Profile|null;mfa_required?:boolean;recovery?:boolean;factors?:Array<{id:string;friendly_name?:string}>}
 export interface AccountBootstrap extends AccountSession {workspace?:{payload:Record<string,unknown>;revision:number};dashboard?:DashboardSummary;startup?:StartupSummary}
-interface AuthState extends AccountSession {loading:boolean;error:string;refresh:()=>Promise<void>;establish:(next:AccountBootstrap)=>Promise<void>;logout:(all?:boolean)=>Promise<void>}
+interface AuthState extends AccountSession {loading:boolean;error:string;refresh:(restart?:boolean)=>Promise<void>;establish:(next:AccountBootstrap)=>Promise<void>;logout:(all?:boolean)=>Promise<void>}
 const AuthContext = createContext<AuthState|null>(null)
 export const useAuth = () => {const value=useContext(AuthContext);if(!value)throw new Error('Missing account provider');return value}
 
@@ -22,8 +22,9 @@ export function AuthProvider({children}:{children:ReactNode}) {
   const [loading,setLoading] = useState(true), [error,setError] = useState('')
   const accountId = useRef('')
   const role=useRef(''),generation=useRef(0),inFlight=useRef<Promise<void>|null>(null)
-  const clear = useCallback(() => {generation.current++;accountId.current='';role.current='';purgeStartupCache();clearAccountWorkspace();client.clear();setSession({user:null});clearConnection();setAccountConnectionAvailable(false)},[client])
-  const accept=useCallback(async(next:AccountBootstrap,expected:number)=>{
+  const accountCheck=useRef<AbortController|null>(null)
+  const clear = useCallback(() => {generation.current++;accountCheck.current?.abort();accountId.current='';role.current='';purgeStartupCache();clearAccountWorkspace();client.clear();setSession({user:null});setLoading(false);clearConnection();setAccountConnectionAvailable(false)},[client])
+  const accept=useCallback(async(next:AccountBootstrap,expected:number,signal?:AbortSignal)=>{
     if(expected!==generation.current)return
     if(!next.user){clear();return}
     const allowed=!next.mfa_required&&!next.recovery, nextRole=allowed?next.profile?.role||'':''
@@ -34,7 +35,7 @@ export function AuthProvider({children}:{children:ReactNode}) {
       else purgeStartupCache()
     }
     if(allowed&&workspaceStatus().owner!==next.user.id){
-      const workspace=next.workspace||await accountRequest<{payload:Record<string,unknown>;revision:number}>('/workspace')
+      const workspace=next.workspace||await accountRequest<{payload:Record<string,unknown>;revision:number}>('/workspace',undefined,{signal})
       if(expected!==generation.current)return
       activateWorkspace(next.user.id,workspace.payload,workspace.revision)
     }
@@ -47,25 +48,30 @@ export function AuthProvider({children}:{children:ReactNode}) {
     setAccountConnectionAvailable(allowed&&nextRole==='admin'&&!['localhost','127.0.0.1','[::1]'].includes(location.hostname))
     setSession(next);setError('')
   },[clear,client])
-  const establish=useCallback(async(next:AccountBootstrap)=>{const expected=++generation.current;await accept(next,expected);if(expected===generation.current)setLoading(false)},[accept])
-  const refresh = useCallback(() => {
-    if(inFlight.current)return inFlight.current
+  const establish=useCallback(async(next:AccountBootstrap)=>{const expected=++generation.current;accountCheck.current?.abort();try{await accept(next,expected)}finally{if(expected===generation.current)setLoading(false)}},[accept])
+  const refresh = useCallback((restart=false) => {
+    if(inFlight.current&&!restart)return inFlight.current
+    if(restart){generation.current++;accountCheck.current?.abort();setError('');setLoading(true)}
     const expected=generation.current
+    const controller=new AbortController();accountCheck.current=controller
+    // Bound the entire restore, including a missing workspace, rather than
+    // allowing consecutive account requests to each consume their own timeout.
+    const deadline=setTimeout(()=>controller.abort(new DOMException('Account check timed out','TimeoutError')),15000)
     const task=(async()=>{
     try {
-      const next=await accountRequest<AccountBootstrap>('/bootstrap'+(workspaceStatus().owner?'?workspace=0':''))
-      await accept(next,expected)
+      const next=await accountRequest<AccountBootstrap>('/bootstrap'+(workspaceStatus().owner?'?workspace=0':''),undefined,{signal:controller.signal})
+      await accept(next,expected,controller.signal)
     } catch (error) {
       if(expected!==generation.current)return
       if (error instanceof AccountError && [401,403].includes(error.status)) clear()
       setError(error instanceof Error ? error.message : 'Unable to load your account.')
-    } finally {if(expected===generation.current||!accountId.current)setLoading(false)}
+    } finally {clearTimeout(deadline);if(accountCheck.current===controller)accountCheck.current=null;if(expected===generation.current)setLoading(false)}
     })()
     inFlight.current=task;void task.finally(()=>{if(inFlight.current===task)inFlight.current=null})
     return task
   },[clear,accept])
   const logout = async (all=false) => {
-    generation.current++;inFlight.current=null
+    generation.current++;accountCheck.current?.abort();inFlight.current=null
     // Saving problems must not prevent a user from revoking their session.
     await flushAccountWorkspace().catch(()=>{})
     await accountRequest('/logout',{all}); clear()
@@ -103,7 +109,10 @@ export function AuthProvider({children}:{children:ReactNode}) {
 
 export function RequireAccount({children}:{children:ReactNode}) {
   const auth=useAuth(), location=useLocation()
-  if(auth.loading)return <div className="page max-w-xl" aria-busy="true"><div className="panel p-6"><p role="status">Loading your account…</p></div></div>
+  const [slow,setSlow]=useState(false)
+  useEffect(()=>{if(!auth.loading)return;const timer=setTimeout(()=>setSlow(true),5000);return()=>clearTimeout(timer)},[auth.loading])
+  if(auth.loading)return <div className="page max-w-xl" aria-busy="true"><div className="panel p-6"><p role="status">Loading your account…</p>{slow&&<button type="button" className="btn-secondary mt-4" onClick={()=>void auth.refresh(true)}>Retry connection</button>}</div></div>
+  if(!auth.user&&auth.error)return <div className="page max-w-xl"><div className="panel p-6"><h1 className="text-lg font-semibold">Account connection interrupted</h1><p className="mt-3" role="alert">{auth.error}</p><div className="mt-4 flex flex-wrap items-center gap-4"><button type="button" className="btn-secondary" onClick={()=>void auth.refresh(true)}>Retry connection</button><Link to="/signin">Sign in</Link></div></div></div>
   if(!auth.user)return <Navigate to="/signin" replace state={{from:location.pathname}}/>
   if(auth.mfa_required)return <Navigate to="/signin?mode=mfa" replace/>
   if(auth.recovery && location.pathname !== '/account')return <Navigate to="/account" replace/>
