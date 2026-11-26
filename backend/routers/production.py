@@ -168,6 +168,15 @@ def product_view(job_id:str,name:str,fingerprint:str):
     return JSONResponse(result,headers={'Cache-Control':'private, no-store'})
 
 
+@router.get('/jobs/{job_id}/document')
+def product_document(job_id:str,name:str,fingerprint:str,page:int|None=None):
+    from services.product_viewer import document
+    from fastapi.responses import JSONResponse
+    result=invoke(document,service.engine(),job_id,name,fingerprint,page)
+    headers={'Cache-Control':'private, no-store'}
+    return JSONResponse(result,headers=headers) if page is None else Response(result,media_type='image/png',headers=headers)
+
+
 @router.get('/jobs/{job_id}/thumbnail')
 def thumbnail(job_id:str,kind:str='inside'):
     from io import BytesIO

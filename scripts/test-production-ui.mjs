@@ -60,7 +60,11 @@ try {
   const completeViewer=page.getByRole('region',{name:'Complete product viewer'});await completeViewer.waitFor()
   await completeViewer.scrollIntoViewIfNeeded()
   await completeViewer.getByRole('img',{name:/Page 1 of/}).waitFor()
-  assert.equal(await completeViewer.locator('figure').count(),jobs.jobs[0].result.manifest.render.previews?.length||1)
+  const document=await (await fetch(`${api}/api/production/jobs/${jobs.jobs[0].id}/document?name=customer.pdf&fingerprint=${jobs.jobs[0].result.manifest.artifact_fingerprint}`)).json()
+  assert.equal(document.pages,2,'Both PDF pages must be viewable even when a legacy package only has one saved preview')
+  assert.equal(await completeViewer.locator('figure').count(),document.pages)
+  await completeViewer.getByLabel('Page',{exact:true}).selectOption('1')
+  await completeViewer.getByRole('img',{name:'Page 2 of 2',exact:true}).waitFor()
   await mkdir('work/product-viewer-qa',{recursive:true})
   for(const width of [1440,390]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:`work/product-viewer-qa/actual-product-${width}.png`,fullPage:true})}
   const review = page.getByRole('form', {name: 'Review production files'})

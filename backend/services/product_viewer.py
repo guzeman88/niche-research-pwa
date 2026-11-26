@@ -5,6 +5,42 @@ from pathlib import Path
 from zipfile import ZipFile, BadZipFile
 
 
+def customer_files(manifest):
+    supplied=manifest.get('render', {}).get('customer_files')
+    if supplied is not None:return supplied
+    return [item['name'] for item in manifest.get('files', []) if item['name'].startswith('customer.') or item['name'] in ('instructions.txt','font-license.txt')]
+
+
+def document(engine, job_id, name, fingerprint, page=None):
+    import pypdfium2 as pdfium
+    from io import BytesIO
+    job=engine.job(job_id);manifest=(job.get('result') or {}).get('manifest') or {}
+    if not fingerprint or fingerprint!=manifest.get('artifact_fingerprint'):
+        raise ValueError('The product package changed. Reopen its review before viewing files.')
+    if name not in customer_files(manifest) or Path(name).suffix.lower()!='.pdf':
+        raise ValueError('Choose a customer PDF from this product package.')
+    path=engine.file(job_id,name)
+    if path.stat().st_size>20*1024*1024:raise ValueError('This PDF exceeds the in-app viewer size limit.')
+    with pdfium.PdfDocument(path) as pdf:
+        count=len(pdf)
+        if count>500:raise ValueError('This PDF exceeds the in-app viewer page limit.')
+        if page is None:
+            previews=manifest.get('render',{}).get('previews') or []
+            return {'pages':count,'previews':previews if len(previews)==count else [],'artifact_fingerprint':fingerprint}
+        if not 0<=page<count:raise ValueError('Choose a page in this PDF.')
+        source=pdf[page]
+        try:
+            width,height=source.get_size()
+            if not width>0 or not height>0:raise ValueError('This PDF page has invalid dimensions.')
+            scale=min(2,1800/max(width,height))
+            bitmap=source.render(scale=scale)
+            try:
+                image=bitmap.to_pil();output=BytesIO();image.save(output,format='PNG');image.close()
+                return output.getvalue()
+            finally:bitmap.close()
+        finally:source.close()
+
+
 def package_entries(path):
     with ZipFile(path) as archive:
         entries = archive.infolist()
@@ -85,7 +121,7 @@ def view(engine, job_id, name, fingerprint):
     manifest = (job.get('result') or {}).get('manifest') or {}
     if not fingerprint or fingerprint != manifest.get('artifact_fingerprint'):
         raise ValueError('The product package changed. Reopen its review before viewing files.')
-    if name not in manifest.get('render', {}).get('customer_files', []):
+    if name not in customer_files(manifest):
         raise ValueError('Choose a customer file from this product package.')
     if Path(name).suffix.lower() not in ('.xlsx', '.pptx', '.txt', '.zip'):
         raise ValueError('This file has no structured in-app view.')

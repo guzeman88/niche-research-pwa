@@ -61,6 +61,11 @@ export async function artifactBlob(job: string, name: string) {
   if (!response.ok) throw new Error('This artifact is unavailable or failed integrity verification.')
   return response.blob()
 }
+export async function documentPageBlob(job:string,name:string,fingerprint:string,page:number){
+  const response=await operatorFetch(`/api/production/jobs/${encodeURIComponent(job)}/document?name=${encodeURIComponent(name)}&fingerprint=${encodeURIComponent(fingerprint)}&page=${page}`)
+  if(!response.ok)throw new Error('This PDF page could not be loaded. Retry the page or reopen the review.')
+  return response.blob()
+}
 export async function downloadArtifact(job: string, name: string) {
   const blob = await artifactBlob(job, name); const url = URL.createObjectURL(blob)
   const link = document.createElement('a'); link.href = url; link.download = name; link.click()

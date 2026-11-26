@@ -6,7 +6,7 @@ import pytest
 from openpyxl import Workbook
 from pptx import Presentation
 from pptx.util import Inches
-from services.product_viewer import read_artifact, view
+from services.product_viewer import read_artifact, view, document
 
 
 def test_workbook_keeps_every_sheet_last_row_formulas_and_unknown_cached_results(tmp_path):
@@ -61,3 +61,17 @@ def test_oversized_workbooks_and_archive_expansion_fail_instead_of_truncating(tm
     with ZipFile(package,'w') as archive:
         for i in range(2049):archive.writestr(str(i),'x')
     with pytest.raises(ValueError,match='size limit'):read_artifact(package)
+
+
+def test_actual_pdf_pages_include_missing_legacy_previews_without_changing_source(tmp_path):
+    from reportlab.pdfgen.canvas import Canvas
+    path=tmp_path/'customer.pdf';canvas=Canvas(str(path))
+    for text in ['First page','Second page']:canvas.drawString(30,700,text);canvas.showPage()
+    canvas.save();before=sha256(path.read_bytes()).hexdigest()
+    engine=SimpleNamespace(job=lambda _: {'result':{'manifest':{'artifact_fingerprint':'current','files':[{'name':'customer.pdf'}],'render':{'previews':['preview.png']}}}},file=lambda *_:path)
+    assert document(engine,'job','customer.pdf','current')['pages']==2
+    assert document(engine,'job','customer.pdf','current')['previews']==[]
+    assert document(engine,'job','customer.pdf','current',1).startswith(b'\x89PNG')
+    with pytest.raises(ValueError):document(engine,'job','customer.pdf','current',2)
+    with pytest.raises(ValueError):document(engine,'job','customer.pdf','old')
+    assert sha256(path.read_bytes()).hexdigest()==before

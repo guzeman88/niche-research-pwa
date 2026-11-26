@@ -22,6 +22,7 @@ await context.route('https://viewer-api.test/**',route=>{
  const u=new URL(route.request().url()),path=u.pathname
  if(path.endsWith('/jobs-overview'))return route.fulfill({json:{jobs:[job],paused:false}})
  if(path.endsWith('/jobs/viewer-job'))return route.fulfill({json:job})
+ if(path.endsWith('/document'))return route.fulfill({json:{pages:11,previews:job.result.manifest.render.previews,artifact_fingerprint:fingerprint}})
  if(path.endsWith('/view')){
   if(failView)return route.fulfill({status:400,json:{detail:'The product package changed. Reopen its review before viewing files.'}})
   const name=u.searchParams.get('name');assert.equal(u.searchParams.get('fingerprint'),fingerprint)
@@ -35,7 +36,7 @@ await mkdir('work/product-viewer-qa',{recursive:true})
 try{
  await page.goto(site+'/production');await page.getByRole('button',{name:'Review',exact:true}).click()
  const viewer=page.getByRole('region',{name:'Complete product viewer'})
- await viewer.waitFor();assert.equal(await viewer.locator('figure').count(),11)
+ await viewer.waitFor();await viewer.locator('figure').first().waitFor();assert.equal(await viewer.locator('figure').count(),11)
  await viewer.getByLabel('Page',{exact:true}).selectOption('10');await viewer.getByRole('img',{name:'Page 11 of 11',exact:true}).waitFor()
  await viewer.getByLabel('Zoom',{exact:true}).selectOption('200')
  await viewer.getByLabel('View',{exact:true}).selectOption('customer.xlsx');await viewer.getByRole('alert').waitFor()
