@@ -12,8 +12,10 @@ def customer_files(manifest):
 
 
 def document(engine, job_id, name, fingerprint, page=None):
-    import pypdfium2 as pdfium
-    from io import BytesIO
+    from pypdf import PdfReader
+    import subprocess
+    import sys
+    import os
     job=engine.job(job_id);manifest=(job.get('result') or {}).get('manifest') or {}
     if not fingerprint or fingerprint!=manifest.get('artifact_fingerprint'):
         raise ValueError('The product package changed. Reopen its review before viewing files.')
@@ -21,24 +23,23 @@ def document(engine, job_id, name, fingerprint, page=None):
         raise ValueError('Choose a customer PDF from this product package.')
     path=engine.file(job_id,name)
     if path.stat().st_size>20*1024*1024:raise ValueError('This PDF exceeds the in-app viewer size limit.')
-    with pdfium.PdfDocument(path) as pdf:
-        count=len(pdf)
-        if count>500:raise ValueError('This PDF exceeds the in-app viewer page limit.')
-        if page is None:
-            previews=manifest.get('render',{}).get('previews') or []
-            return {'pages':count,'previews':previews if len(previews)==count else [],'artifact_fingerprint':fingerprint}
-        if not 0<=page<count:raise ValueError('Choose a page in this PDF.')
-        source=pdf[page]
-        try:
-            width,height=source.get_size()
-            if not width>0 or not height>0:raise ValueError('This PDF page has invalid dimensions.')
-            scale=min(2,1800/max(width,height))
-            bitmap=source.render(scale=scale)
-            try:
-                image=bitmap.to_pil();output=BytesIO();image.save(output,format='PNG');image.close()
-                return output.getvalue()
-            finally:bitmap.close()
-        finally:source.close()
+    with path.open('rb') as stream:count=len(PdfReader(stream).pages)
+    if count>500:raise ValueError('This PDF exceeds the in-app viewer page limit.')
+    if page is None:
+        previews=manifest.get('render',{}).get('previews') or []
+        return {'pages':count,'previews':previews if len(previews)==count else [],'artifact_fingerprint':fingerprint}
+    if not 0<=page<count:raise ValueError('Choose a page in this PDF.')
+    # PDFium is not thread-safe. A separate bounded process keeps viewer reads
+    # isolated from each other and the existing production renderer's threads.
+    try:
+        result=subprocess.run([sys.executable,str(Path(__file__).with_name('product_pdf_page.py')),str(path),str(page)],
+            capture_output=True,timeout=30,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError('This PDF page took too long to render. Retry the page.') from exc
+    if result.returncode or not result.stdout.startswith(b'\x89PNG'):
+        raise ValueError('This PDF page could not be rendered. Reopen the product review.')
+    return result.stdout
+
 
 
 def package_entries(path):
