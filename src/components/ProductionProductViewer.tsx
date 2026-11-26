@@ -66,10 +66,10 @@ export default function ProductionProductViewer({job}:{job:ProductionJob}){
   const manifest=job.result?.manifest,files=manifest?.render.customer_files||manifest?.files.filter(f=>f.name.startsWith('customer.')||['instructions.txt','font-license.txt'].includes(f.name)).map(f=>f.name)||[],fingerprint=manifest?.artifact_fingerprint||''
   const [selected,setSelected]=useState('document'),[zoom,setZoom]=useState(100),[downloadError,setDownloadError]=useState('')
   const [expanded,setExpanded]=useState(false)
-  const viewer=useRef<HTMLElement>(null),expandButton=useRef<HTMLButtonElement>(null),exitButton=useRef<HTMLButtonElement>(null)
+  const viewer=useRef<HTMLElement>(null),exitButton=useRef<HTMLButtonElement>(null)
   useEffect(()=>{
     if(!expanded)return
-    const overflow=document.body.style.overflow
+    const overflow=document.body.style.overflow,container=viewer.current
     document.body.style.overflow='hidden'
     exitButton.current?.focus()
     const keys=(event:KeyboardEvent)=>{
@@ -87,7 +87,7 @@ export default function ProductionProductViewer({job}:{job:ProductionJob}){
     return ()=>{
       document.body.style.overflow=overflow
       document.removeEventListener('keydown',keys,true)
-      requestAnimationFrame(()=>expandButton.current?.focus())
+      requestAnimationFrame(()=>container?.querySelector<HTMLButtonElement>('.product-viewer-expand')?.focus())
     }
   },[expanded])
   const pdfName=files.find(name=>name.endsWith('.pdf'))
@@ -103,7 +103,7 @@ export default function ProductionProductViewer({job}:{job:ProductionJob}){
   return <section ref={viewer} id={`${id}-viewer`} className={`product-viewer${expanded?' product-viewer-expanded':''}`} role={expanded?'dialog':'region'} aria-modal={expanded||undefined} aria-label="Complete product viewer">
     {expanded&&<header className="product-viewer-heading"><h3>{job.spec.name}</h3></header>}
     <div className="product-viewer-controls"><label>View<select aria-label="View" value={option.id} onChange={event=>{setSelected(event.target.value);setZoom(100)}}>{options.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
-      {!expanded&&<button ref={expandButton} type="button" className="product-viewer-expand" aria-controls={`${id}-viewer`} aria-expanded="false" onClick={()=>setExpanded(true)}>Full screen</button>}
+      {!expanded&&<button type="button" className="product-viewer-expand" aria-controls={`${id}-viewer`} aria-expanded="false" onClick={()=>setExpanded(true)}>Full screen</button>}
       {option.images.length>0&&<><label>Page<select aria-label="Page" defaultValue="0" key={option.id} onChange={event=>{const target=viewport.current?.querySelector<HTMLElement>(`[data-page="${event.target.value}"]`);if(target&&viewport.current)viewport.current.scrollTo({top:target.offsetTop,behavior:'instant'})}}>{option.images.map((_,i)=><option key={i} value={i}>{i+1} of {option.images.length}</option>)}</select></label><label>Zoom<select aria-label="Zoom" value={zoom} onChange={event=>setZoom(Number(event.target.value))}>{[100,125,150,200].map(value=><option key={value} value={value}>{value===100?'Fit width':value+'%'}</option>)}</select></label></>}
     </div>
     {option.id==='document'&&pdfName&&documentQuery.isPending?<p role="status">Loading document...</p>:option.id==='document'&&pdfName&&documentQuery.isError?<div role="alert">{documentQuery.error.message}<button type="button" onClick={()=>void documentQuery.refetch()}>Retry document</button></div>:option.images.length>0?<div ref={viewport} className="product-page-scroll" tabIndex={0} role="region" aria-label={option.label+' pages'}><div style={{width:zoom+'%'}}>{option.images.map((name,i)=><div key={name} id={`${id}-${i}`} data-page={i}><ImagePage job={job.id} name={name} pdf={option.id==='document'&&pdfName&&!documentQuery.data?.previews.length?{name:pdfName,fingerprint,page:i}:undefined} label={`${option.id==='listing-images'?'Image':'Page'} ${i+1} of ${option.images.length}`}/></div>)}</div></div>:query.isPending?<p role="status">Loading {option.label.toLowerCase()}…</p>:query.isError?<div role="alert">{query.error.message}<button type="button" onClick={()=>void query.refetch()}>Retry file</button></div>:query.data?.kind==='workbook'?<Workbook key={option.id} sheets={query.data.sheets}/>:query.data?.kind==='text'?<pre className="product-text">{query.data.text}</pre>:query.data?.kind==='slides'?<div className="product-text">{query.data.slides.map((blocks,i)=><section key={i}><h4>Slide {i+1}</h4>{blocks.map((text,j)=><p key={j}>{text}</p>)}</section>)}</div>:query.data?.kind==='package'?<ul className="product-package">{query.data.files.map(file=><li key={file.name}><span>{file.name}</span><span>{Math.ceil(file.bytes/1024)} KB</span></li>)}</ul>:null}
