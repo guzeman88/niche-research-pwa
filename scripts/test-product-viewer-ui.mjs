@@ -49,6 +49,7 @@ try{
  }
  for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert(await page.evaluate(()=>document.querySelector('.product-viewer-expanded')?.contains(document.activeElement)||document.activeElement?.classList.contains('product-viewer-exit')))}
  await page.keyboard.press('Escape');await viewer.waitFor();assert.equal(await page.locator('.detail-panel').count(),1,'Escape exits the viewer before closing the product review')
+ await page.waitForFunction(()=>document.activeElement?.classList.contains('product-viewer-expand'))
  assert.equal(await viewer.getByRole('button',{name:'Full screen',exact:true}).evaluate(e=>e===document.activeElement),true)
  assert.equal(await page.evaluate(()=>document.body.style.overflow),previousOverflow)
  await viewer.getByLabel('View',{exact:true}).selectOption('customer.xlsx');await viewer.getByRole('alert').waitFor()
