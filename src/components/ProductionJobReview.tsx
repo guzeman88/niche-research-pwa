@@ -1,23 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { artifactBlob, downloadArtifact, productionRequest, physicalProduct, type ProductionJob, type ProductionSpec } from '../lib/production'
+import { productionRequest, physicalProduct, type ProductionJob, type ProductionSpec } from '../lib/production'
 import {CostPlanSummary} from './ProductionCostPlan'
+import ProductionProductViewer from './ProductionProductViewer'
 
 const checks = ['wording', 'usefulness', 'visual_quality', 'rights', 'files', 'mockups', 'facts']
 export default function ProductionJobReview({job, refresh, revise}: {job: ProductionJob; refresh: () => void; revise: (spec: ProductionSpec) => void}) {
-  const [preview, setPreview] = useState(''); const [previewError, setPreviewError] = useState('')
+  const [previewError, setPreviewError] = useState('')
   const [assessment, setAssessment] = useState('')
   const artifactHash = job.result?.manifest?.artifact_fingerprint
-  const previews = [...(job.result?.manifest?.render.previews || ['preview.png']),...(job.result?.listing_images||[])]
-  const [previewPage, setPreviewPage] = useState(0)
-  const previewName = previews[previewPage] || previews[0]
-  useEffect(() => {
-    let active = true; let url = ''; setPreview(''); setPreviewError('')
-    if (artifactHash) artifactBlob(job.id, previewName).then(blob => {
-      url = URL.createObjectURL(blob); if (active) setPreview(url); else URL.revokeObjectURL(url)
-    }).catch(error => {if (active) setPreviewError(error.message)})
-    return () => {active = false; if (url) URL.revokeObjectURL(url)}
-  }, [job.id, artifactHash, previewName])
   const operation = useMutation({mutationFn: ({path, body}: {path: string; body: unknown}) => productionRequest(path, body),
     onSuccess: result => {setAssessment(JSON.stringify(result, null, 2)); refresh()}})
   const run = (path: string, body: unknown = {}) => operation.mutate({path: `/jobs/${job.id}${path}`, body})
@@ -45,19 +36,15 @@ export default function ProductionJobReview({job, refresh, revise}: {job: Produc
         run('/listing-images',{images,source_artifact_fingerprint:artifactHash})
       }catch(error){setPreviewError(error instanceof Error?error.message:'Check the listing image files.')}
     }}/></label></details>}
-    {result?.manifest && <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <div>{previews.length > 1 && <label className="mb-3 block text-sm">Review page or sheet<select className="input mt-2 w-full" value={previewPage} onChange={event=>setPreviewPage(Number(event.target.value))}>{previews.map((name,index)=><option key={name} value={index}>Page {index+1} · {name}</option>)}</select></label>}{preview && <img className="max-h-[32rem] w-full rounded bg-white object-contain" src={preview} alt={`Actual generated layout for ${job.spec.name}, page ${previewPage+1}`} />}
-        {previewError && <p role="alert">{previewError}</p>}
-        <p className="mt-3 text-xs text-surface-200">{result.manifest.render.preview_kind.replace(/_/g, ' ')}. Inspect customer files before approval.</p>
-        <ul className="mt-4 space-y-2">{result.manifest.files.map(file => <li key={file.name}><button className="text-sm underline underline-offset-4" onClick={() => downloadArtifact(job.id, file.name).catch(error => setPreviewError(error.message))}>Download review copy: {file.name}</button><span className="ml-2 text-xs text-surface-200">{Math.ceil(file.bytes / 1024)} KB</span></li>)}</ul>
-      </div>
+    {previewError&&<p role="alert">{previewError}</p>}
+    {result?.manifest && <><ProductionProductViewer key={job.id+job.revision+artifactHash} job={job}/><div className="mt-6">
       <div><h4 className="font-semibold">Actual file checks</h4><ul className="mt-3 space-y-2 text-sm">{result.quality?.checks.map(check => <li key={check.check}>{check.passed === true ? 'Pass' : check.passed === false ? 'Fail' : 'Not verified'} · {check.check.replace(/_/g, ' ')}</li>)}</ul>
         {result.listing?.cost_summary&&<CostPlanSummary summary={result.listing.cost_summary}/>}
         <h4 className="mt-5 font-semibold">Listing readiness</h4><ul className="mt-3 space-y-2 text-sm">{result.listing?.blockers.length ? result.listing.blockers.map(item => <li key={item}>{item}</li>) : <li>{job.spec.cost_plan?'Planning inputs complete. Final review and cost-plan acknowledgment are still required.':'Facts complete. Human review still required.'}</li>}</ul>
         <details className="mt-4"><summary className="cursor-pointer text-sm">Generated listing copy</summary><p className="mt-3 whitespace-pre-wrap text-sm">{result.listing?.description}</p><p className="mt-3 text-sm">Tags: {result.listing?.tags.join(', ')}</p></details>
         <div className="mt-5 flex flex-wrap gap-3"><button className="btn-secondary" disabled={operation.isPending} onClick={() => run('/assess', {vision: false})}>Run OCR assessment</button><button className="btn-secondary" disabled={operation.isPending} onClick={() => run('/assess', {vision: true})}>Run local visual critique</button></div>
       </div>
-    </div>}
+    </div></>}
     {job.status === 'needs_review' && result?.manifest && <form className="mt-6 max-w-2xl" aria-label="Review production files" onSubmit={event => {
       event.preventDefault(); const data = new FormData(event.currentTarget)
       run('/review', {revision: job.revision, artifact_fingerprint: result.manifest!.artifact_fingerprint,

@@ -57,6 +57,12 @@ try {
   assert.equal(jobs.jobs.length, 1); assert.equal(jobs.jobs[0].status, 'needs_review')
   assert.equal(jobs.jobs[0].spec.research.status, 'unvalidated_operator_concept')
   assert.equal((await fetch(`${api}/api/production/jobs/${jobs.jobs[0].id}/files/customer.pdf`)).status, 200)
+  const completeViewer=page.getByRole('region',{name:'Complete product viewer'});await completeViewer.waitFor()
+  await completeViewer.scrollIntoViewIfNeeded()
+  await completeViewer.getByRole('img',{name:/Page 1 of/}).waitFor()
+  assert.equal(await completeViewer.locator('figure').count(),jobs.jobs[0].result.manifest.render.previews?.length||1)
+  await mkdir('work/product-viewer-qa',{recursive:true})
+  for(const width of [1440,390]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:`work/product-viewer-qa/actual-product-${width}.png`,fullPage:true})}
   const review = page.getByRole('form', {name: 'Review production files'})
   for (const checkbox of await review.getByRole('checkbox').all()) await checkbox.check()
   await review.getByLabel('Review note').fill('Inspected actual customer PDF, wording, rights and factual product details.')

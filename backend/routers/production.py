@@ -160,6 +160,14 @@ def file(job_id:str,name:str):
     return FileResponse(path,filename=name,headers={'Cache-Control':'private, no-store'})
 
 
+@router.get('/jobs/{job_id}/view')
+def product_view(job_id:str,name:str,fingerprint:str):
+    from services.product_viewer import view
+    from fastapi.responses import JSONResponse
+    result=invoke(view,service.engine(),job_id,name,fingerprint)
+    return JSONResponse(result,headers={'Cache-Control':'private, no-store'})
+
+
 @router.get('/jobs/{job_id}/thumbnail')
 def thumbnail(job_id:str,kind:str='inside'):
     from io import BytesIO
