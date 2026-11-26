@@ -1,5 +1,6 @@
 import {useEffect, useId, useRef, useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
+import {createPortal} from 'react-dom'
 import {artifactBlob, documentPageBlob, downloadArtifact, productionRequest, type ProductionJob} from '../lib/production'
 import './ProductionProductViewer.css'
 
@@ -22,7 +23,7 @@ function ImagePage({job,name,label,pdf}:{job:string;name:string;label:string;pdf
     if(!visible)return
     let active=true,objectUrl=''
     const request=pdfName&&pdfFingerprint&&pdfPage!==undefined?documentPageBlob(job,pdfName,pdfFingerprint,pdfPage):artifactBlob(job,name)
-    request.then(blob=>{objectUrl=URL.createObjectURL(blob);if(active){setUrl(objectUrl);setError('')}}).catch(cause=>{if(active)setError(cause instanceof Error?cause.message:'This page could not be loaded.')})
+    request.then(blob=>{objectUrl=URL.createObjectURL(blob);if(active){setUrl(objectUrl);setError('')}else URL.revokeObjectURL(objectUrl)}).catch(cause=>{if(active)setError(cause instanceof Error?cause.message:'This page could not be loaded.')})
     return ()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl)}
   },[job,name,visible,attempt,pdfName,pdfFingerprint,pdfPage])
   return <figure ref={target} className="product-viewer-page"><figcaption>{label}</figcaption>{url?<img src={url} alt={label} decoding="async"/>:error?<div role="alert">{error}<button type="button" onClick={()=>{setError('');setAttempt(x=>x+1)}}>Retry page</button></div>:<div className="product-viewer-loading" role="status">Loading {label.toLowerCase()}…</div>}</figure>
@@ -64,6 +65,31 @@ function Workbook({sheets}:{sheets:Sheet[]}){
 export default function ProductionProductViewer({job}:{job:ProductionJob}){
   const manifest=job.result?.manifest,files=manifest?.render.customer_files||manifest?.files.filter(f=>f.name.startsWith('customer.')||['instructions.txt','font-license.txt'].includes(f.name)).map(f=>f.name)||[],fingerprint=manifest?.artifact_fingerprint||''
   const [selected,setSelected]=useState('document'),[zoom,setZoom]=useState(100),[downloadError,setDownloadError]=useState('')
+  const [expanded,setExpanded]=useState(false)
+  const viewer=useRef<HTMLElement>(null),exitButton=useRef<HTMLButtonElement>(null)
+  useEffect(()=>{
+    if(!expanded)return
+    const overflow=document.body.style.overflow,container=viewer.current
+    document.body.style.overflow='hidden'
+    exitButton.current?.focus()
+    const keys=(event:KeyboardEvent)=>{
+      if(event.key==='Escape'){
+        event.preventDefault();event.stopImmediatePropagation();setExpanded(false)
+      }else if(event.key==='Tab'){
+        // Keep focus in this viewer, including when it is inside the mobile drawer.
+        event.preventDefault();event.stopImmediatePropagation()
+        const elements=[exitButton.current,...(viewer.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],select:not(:disabled),summary,[tabindex="0"]')||[])].filter((element):element is HTMLElement=>Boolean(element?.checkVisibility()))
+        const index=elements.indexOf(document.activeElement as HTMLElement)
+        elements[(index+(event.shiftKey?-1:1)+elements.length)%elements.length]?.focus()
+      }
+    }
+    document.addEventListener('keydown',keys,true)
+    return ()=>{
+      document.body.style.overflow=overflow
+      document.removeEventListener('keydown',keys,true)
+      requestAnimationFrame(()=>container?.querySelector<HTMLButtonElement>('.product-viewer-expand')?.focus())
+    }
+  },[expanded])
   const pdfName=files.find(name=>name.endsWith('.pdf'))
   const documentQuery=useQuery({queryKey:['product-document',job.id,fingerprint,pdfName],enabled:selected==='document'&&Boolean(pdfName),queryFn:async()=>{const data=await productionRequest<{pages:number;previews:string[];artifact_fingerprint:string}>(`/jobs/${encodeURIComponent(job.id)}/document?name=${encodeURIComponent(pdfName!)}&fingerprint=${encodeURIComponent(fingerprint)}`);if(data.artifact_fingerprint!==fingerprint||!Number.isSafeInteger(data.pages)||data.pages<1||data.pages>500)throw new Error('The document could not be verified. Reopen its review.');return data},retry:false,staleTime:Infinity})
   const documentImages=pdfName?(documentQuery.data?.previews.length?documentQuery.data.previews:Array.from({length:documentQuery.data?.pages||0},(_,i)=>'pdf-page-'+i)):manifest?.render.previews||['preview.png']
@@ -74,11 +100,14 @@ export default function ProductionProductViewer({job}:{job:ProductionJob}){
   const query=useQuery({queryKey:['product-file-view',job.id,fingerprint,option.id],enabled:!['document','listing-images'].includes(option.id),
     queryFn:async()=>{const data=await productionRequest<View>(`/jobs/${encodeURIComponent(job.id)}/view?name=${encodeURIComponent(option.id)}&fingerprint=${encodeURIComponent(fingerprint)}`);if(data.artifact_fingerprint!==fingerprint||data.name!==option.id)throw new Error('The product package changed. Reopen its review.');return data},retry:false,staleTime:Infinity})
   if(!manifest)return null
-  return <section className="product-viewer" aria-label="Complete product viewer">
+  return <section ref={viewer} id={`${id}-viewer`} className={`product-viewer${expanded?' product-viewer-expanded':''}`} role={expanded?'dialog':'region'} aria-modal={expanded||undefined} aria-label="Complete product viewer">
+    {expanded&&<header className="product-viewer-heading"><h3>{job.spec.name}</h3></header>}
     <div className="product-viewer-controls"><label>View<select aria-label="View" value={option.id} onChange={event=>{setSelected(event.target.value);setZoom(100)}}>{options.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
+      {!expanded&&<button type="button" className="product-viewer-expand" aria-controls={`${id}-viewer`} aria-expanded="false" onClick={()=>setExpanded(true)}>Full screen</button>}
       {option.images.length>0&&<><label>Page<select aria-label="Page" defaultValue="0" key={option.id} onChange={event=>{const target=viewport.current?.querySelector<HTMLElement>(`[data-page="${event.target.value}"]`);if(target&&viewport.current)viewport.current.scrollTo({top:target.offsetTop,behavior:'instant'})}}>{option.images.map((_,i)=><option key={i} value={i}>{i+1} of {option.images.length}</option>)}</select></label><label>Zoom<select aria-label="Zoom" value={zoom} onChange={event=>setZoom(Number(event.target.value))}>{[100,125,150,200].map(value=><option key={value} value={value}>{value===100?'Fit width':value+'%'}</option>)}</select></label></>}
     </div>
     {option.id==='document'&&pdfName&&documentQuery.isPending?<p role="status">Loading document...</p>:option.id==='document'&&pdfName&&documentQuery.isError?<div role="alert">{documentQuery.error.message}<button type="button" onClick={()=>void documentQuery.refetch()}>Retry document</button></div>:option.images.length>0?<div ref={viewport} className="product-page-scroll" tabIndex={0} role="region" aria-label={option.label+' pages'}><div style={{width:zoom+'%'}}>{option.images.map((name,i)=><div key={name} id={`${id}-${i}`} data-page={i}><ImagePage job={job.id} name={name} pdf={option.id==='document'&&pdfName&&!documentQuery.data?.previews.length?{name:pdfName,fingerprint,page:i}:undefined} label={`${option.id==='listing-images'?'Image':'Page'} ${i+1} of ${option.images.length}`}/></div>)}</div></div>:query.isPending?<p role="status">Loading {option.label.toLowerCase()}…</p>:query.isError?<div role="alert">{query.error.message}<button type="button" onClick={()=>void query.refetch()}>Retry file</button></div>:query.data?.kind==='workbook'?<Workbook key={option.id} sheets={query.data.sheets}/>:query.data?.kind==='text'?<pre className="product-text">{query.data.text}</pre>:query.data?.kind==='slides'?<div className="product-text">{query.data.slides.map((blocks,i)=><section key={i}><h4>Slide {i+1}</h4>{blocks.map((text,j)=><p key={j}>{text}</p>)}</section>)}</div>:query.data?.kind==='package'?<ul className="product-package">{query.data.files.map(file=><li key={file.name}><span>{file.name}</span><span>{Math.ceil(file.bytes/1024)} KB</span></li>)}</ul>:null}
     <details className="product-downloads"><summary>Download files</summary><ul>{manifest.files.filter(file=>files.includes(file.name)).map(file=><li key={file.name}><button type="button" onClick={()=>{setDownloadError('');downloadArtifact(job.id,file.name).catch(error=>setDownloadError(error instanceof Error?error.message:'The download failed. Retry the file.'))}}>{file.name}</button></li>)}</ul>{downloadError&&<p role="alert">{downloadError}</p>}</details>
+    {expanded&&createPortal(<button ref={exitButton} type="button" className="product-viewer-exit" onClick={()=>setExpanded(false)}>Exit full screen</button>,document.body)}
   </section>
 }
