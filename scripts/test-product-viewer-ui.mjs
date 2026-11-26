@@ -48,6 +48,7 @@ try{
  await viewer.getByRole('button',{name:'Next rows'}).click();await viewer.getByRole('button',{name:'Next rows'}).click();await viewer.getByRole('gridcell',{name:'Final customer row',exact:true}).waitFor()
  await viewer.getByLabel('Worksheet',{exact:true}).selectOption('1');await viewer.getByRole('gridcell',{name:'All worksheets available',exact:true}).waitFor()
  await viewer.getByLabel('Worksheet',{exact:true}).selectOption('0')
+ await viewer.locator('td[data-cell="12-0"]').hover();assert.equal(await viewer.locator('td[data-cell="12-0"]').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)','Inherited row hover must not hide worksheet text')
  for(const width of [1440,390,320]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Viewer fits ${width}`);if(width!==320)await page.screenshot({path:`work/product-viewer-qa/workbook-${width}.png`,fullPage:true})}
  await viewer.getByLabel('View',{exact:true}).selectOption('instructions.txt');await viewer.getByText('Complete customer instructions, without a download.',{exact:true}).waitFor()
  await viewer.getByLabel('View',{exact:true}).selectOption('customer.zip');await viewer.getByText('customer.xlsx',{exact:true}).first().waitFor()
