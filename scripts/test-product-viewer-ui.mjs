@@ -39,6 +39,8 @@ try{
  await viewer.waitFor();await viewer.locator('figure').first().waitFor();assert.equal(await viewer.locator('figure').count(),11)
  await viewer.getByLabel('Page',{exact:true}).selectOption('10');await viewer.getByRole('img',{name:'Page 11 of 11',exact:true}).waitFor()
  await viewer.getByLabel('Zoom',{exact:true}).selectOption('200')
+ const imageGeometry=await viewer.getByRole('img',{name:'Page 11 of 11',exact:true}).evaluate(async image=>{await image.decode();const rect=image.getBoundingClientRect();return {display:rect.width/rect.height,natural:image.naturalWidth/image.naturalHeight,padding:getComputedStyle(image).padding}})
+ assert(Math.abs(imageGeometry.display-imageGeometry.natural)<.01,'Document pages retain their actual proportions instead of inheriting thumbnail sizing');assert.equal(imageGeometry.padding,'0px')
  const previousOverflow=await page.evaluate(()=>document.body.style.overflow)
  await viewer.getByRole('button',{name:'Full screen',exact:true}).click()
  let full=page.getByRole('dialog',{name:'Complete product viewer',exact:true});await full.waitFor()
